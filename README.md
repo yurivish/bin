@@ -1,4 +1,4 @@
-# Bin
+# Bin (experimental)
 
 This is a small library created to see what it's like to use WASM-compiled [Zig](https://ziglang.org) in a browser environment. 
 
