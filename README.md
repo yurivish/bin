@@ -1,6 +1,6 @@
 # Bin
 
-This is a small project created to see what it's like to use WASM-compiled [Zig](https://ziglang.org) in a browser environment. 
+This is a small library created to see what it's like to use WASM-compiled [Zig](https://ziglang.org) in a browser environment. 
 
 The library implements simple binning into linearly-spaced bins in 1 and 2 dimensions, as well as the Euclidean [Distance Transform](https://en.wikipedia.org/wiki/Distance_transform). 
 
