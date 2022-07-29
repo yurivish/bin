@@ -71,10 +71,15 @@ pub noinline fn initMinMax(nBins: usize, data: []f64, min: f64, max: f64) !Vec {
     // else
     const denom = if (max - min == 0) eps64 else max - min;
     const scale = (@intToFloat(f64, nBins) - eps64) / denom;
-    return Vec{ .data = data, .min = min, .max = max, .scale = scale, .nBins = nBins,
+    return Vec{
+        .data = data,
+        .min = min,
+        .max = max,
+        .scale = scale,
+        .nBins = nBins,
         .trueMin = math.min(min, max),
         .trueMax = math.max(min, max),
-     };
+    };
 }
 
 pub fn bin(vec: Vec, value: f64) usize {
@@ -87,7 +92,7 @@ pub fn inBounds(vec: Vec, value: f64) bool {
     return vec.trueMin <= value and value <= vec.trueMax;
 }
 
-const Error = error{ NonFiniteMinOrMax };
+const Error = error{NonFiniteMinOrMax};
 
 pub fn errString(e: Vec.Error) f64 {
     const Strings = struct {
@@ -157,7 +162,6 @@ test "Vec.initAuto" {
         try expectEqual(v.max, 7);
     }
 }
-
 
 // todo:
 // - test data with inifities and only nans; these cases should throw an error.
