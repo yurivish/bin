@@ -11,7 +11,7 @@ fn sqr(x: f64) f64 {
 // v: holds indices into f
 // f: holds in array values for the current row/col (needed in order to operate in-place)
 // z: holds envelope interval boundaries
-// See "Distance Transforms of Sampled Functions" by Pedro F. Felzenszwalb Daniel P. Huttenlocher
+// See "Distance Transforms of Sampled Functions" by Felzenszwalb & Huttenlocher
 // for an explanation of the algorithms (variable names are theirs).
 //
 // Subtleties:
