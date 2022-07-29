@@ -11,11 +11,10 @@ For improved efficiency, the EDT implementation also uses an idea from the 1996 
 
 See the companion [Observable notebook](https://observablehq.com/@yurivish/bin) for the JavaScript API.
 
-For a JavaScript implementation of the EDT, see [this notebook](https://observablehq.com/@mourner/fast-distance-transform) and [library](https://github.com/mapbox/tiny-sdf) by Vladimir Agafonkin.
-
 Build with:
 
 ```sh
 zig build-lib main.zig --name bin -target wasm32-freestanding -dynamic -OReleaseSafe
 ````
 
+For a JavaScript implementation of the EDT, see [this notebook](https://observablehq.com/@mourner/fast-distance-transform) and [library](https://github.com/mapbox/tiny-sdf) by Vladimir Agafonkin.
