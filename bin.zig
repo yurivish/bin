@@ -5,13 +5,6 @@ const assert = std.debug.assert;
 
 pub const Rgba = packed struct { r: u8, g: u8, b: u8, a: u8 };
 
-test {
-    var bins = [_]f64{ 0, 0, 0 };
-    var a = [_]f64{ 1, 2, 3 }; // , math.inf(f64)}; // also test empty array; should crash.
-    var vec = Vec.initAuto(bins.len, a[0..], math.nan(f64), math.nan(f64));
-    bin1d(bins[0..], vec);
-}
-
 pub fn bin1d(bins: []f64, xs: Vec, binAssignments: []usize) void {
     for (xs.data) |x, i| {
         if (xs.inBounds(x)) {
