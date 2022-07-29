@@ -2,10 +2,12 @@
 
 This is a small project created to see what it's like to use WASM-compiled [Zig](https://ziglang.org) in a browser environment. 
 
-The library implements simple binning into linearly-spaced bins in 1 and 2 dimensions, as well as the Euclidean [Distance Transform](https://en.wikipedia.org/wiki/Distance_transform), based on a method by Felzenszwalb and Huttenlocher. For details, see [Distance Transforms of Sampled Functions](
-http://people.cs.uchicago.edu).
+The library implements simple binning into linearly-spaced bins in 1 and 2 dimensions, as well as the Euclidean [Distance Transform](https://en.wikipedia.org/wiki/Distance_transform). 
 
-The EDT implementation uses an improvement from the 1996 paper [An Efficient Algorithm for the Euclidean Distance Transformation](https://onlinelibrary.wiley.com/doi/abs/10.1002/scj.4690270702) for improved efficiency in the common case when you're computing the EDT of a binary image.
+For details on the algorithm used to compute the EDT, see the paper [Distance Transforms of Sampled Functions](
+http://people.cs.uchicago.edu) by Felzenszwalb and Huttenlocher.
+
+The EDT implementation uses an additional improvement from the 1996 paper [An Efficient Algorithm for the Euclidean Distance Transformation](https://onlinelibrary.wiley.com/doi/abs/10.1002/scj.4690270702) for improved efficiency in the common case when you're computing the EDT of a binary image.
 
 See the companion [Observable notebook](https://observablehq.com/@yurivish/bin) for the JavaScript API.
 
