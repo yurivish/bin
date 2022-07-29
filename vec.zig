@@ -6,12 +6,12 @@ const math = std.math;
 // The data must be non-empty, since otherwse min and max can't be computed.
 const Vec = @This();
 
-// Stores the data from which we compute any missing elements in the extent
+// Stores the data from which we compute any NaN elements in the domain
 data: []f64,
 
-// Stores the extent. Note that min and max are the boundaries of the bins;
-// not necessarily the min and max of the data. The extent may be reversed,
-// in which case min can be greater than max.
+// Stores the endpoints of the bin domain. Note that min and max are the boundaries
+// of the bins, not necessarily the min and max of the data. The domain extent may
+// be reversed, in which case min is greater than max.
 min: f64,
 max: f64,
 
