@@ -8,6 +8,12 @@ fn sqr(x: f64) f64 {
     return x * x;
 }
 
+// Compute the one-dimensional Euclidean Distance Transform.
+// Accepts and returns squared Euclidean distances.
+// out: output slice; may alias input.
+// in: input slice
+// offset, stride, len: array iteration specification that allows encoding
+// both row and column traversals of a slice representing a matrix.
 // v: holds indices into f
 // f: holds in array values for the current row/col (needed in order to operate in-place)
 // z: holds envelope interval boundaries
