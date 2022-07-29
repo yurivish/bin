@@ -18,3 +18,5 @@ zig build-lib main.zig --name bin -target wasm32-freestanding -dynamic -ORelease
 ````
 
 For a JavaScript implementation of the EDT, see [this notebook](https://observablehq.com/@mourner/fast-distance-transform) and [library](https://github.com/mapbox/tiny-sdf) by Vladimir Agafonkin.
+
+Thanks to [Fil](https://observablehq.com/@fil) for feedback during the development of this library.
