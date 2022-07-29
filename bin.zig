@@ -19,7 +19,6 @@ pub fn bin1d(bins: []f64, xs: Vec, binAssignments: []usize) void {
 
 pub fn bin2d(bins: []f64, xs: Vec, ys: Vec, binAssignments: []usize) void {
     const xBins = xs.nBins;
-    // The (0, 0) bin is bottom left
     for (xs.data) |x, i| {
         const y = ys.data[i];
         if ((xs.inBounds(x) and ys.inBounds(y))) {
