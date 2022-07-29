@@ -1,5 +1,4 @@
 # Bin
-## Tiny toolkit for uniform binning
 
 See the companion [Observable notebook](https://observablehq.com/@yurivish/bin).
 
