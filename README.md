@@ -2,7 +2,7 @@
 
 This is a small library created to see what it's like to use WASM-compiled [Zig](https://ziglang.org) in a browser environment. 
 
-The library implements simple binning into linearly-spaced bins in 1 and 2 dimensions, as well as a fast Euclidean [Distance Transform](https://en.wikipedia.org/wiki/Distance_transform). 
+The library implements simple binning into linearly-spaced bins in 1 and 2 dimensions, as well as a fast Euclidean [distance transform](https://en.wikipedia.org/wiki/Distance_transform). 
 
 For details on the algorithm used to compute the EDT, see the paper [Distance Transforms of Sampled Functions](
 http://people.cs.uchicago.edu) by Felzenszwalb and Huttenlocher.
