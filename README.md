@@ -7,7 +7,7 @@ The library implements simple binning into linearly-spaced bins in 1 and 2 dimen
 For details on the algorithm used to compute the EDT, see the paper [Distance Transforms of Sampled Functions](
 http://people.cs.uchicago.edu) by Felzenszwalb and Huttenlocher.
 
-For improved efficiency, the EDT implementation also uses an idea from the 1996 paper [An Efficient Algorithm for the Euclidean Distance Transformation](https://onlinelibrary.wiley.com/doi/abs/10.1002/scj.4690270702) in the common case when you're computing the EDT of a binary image. The idea is to use a faster and simpler transform in the initial 1d pass.
+For improved efficiency, the EDT implementation also uses an idea from the 1996 paper [An Efficient Algorithm for the Euclidean Distance Transformation](https://onlinelibrary.wiley.com/doi/abs/10.1002/scj.4690270702) in the common case when you're computing the EDT of a binary image. The idea is to use a faster and simpler transform for the initial 1d pass.
 
 See the companion [Observable notebook](https://observablehq.com/@yurivish/bin) for the JavaScript API.
 
