@@ -8,30 +8,61 @@ const Rgba = bin.Rgba;
 // zig fmt: off
 export fn bin1d(
     bins: [*]f64, 
+    assignments: [*]usize,
     xBins: usize, xs: [*]f64, xDomain: *[2]f64,
     len: usize,
-    binAssignments: [*]usize,
 ) f64 {
     if (len == 0) return 0;
     const xVec = Vec.initAuto(xBins, xs[0..len], xDomain[0], xDomain[1]) catch |e| return Vec.errString(e);
     xDomain.* = .{xVec.min, xVec.max};
-    bin.bin1d(bins[0..xBins], xVec, binAssignments[0..len]);
+    bin.bin1d(bins[0..xBins], assignments[0..len], xVec);
+    return 0;
+}
+
+export fn binFacets1d(
+    bins: [*]f64, 
+    assignments: [*]usize,
+    xBins: usize, xs: [*]f64, xDomain: *[2]f64,
+    facets: [*]usize, numFacets: usize,
+    len: usize,
+) f64 {
+    if (len == 0) return 0;
+    const xVec = Vec.initAuto(xBins, xs[0..len], xDomain[0], xDomain[1]) catch |e| return Vec.errString(e);
+    xDomain.* = .{xVec.min, xVec.max};
+    bin.binFacets1d(bins[0..xBins*numFacets], assignments[0..len], xVec, facets[0..len]);
     return 0;
 }
 
 export fn bin2d(
     bins: [*]f64,
+    assignments: [*]usize,
     xBins: usize, xs: [*]f64, xDomain: *[2]f64,
     yBins: usize, ys: [*]f64, yDomain: *[2]f64,
     len: usize,
-    binAssignments: [*]usize,
 ) f64 {
     if (len == 0) return 0;
     const xVec = Vec.initAuto(xBins, xs[0..len], xDomain[0], xDomain[1]) catch |e| return Vec.errString(e);
     const yVec = Vec.initAuto(yBins, ys[0..len], yDomain[0], yDomain[1]) catch |e| return Vec.errString(e);
     xDomain.* = .{xVec.min, xVec.max};
     yDomain.* = .{yVec.min, yVec.max};
-    bin.bin2d(bins[0 .. xBins * yBins], xVec, yVec, binAssignments[0..len]);
+    bin.bin2d(bins[0 .. xBins * yBins], assignments[0..len], xVec, yVec);
+    return 0;
+}
+
+export fn binFacets2d(
+    bins: [*]f64,
+    assignments: [*]usize,
+    xBins: usize, xs: [*]f64, xDomain: *[2]f64,
+    yBins: usize, ys: [*]f64, yDomain: *[2]f64,
+    facets: [*]usize, numFacets: usize,
+    len: usize,
+) f64 {
+    if (len == 0) return 0;
+    const xVec = Vec.initAuto(xBins, xs[0..len], xDomain[0], xDomain[1]) catch |e| return Vec.errString(e);
+    const yVec = Vec.initAuto(yBins, ys[0..len], yDomain[0], yDomain[1]) catch |e| return Vec.errString(e);
+    xDomain.* = .{xVec.min, xVec.max};
+    yDomain.* = .{yVec.min, yVec.max};
+    bin.binFacets2d(bins[0 .. xBins * yBins * numFacets], assignments[0..len], xVec, yVec, facets[0..len]);
     return 0;
 }
 
