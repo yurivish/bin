@@ -55,7 +55,6 @@ pub fn initMax(nBins: usize, data: []f64, max: f64) !Vec {
 }
 
 pub noinline fn initMinMax(nBins: usize, data: []f64, min: f64, max: f64) !Vec {
-    // if (min > max) return error.MinGreaterThanMax;
     if (!(math.isFinite(min) and math.isFinite(max))) return error.NonFiniteMinOrMax;
 
     // This eps value can be subtracted from an f64 < 32768^2 to decrease it, and
@@ -66,10 +65,8 @@ pub noinline fn initMinMax(nBins: usize, data: []f64, min: f64, max: f64) !Vec {
 
     // Scale factor from [min, max] to [0..bins.len - eps]. The epsilon ensures
     // that maximum point gets mapped into the largest bin rather than beyond it.
-    // const scale = if (min > max)
-    //     (@intToFloat(f64, nBins) - eps64) / math.max(min - max, eps64)
-    // else
-    const denom = if (max - min == 0) eps64 else max - min;
+    // If max is equal to min, we want to map all value to the zeroth bin.
+    const denom = if (max - min == 0) math.inf(f64) else max - min;
     const scale = (@intToFloat(f64, nBins) - eps64) / denom;
     return Vec{
         .data = data,

@@ -19,20 +19,6 @@ export fn bin1d(
     return 0;
 }
 
-export fn binFacets1d(
-    bins: [*]f64, 
-    assignments: [*]usize,
-    xBins: usize, xs: [*]f64, xDomain: *[2]f64,
-    facets: [*]usize, numFacets: usize,
-    len: usize,
-) f64 {
-    if (len == 0) return 0;
-    const xVec = Vec.initAuto(xBins, xs[0..len], xDomain[0], xDomain[1]) catch |e| return Vec.errString(e);
-    xDomain.* = .{xVec.min, xVec.max};
-    bin.binFacets1d(bins[0..xBins*numFacets], assignments[0..len], xVec, facets[0..len]);
-    return 0;
-}
-
 export fn bin2d(
     bins: [*]f64,
     assignments: [*]usize,
@@ -49,20 +35,22 @@ export fn bin2d(
     return 0;
 }
 
-export fn binFacets2d(
+export fn bin3d(
     bins: [*]f64,
     assignments: [*]usize,
     xBins: usize, xs: [*]f64, xDomain: *[2]f64,
     yBins: usize, ys: [*]f64, yDomain: *[2]f64,
-    facets: [*]usize, numFacets: usize,
+    zBins: usize, zs: [*]f64, zDomain: *[2]f64,
     len: usize,
 ) f64 {
     if (len == 0) return 0;
     const xVec = Vec.initAuto(xBins, xs[0..len], xDomain[0], xDomain[1]) catch |e| return Vec.errString(e);
     const yVec = Vec.initAuto(yBins, ys[0..len], yDomain[0], yDomain[1]) catch |e| return Vec.errString(e);
+    const zVec = Vec.initAuto(zBins, zs[0..len], zDomain[0], zDomain[1]) catch |e| return Vec.errString(e);
     xDomain.* = .{xVec.min, xVec.max};
     yDomain.* = .{yVec.min, yVec.max};
-    bin.binFacets2d(bins[0 .. xBins * yBins * numFacets], assignments[0..len], xVec, yVec, facets[0..len]);
+    zDomain.* = .{zVec.min, zVec.max};
+    bin.bin3d(bins[0 .. xBins * yBins * zBins], assignments[0..len], xVec, yVec, zVec);
     return 0;
 }
 
