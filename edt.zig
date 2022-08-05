@@ -94,7 +94,7 @@ pub fn edtBinary1d(out: []f64, in: []f64) void {
     // forwards sweep:
     // compute the minimum distance to each sample's nearest
     // left zero-valued neighbor
-    var tmp = math.inf(f64);
+    var tmp = inf64;
     for (in) |x, i| {
         tmp = if (x == 0) 0 else tmp + 1;
         out[i] = sqr(tmp);
@@ -103,7 +103,7 @@ pub fn edtBinary1d(out: []f64, in: []f64) void {
     // take the min between the distance to the nearest
     // left zero-valued neighbor and the nearest right
     // zero-valued neighbor
-    tmp = math.inf(f64);
+    tmp = inf64;
     var i = out.len;
     while (i > 0) {
         i -= 1;
