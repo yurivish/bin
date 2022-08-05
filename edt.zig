@@ -28,8 +28,8 @@ fn sqr(x: f64) f64 {
 // * inf when y2 == inf and y1 is not
 // Since x1 is always less than x2, we know the denominator is always nonzero.
 // Since f is always nonnegative, we know the y values are always nonnegative.
-// The loop break condition has the k == 0 check so that we break when when
-// the value of `s` is -inf or NaN.
+// The loop break condition has the k == 0 check so that we break when the value
+// of `s` is -inf or NaN.
 fn edt1d(out: []f64, in: []f64, offset: usize, stride: usize, len: usize, v: []usize, f: []f64, z: []f64) void {
     v[0] = 0;
     f[0] = in[offset];
