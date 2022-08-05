@@ -2,8 +2,6 @@ const std = @import("std");
 const math = std.math;
 const Vec = @import("vec.zig");
 
-const inf64 = math.inf(f64);
-
 fn sqr(x: f64) f64 {
     return x * x;
 }
@@ -33,8 +31,8 @@ fn sqr(x: f64) f64 {
 fn edt1d(out: []f64, in: []f64, offset: usize, stride: usize, len: usize, v: []usize, f: []f64, z: []f64) void {
     v[0] = 0;
     f[0] = in[offset];
-    z[0] = -inf64;
-    z[1] = inf64;
+    z[0] = -math.inf(f64);
+    z[1] = math.inf(f64);
     var k: usize = 0;
     var s: f64 = 0;
     var q: usize = 1;
@@ -52,7 +50,7 @@ fn edt1d(out: []f64, in: []f64, offset: usize, stride: usize, len: usize, v: []u
         k += 1;
         v[k] = q;
         z[k] = s;
-        z[k + 1] = inf64;
+        z[k + 1] = math.inf(f64);
     }
     k = 0;
     q = 0;
@@ -94,7 +92,7 @@ pub fn edtBinary1d(out: []f64, in: []f64) void {
     // forwards sweep:
     // compute the minimum distance to each sample's nearest
     // left zero-valued neighbor
-    var tmp = inf64;
+    var tmp = math.inf(f64);
     for (in) |x, i| {
         tmp = if (x == 0) 0 else tmp + 1;
         out[i] = sqr(tmp);
@@ -103,7 +101,7 @@ pub fn edtBinary1d(out: []f64, in: []f64) void {
     // take the min between the distance to the nearest
     // left zero-valued neighbor and the nearest right
     // zero-valued neighbor
-    tmp = inf64;
+    tmp = math.inf(f64);
     var i = out.len;
     while (i > 0) {
         i -= 1;
