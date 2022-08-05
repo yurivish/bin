@@ -86,7 +86,7 @@ pub fn edt2d(out: []f64, in: []f64, width: usize, height: usize, v: []usize, f: 
 // sample and any other value denoting an unfilled sample.
 // Note: Unlike the parabola-based method, this function
 // treats all non-zero input values as positive infinity.
-// Output: Array of sqruared euclidean distances from each
+// Output: Array of squared Euclidean distances from each
 // array sample to its nearest filled neighbor.
 pub fn edtBinary1d(out: []f64, in: []f64) void {
     // forwards sweep:
