@@ -48,8 +48,10 @@ pub const Rgba = packed struct { r: u8, g: u8, b: u8, a: u8 };
 //     }
 // }
 
-pub fn bin(bins: []f64, assignments: []usize, vecs: anytype, weights: anytype) void {
+pub fn bin(bins: []f64, assignments: []usize, weights: []const f64, vecs: anytype) void {
     assert(vecs.len > 0);
+    // if the weight vector has length 1, broadcast it.
+    const i_weight: usize = if (weights.len == 1) 0 else 1;
     const n_data = vecs[0].data.len;
     var i_data: usize = 0;
     while (i_data < n_data) : (i_data += 1) {
@@ -71,7 +73,7 @@ pub fn bin(bins: []f64, assignments: []usize, vecs: anytype, weights: anytype) v
             if (all_in_bounds) i_bin = i_bin * vec.nBins + vec.bin(val);
         }
         if (all_in_bounds) {
-            bins[i_bin] += comptime if (@TypeOf(weights) == void) 1 else weights[i_data];
+            bins[i_bin] += weights[i_weight * i_data];
             assignments[i_data] = i_bin;
         } else {
             assignments[i_data] = math.maxInt(usize);

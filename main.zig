@@ -5,11 +5,11 @@ const edt = @import("edt.zig");
 const Vec = @import("vec.zig");
 const Rgba = bin.Rgba;
 
+test "debug" {}
+
 fn possiblyWeightedBin(bins: []f64, assignments: []usize, vecs: anytype, weights: ?[]f64) void {
-    if (weights) |ws|
-        bin.bin(bins, assignments, vecs, ws)
-    else
-        bin.bin(bins, assignments, vecs, {});
+    const ws = if (weights) |ws| ws else &[1]f64{1};
+    bin.bin(bins, assignments, ws, vecs);
 }
 
 export fn bin1d(
