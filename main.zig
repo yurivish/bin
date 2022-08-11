@@ -13,7 +13,7 @@ export fn bin1d(
     // zig fmt: off
     bins: [*]f64, 
     assignments: [*]usize,
-    xBins: usize, xs: [*]f64, xDomain: *[2]f64,
+    xBins: usize, xs: [*]const f64, xDomain: *[2]f64,
     weights: ?[*]const f64, len: usize,
     // zig fmt: on
 ) f64 {
@@ -29,8 +29,8 @@ export fn bin2d(
     // zig fmt: off
     binsPtr: [*]f64,
     assignmentsPtr: [*]usize,
-    xBins: usize, xs: [*]f64, xDomain: *[2]f64,
-    yBins: usize, ys: [*]f64, yDomain: *[2]f64,
+    xBins: usize, xs: [*]const f64, xDomain: *[2]f64,
+    yBins: usize, ys: [*]const f64, yDomain: *[2]f64,
     weightsPtr: ?[*]const f64, len: usize,
     binsEdtPtr: [*]f64, v: [*]usize, f: [*]f64, z: [*]f64,
     outlierPtr: [*]u8, outlierCutoff: f64, outlierRadius: f64, 

@@ -7,7 +7,7 @@ const math = std.math;
 const Vec = @This();
 
 // Stores the data from which we compute any NaN elements in the domain
-data: []f64,
+data: []const f64,
 
 // Stores the endpoints of the bin domain. Note that min and max are the boundaries
 // of the bins, not necessarily the min and max of the data. The domain extent may
@@ -23,7 +23,7 @@ nBins: usize,
 trueMin: f64,
 trueMax: f64,
 
-pub noinline fn initAuto(nBins: usize, data: []f64, min: f64, max: f64) !Vec {
+pub noinline fn initAuto(nBins: usize, data: []const f64, min: f64, max: f64) !Vec {
     const nanMin = math.isNan(min);
     const nanMax = math.isNan(max);
     if (nanMin and nanMax) return Vec.init(nBins, data);
@@ -32,7 +32,7 @@ pub noinline fn initAuto(nBins: usize, data: []f64, min: f64, max: f64) !Vec {
     return Vec.initMinMax(nBins, data, min, max);
 }
 
-pub fn init(nBins: usize, data: []f64) !Vec {
+pub fn init(nBins: usize, data: []const f64) !Vec {
     var min = math.inf(f64);
     var max = -math.inf(f64);
     for (data[0..]) |d| {
@@ -42,19 +42,19 @@ pub fn init(nBins: usize, data: []f64) !Vec {
     return Vec.initMinMax(nBins, data, min, max);
 }
 
-pub fn initMin(nBins: usize, data: []f64, min: f64) !Vec {
+pub fn initMin(nBins: usize, data: []const f64, min: f64) !Vec {
     var max = -math.inf(f64);
     for (data) |d| max = math.max(d, max);
     return Vec.initMinMax(nBins, data, min, max);
 }
 
-pub fn initMax(nBins: usize, data: []f64, max: f64) !Vec {
+pub fn initMax(nBins: usize, data: []const f64, max: f64) !Vec {
     var min = math.inf(f64);
     for (data) |d| min = math.min(d, min);
     return Vec.initMinMax(nBins, data, min, max);
 }
 
-pub noinline fn initMinMax(nBins: usize, data: []f64, min: f64, max: f64) !Vec {
+pub noinline fn initMinMax(nBins: usize, data: []const f64, min: f64, max: f64) !Vec {
     if (!(math.isFinite(min) and math.isFinite(max))) return error.NonFiniteMinOrMax;
 
     // This eps value can be subtracted from an f64 < 32768^2 to decrease it, and
@@ -98,8 +98,9 @@ pub fn errString(e: Vec.Error) f64 {
     const s = switch (e) {
         Vec.Error.NonFiniteMinOrMax => Strings.NonFiniteMinOrMax,
     };
-    // return pointer to static string
-    return ptrLenF64(@ptrToInt(&s[0]), s.len);
+    // return pointer to static string.
+    // note: assumes that we're on a 32-bit platform.
+    return ptrLenF64(@intCast(u32, @ptrToInt(&s[0])), @intCast(u32, s.len));
 }
 
 fn ptrLenF64(ptr: u32, len: u32) f64 {
