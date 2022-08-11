@@ -5,6 +5,41 @@ const assert = std.debug.assert;
 
 pub const Rgba = packed struct { r: u8, g: u8, b: u8, a: u8 };
 
+pub fn bin(bins: []f64, assignments: []usize, maybe_weights: ?[]const f64, vecs: anytype) void {
+    assert(vecs.len > 0);
+    // if the weight vector has length 1, broadcast it.
+    const weights = if (maybe_weights) |weights| weights else &[1]f64{1};
+    const i_weight: usize = if (maybe_weights) |_| 1 else 0;
+    const n_data = vecs[0].data.len;
+    var i_data: usize = 0;
+    while (i_data < n_data) : (i_data += 1) {
+        // iterate over dimensions in reverse to compute i_bin.
+        var i_bin: usize = 0;
+        var all_in_bounds = true;
+        comptime var i_vec = vecs.len - 1;
+        inline while (i_vec >= 0) : (i_vec -= 1) {
+            const vec = vecs[i_vec];
+            const val = vec.data[i_data];
+            all_in_bounds = all_in_bounds and vec.inBounds(val);
+            if (all_in_bounds) i_bin = i_bin * vec.nBins + vec.bin(val);
+        }
+        if (all_in_bounds) {
+            bins[i_bin] += weights[i_weight * i_data];
+            assignments[i_data] = i_bin;
+        } else {
+            assignments[i_data] = math.maxInt(usize);
+        }
+    }
+}
+
+pub fn colorize(colors: []Rgba, vs: Vec, ramp: []Rgba) void {
+    // Compute a color for each bin by looking up the appropriate ramp value
+    const unknown = Rgba{ .r = 255, .g = 0, .b = 255, .a = 255 };
+    for (vs.data) |v, i| {
+        colors[i] = if (vs.inBounds(v)) ramp[vs.bin(v)] else unknown;
+    }
+}
+
 // pub fn bin1d(bins: []f64, assignments: []usize, xs: Vec) void {
 //     for (xs.data) |x, i| {
 //         if (xs.inBounds(x)) {
@@ -48,39 +83,6 @@ pub const Rgba = packed struct { r: u8, g: u8, b: u8, a: u8 };
 //     }
 // }
 
-pub fn bin(bins: []f64, assignments: []usize, weights: []const f64, vecs: anytype) void {
-    assert(vecs.len > 0);
-    // if the weight vector has length 1, broadcast it.
-    const i_weight: usize = if (weights.len == 1) 0 else 1;
-    const n_data = vecs[0].data.len;
-    var i_data: usize = 0;
-    while (i_data < n_data) : (i_data += 1) {
-        // iterate over dimensions in reverse to compute i_bin.
-        // for example:
-        //   i_bin = 0;
-        //   i_bin = i_bin * zs.nBins + zs.bin(val);
-        //   i_bin = i_bin * ys.nBins + ys.bin(val);
-        //   i_bin = i_bin * xs.nBins + xs.bin(val);
-        // is equivalent to:
-        //   i_bin = xyBins * zs.bin(z) + xBins * ys.bin(y) + xs.bin(x);
-        var i_bin: usize = 0;
-        var all_in_bounds = true;
-        comptime var i_vec = vecs.len - 1;
-        inline while (i_vec >= 0) : (i_vec -= 1) {
-            const vec = vecs[i_vec];
-            const val = vec.data[i_data];
-            all_in_bounds = all_in_bounds and vec.inBounds(val);
-            if (all_in_bounds) i_bin = i_bin * vec.nBins + vec.bin(val);
-        }
-        if (all_in_bounds) {
-            bins[i_bin] += weights[i_weight * i_data];
-            assignments[i_data] = i_bin;
-        } else {
-            assignments[i_data] = math.maxInt(usize);
-        }
-    }
-}
-
 // https://github.com/ziglang/zig/issues/7364
 
 // original formulation in bin3d:
@@ -97,11 +99,12 @@ pub fn bin(bins: []f64, assignments: []usize, weights: []const f64, vecs: anytyp
 //         = ((0 * zBins + zIndex) * yBins + yIndex) * xBins + xIndex;
 //         = zIndex * yBins * xBins + yIndex * xBins + xIndex;
 // as desired.
+//
+// for example:
+//   i_bin = 0;
+//   i_bin = i_bin * zs.nBins + zs.bin(val);
+//   i_bin = i_bin * ys.nBins + ys.bin(val);
+//   i_bin = i_bin * xs.nBins + xs.bin(val);
+// is equivalent to:
+//   i_bin = xyBins * zs.bin(z) + xBins * ys.bin(y) + xs.bin(x);
 
-pub fn colorize(colors: []Rgba, vs: Vec, ramp: []Rgba) void {
-    // Compute a color for each bin by looking up the appropriate ramp value
-    const unknown = Rgba{ .r = 255, .g = 0, .b = 255, .a = 255 };
-    for (vs.data) |v, i| {
-        colors[i] = if (vs.inBounds(v)) ramp[vs.bin(v)] else unknown;
-    }
-}

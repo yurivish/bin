@@ -13,7 +13,7 @@ fn sqr(x: f64) f64 {
 // offset, stride, len: array iteration specification that allows encoding
 // both row and column traversals of a slice representing a matrix.
 // v: holds indices into f
-// f: holds in array values for the current row/col (needed in order to operate in-place)
+// f: holds in values for the current row/col (needed in order to operate in-place)
 // z: holds envelope interval boundaries
 // See "Distance Transforms of Sampled Functions" by Felzenszwalb & Huttenlocher
 // for an explanation of the algorithms (variable names are theirs).
@@ -28,7 +28,7 @@ fn sqr(x: f64) f64 {
 // Since f is always nonnegative, we know the y values are always nonnegative.
 // The loop break condition has the k == 0 check so that we break when the value
 // of `s` is -inf or NaN.
-fn edt1d(out: []f64, in: []f64, offset: usize, stride: usize, len: usize, v: []usize, f: []f64, z: []f64) void {
+fn edt1d(out: []f64, in: []const f64, offset: usize, stride: usize, len: usize, v: []usize, f: []f64, z: []f64) void {
     v[0] = 0;
     f[0] = in[offset];
     z[0] = -math.inf(f64);
@@ -58,11 +58,12 @@ fn edt1d(out: []f64, in: []f64, offset: usize, stride: usize, len: usize, v: []u
         const qf = @intToFloat(f64, q);
         while (z[k + 1] < @intToFloat(f64, q)) k += 1;
         const vk = v[k];
+        _ = qf;
         out[offset + q * stride] = f[vk] + sqr(qf - @intToFloat(f64, vk));
     }
 }
 
-pub fn edt2d(out: []f64, in: []f64, width: usize, height: usize, v: []usize, f: []f64, z: []f64) void {
+pub fn edt2d(out: []f64, in: []const f64, width: usize, height: usize, v: []usize, f: []f64, z: []f64) void {
     // iterate over rows
     var y: usize = 0;
     while (y < in.len) : (y += width) {
@@ -71,13 +72,14 @@ pub fn edt2d(out: []f64, in: []f64, width: usize, height: usize, v: []usize, f: 
         const len = width;
         edt1d(out, in, offset, stride, len, v, f, z);
     }
+
     // iterate over columns
     var x: usize = 0;
     while (x < width) : (x += 1) {
         const offset = x;
         const stride = width;
         const len = height;
-        edt1d(out, in, offset, stride, len, v, f, z);
+        edt1d(out, out, offset, stride, len, v, f, z);
     }
 }
 
@@ -88,7 +90,7 @@ pub fn edt2d(out: []f64, in: []f64, width: usize, height: usize, v: []usize, f: 
 // treats all non-zero input values as positive infinity.
 // Output: Array of squared Euclidean distances from each
 // array sample to its nearest filled neighbor.
-pub fn edtBinary1d(out: []f64, in: []f64) void {
+pub fn edtBinary1d(out: []f64, in: []const f64) void {
     // forwards sweep:
     // compute the minimum distance to each sample's nearest
     // left zero-valued neighbor
@@ -111,7 +113,7 @@ pub fn edtBinary1d(out: []f64, in: []f64) void {
     }
 }
 
-pub fn edtBinary2d(out: []f64, in: []f64, width: usize, height: usize, v: []usize, f: []f64, z: []f64) void {
+pub fn edtBinary2d(out: []f64, in: []const f64, width: usize, height: usize, v: []usize, f: []f64, z: []f64) void {
     // iterate over rows, treating all nonzero values as infinity
     var y: usize = 0;
     while (y < in.len) : (y += width) {
@@ -119,12 +121,13 @@ pub fn edtBinary2d(out: []f64, in: []f64, width: usize, height: usize, v: []usiz
         const inRow = in[y .. y + width];
         edtBinary1d(outRow, inRow);
     }
+
     // iterate over columns, treating all values as squared euclidean distances
     var x: usize = 0;
     while (x < width) : (x += 1) {
         const offset = x;
         const stride = width;
         const len = height;
-        edt1d(out, in, offset, stride, len, v, f, z);
+        edt1d(out, out, offset, stride, len, v, f, z);
     }
 }
