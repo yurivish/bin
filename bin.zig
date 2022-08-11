@@ -48,26 +48,21 @@ pub const Rgba = packed struct { r: u8, g: u8, b: u8, a: u8 };
 //     }
 // }
 
-pub fn bin1d(bins: []f64, assignments: []usize, xs: Vec) void {
-    bin(bins, assignments, .{xs});
-}
-
-pub fn bin2d(bins: []f64, assignments: []usize, xs: Vec, ys: Vec) void {
-    bin(bins, assignments, .{ xs, ys });
-}
-
-pub fn bin3d(bins: []f64, assignments: []usize, xs: Vec, ys: Vec, zs: Vec) void {
-    bin(bins, assignments, .{ xs, ys, zs });
-}
-
-pub fn bin(bins: []f64, assignments: []usize, vecs: anytype) void {
+pub fn bin(bins: []f64, assignments: []usize, vecs: anytype, weights: anytype) void {
     assert(vecs.len > 0);
     const n_data = vecs[0].data.len;
     var i_data: usize = 0;
     while (i_data < n_data) : (i_data += 1) {
+        // iterate over dimensions in reverse to compute i_bin.
+        // for example:
+        //   i_bin = 0;
+        //   i_bin = i_bin * zs.nBins + zs.bin(val);
+        //   i_bin = i_bin * ys.nBins + ys.bin(val);
+        //   i_bin = i_bin * xs.nBins + xs.bin(val);
+        // is equivalent to:
+        //   i_bin = xyBins * zs.bin(z) + xBins * ys.bin(y) + xs.bin(x);
         var i_bin: usize = 0;
         var all_in_bounds = true;
-        // to compute i_bin, iterate over dimensions in reverse
         comptime var i_vec = vecs.len - 1;
         inline while (i_vec >= 0) : (i_vec -= 1) {
             const vec = vecs[i_vec];
@@ -76,7 +71,7 @@ pub fn bin(bins: []f64, assignments: []usize, vecs: anytype) void {
             if (all_in_bounds) i_bin = i_bin * vec.nBins + vec.bin(val);
         }
         if (all_in_bounds) {
-            bins[i_bin] += 1;
+            bins[i_bin] += comptime if (@TypeOf(weights) == void) 1 else weights[i_data];
             assignments[i_data] = i_bin;
         } else {
             assignments[i_data] = math.maxInt(usize);
