@@ -70,31 +70,18 @@ fn f2i(x: f64) usize {
     return @floatToInt(usize, x);
 }
 
-pub fn bin3d(bins: []u32, assignments: []usize, xs: Vec, ys: Vec, zs: Vec) void {
+pub fn bin3d(bins: []u32, xs: Vec, ys: Vec, zs: Vec) void {
     const xBins = @intToFloat(f64, xs.nBins);
     const yBins = @intToFloat(f64, ys.nBins);
-    // const xyBins = xBins * yBins;
     const len = xs.data.len;
     var i: usize = 0;
     while (i < len) : (i += 1) {
         var f_bin = zs.binPc(i);
         f_bin = f_bin * yBins + ys.binPc(i);
         f_bin = f_bin * xBins + xs.binPc(i);
-        //   i_bin = 0;
-        //   i_bin = i_bin * zs.nBins + zs.bin(val);
-        //   i_bin = i_bin * ys.nBins + ys.bin(val);
-        //   i_bin = i_bin * xs.nBins + xs.bin(val);
-
-        // const x_bin = xs.binPc(i);
-        // const y_bin = ys.binPc(i);
-        // const z_bin = zs.binPc(i);
-        // const f_bin = xyBins * z_bin + xBins * y_bin + x_bin;
-        if (math.isNan(f_bin)) {
-            assignments[i] = math.maxInt(usize);
-        } else {
+        if (!math.isNan(f_bin)) {
             const i_bin = @floatToInt(usize, f_bin);
             bins[i_bin] += 1;
-            assignments[i] = i_bin;
         }
     }
 }

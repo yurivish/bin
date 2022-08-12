@@ -95,7 +95,7 @@ export fn test3d(
     xDomain.* = .{ xVec.min, xVec.max };
     yDomain.* = .{ yVec.min, yVec.max };
     zDomain.* = .{ zVec.min, zVec.max };
-    bin.bin3d(bins, assignments, xVec, yVec, zVec);
+    bin.bin3d(bins, xVec, yVec, zVec);
     return 0;
 }
 

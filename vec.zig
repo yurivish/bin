@@ -87,8 +87,8 @@ pub fn bin(vec: Vec, value: f64) usize {
 
 pub fn binPc(vec: Vec, index: usize) f64 {
     const value = vec.data[index];
-    if (vec.inBounds(value)) return @floor((value - vec.min) * vec.scale);
-    return math.nan(f64);
+    if (!vec.inBounds(value)) return math.nan(f64);
+    return @floor((value - vec.min) * vec.scale);
 }
 
 pub fn inBounds(vec: Vec, value: f64) bool {
