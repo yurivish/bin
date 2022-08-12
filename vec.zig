@@ -9,9 +9,9 @@ const Vec = @This();
 // Stores the data from which we compute any NaN elements in the domain
 data: []const f64,
 
-// Stores the endpoints of the bin domain. Note that min and max are the boundaries
-// of the bins, not necessarily the min and max of the data. The domain extent may
-// be reversed, in which case min is greater than max.
+// Stores the endpoints of the bin domain. Note that min and max are not
+// necessarily the min and max of the data, since it can be specified manually.
+// In particular, the domain extent may be reversed, with min greater than max.
 min: f64,
 max: f64,
 

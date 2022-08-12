@@ -53,6 +53,7 @@ export fn bin2d(
         const max = math.max(xBins, yBins);
         edt.edtBinary2d(binsEdt, binsEdt, xBins, yBins, v[0..max], f[0..max], z[0 .. max + 1]);
         const boolEdt = binsEdt; // @ptrCast([*]u8, binsEdtPtr)[0 .. xBins * yBins];
+        // try a bit set?
         for (binsEdt) |b, i| {
             boolEdt[i] = if (b > outlierRadius) 1 else 0;
         }
@@ -63,13 +64,47 @@ export fn bin2d(
     return 0;
 }
 
+export fn test3d(
+    // zig fmt: off
+    binsPtr: [*]f64,
+    assignmentsPtr: [*]usize,
+    xBins: usize, xs: [*]const f64, xDomain: *[2]f64,
+    yBins: usize, ys: [*]const f64, yDomain: *[2]f64,
+    zBins: usize, zs: [*]const f64, zDomain: *[2]f64,
+    weights: ?[*]const f64, len: usize,
+    binsEdtPtr: [*]f64, vPtr: [*]usize, fPtr: [*]f64, zPtr: [*]f64,
+    outlierPtr: [*]u8, outlierCutoff: f64, outlierRadius: f64,
+    // zig fmt: on
+) f64 {
+    const nBins = xBins * yBins * zBins;
+    const bins = binsPtr[0..nBins];
+    const assignments = assignmentsPtr[0..len];
+    // const outlier = outlierPtr[0..len];
+    _ = binsEdtPtr;
+    _ = vPtr;
+    _ = fPtr;
+    _ = zPtr;
+    _ = outlierPtr;
+    _ = outlierCutoff;
+    _ = outlierRadius;
+    const xVec = Vec.initAuto(xBins, xs[0..len], xDomain[0], xDomain[1]) catch |e| return Vec.errString(e);
+    const yVec = Vec.initAuto(yBins, ys[0..len], yDomain[0], yDomain[1]) catch |e| return Vec.errString(e);
+    const zVec = Vec.initAuto(zBins, zs[0..len], zDomain[0], zDomain[1]) catch |e| return Vec.errString(e);
+    xDomain.* = .{ xVec.min, xVec.max };
+    yDomain.* = .{ yVec.min, yVec.max };
+    zDomain.* = .{ zVec.min, zVec.max };
+    const ws = if (weights) |ws| ws[0..len] else null;
+    bin.bin3d(bins, assignments[0..len], ws, xVec, yVec, zVec);
+    return 0;
+}
+
 export fn bin3d(
     // zig fmt: off
     binsPtr: [*]f64,
     assignmentsPtr: [*]usize,
-    xBins: usize, xs: [*]f64, xDomain: *[2]f64,
-    yBins: usize, ys: [*]f64, yDomain: *[2]f64,
-    zBins: usize, zs: [*]f64, zDomain: *[2]f64,
+    xBins: usize, xs: [*]const f64, xDomain: *[2]f64,
+    yBins: usize, ys: [*]const f64, yDomain: *[2]f64,
+    zBins: usize, zs: [*]const f64, zDomain: *[2]f64,
     weights: ?[*]const f64, len: usize,
     binsEdtPtr: [*]f64, vPtr: [*]usize, fPtr: [*]f64, zPtr: [*]f64,
     outlierPtr: [*]u8, outlierCutoff: f64, outlierRadius: f64, 
@@ -117,7 +152,7 @@ export fn bin3d(
 export fn colorize(
     // zig fmt: off
     colors: [*]Rgba, 
-    xs: [*]f64, xDomain: *[2]f64, len: usize, 
+    xs: [*]const f64, xDomain: *[2]f64, len: usize, 
     ramp: [*]Rgba, lenRamp: usize, 
     // zig fmt: on
 ) f64 {
