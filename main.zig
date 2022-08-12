@@ -80,6 +80,7 @@ export fn test3d(
     const bins = binsPtr[0..nBins];
     const assignments = assignmentsPtr[0..len];
     // const outlier = outlierPtr[0..len];
+    _ = assignments;
     _ = binsEdtPtr;
     _ = vPtr;
     _ = fPtr;
@@ -94,7 +95,7 @@ export fn test3d(
     xDomain.* = .{ xVec.min, xVec.max };
     yDomain.* = .{ yVec.min, yVec.max };
     zDomain.* = .{ zVec.min, zVec.max };
-    bin.bin3d(bins, assignments[0..len], xVec, yVec, zVec);
+    bin.bin3d(bins, assignments, xVec, yVec, zVec);
     return 0;
 }
 

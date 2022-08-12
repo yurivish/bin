@@ -66,29 +66,40 @@ pub fn colorize(colors: []Rgba, vs: Vec, ramp: []Rgba) void {
 //     }
 // }
 
-pub fn bin3d(bins: []u32, assignments: []usize, xs: Vec, ys: Vec, zs: Vec) void {
-    const xBins = xs.nBins;
-    const yBins = ys.nBins;
-    const xyBins = xBins * yBins;
-    const none = math.maxInt(usize);
-    _ = assignments;
-    _ = none;
-    const len = xs.data.len;
+fn f2i(x: f64) usize {
+    return @floatToInt(usize, x);
+}
 
+pub fn bin3d(bins: []u32, assignments: []usize, xs: Vec, ys: Vec, zs: Vec) void {
+    const xBins = @intToFloat(f64, xs.nBins);
+    const yBins = @intToFloat(f64, ys.nBins);
+    // const xyBins = xBins * yBins;
+    const len = xs.data.len;
     var i: usize = 0;
     while (i < len) : (i += 1) {
-        const x = xs.data[i];
-        const y = ys.data[i];
-        const z = zs.data[i];
-        if (xs.inBounds(x) and ys.inBounds(y) and zs.inBounds(z)) {
-            const i_bin = xyBins * zs.bin(z) + xBins * ys.bin(y) + xs.bin(x);
+        var f_bin = zs.binPc(i);
+        f_bin = f_bin * yBins + ys.binPc(i);
+        f_bin = f_bin * xBins + xs.binPc(i);
+        //   i_bin = 0;
+        //   i_bin = i_bin * zs.nBins + zs.bin(val);
+        //   i_bin = i_bin * ys.nBins + ys.bin(val);
+        //   i_bin = i_bin * xs.nBins + xs.bin(val);
+
+        // const x_bin = xs.binPc(i);
+        // const y_bin = ys.binPc(i);
+        // const z_bin = zs.binPc(i);
+        // const f_bin = xyBins * z_bin + xBins * y_bin + x_bin;
+        if (math.isNan(f_bin)) {
+            assignments[i] = math.maxInt(usize);
+        } else {
+            const i_bin = @floatToInt(usize, f_bin);
             bins[i_bin] += 1;
             assignments[i] = i_bin;
-        } else {
-            assignments[i] = none;
         }
     }
 }
+// bins[i_bin] += all_in_bounds
+// assignments[i] = i_bin + !all_in_bounds * math.maxInt(usize);
 
 // assignments[i] = blk: {
 //     const z = zs.data[i];
