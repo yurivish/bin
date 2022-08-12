@@ -66,31 +66,23 @@ pub fn colorize(colors: []Rgba, vs: Vec, ramp: []Rgba) void {
 //     }
 // }
 
-pub fn bin3d(bins: []f64, assignments: []usize, maybe_weights: ?[]const f64, xs: Vec, ys: Vec, zs: Vec) void {
-    const w = if (maybe_weights) |w| w else &[1]f64{1};
-    const b: usize = if (maybe_weights) |_| 1 else 0;
+pub fn bin3d(bins: []u32, assignments: []usize, xs: Vec, ys: Vec, zs: Vec) void {
     const xBins = xs.nBins;
     const yBins = ys.nBins;
+    const xyBins = xBins * yBins;
     const none = math.maxInt(usize);
+    _ = assignments;
+    _ = none;
     const len = xs.data.len;
+
     var i: usize = 0;
     while (i < len) : (i += 1) {
-        var all_in_bounds = true;
-        const z = zs.data[i];
-        var i_bin: usize = 0;
-
-        all_in_bounds = zs.inBounds(z);
-        if (all_in_bounds) i_bin = zs.bin(z);
-
-        const y = ys.data[i];
-        all_in_bounds = all_in_bounds and ys.inBounds(y);
-        if (all_in_bounds) i_bin = i_bin * yBins + ys.bin(y);
-
         const x = xs.data[i];
-        all_in_bounds = all_in_bounds and xs.inBounds(x);
-        if (all_in_bounds) {
-            i_bin = i_bin * xBins + xs.bin(x);
-            bins[i_bin] += w[b * i];
+        const y = ys.data[i];
+        const z = zs.data[i];
+        if (xs.inBounds(x) and ys.inBounds(y) and zs.inBounds(z)) {
+            const i_bin = xyBins * zs.bin(z) + xBins * ys.bin(y) + xs.bin(x);
+            bins[i_bin] += 1;
             assignments[i] = i_bin;
         } else {
             assignments[i] = none;

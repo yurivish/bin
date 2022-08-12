@@ -60,13 +60,13 @@ export fn bin2d(
         for (assignments) |a, i| {
             outlier[i] = if (a != math.maxInt(usize) and boolEdt[a] == 1) 1 else 0;
         }
-    }
+    } else for (outlier) |*o| o.* = 0;
     return 0;
 }
 
 export fn test3d(
     // zig fmt: off
-    binsPtr: [*]f64,
+    binsPtr: [*]u32,
     assignmentsPtr: [*]usize,
     xBins: usize, xs: [*]const f64, xDomain: *[2]f64,
     yBins: usize, ys: [*]const f64, yDomain: *[2]f64,
@@ -87,14 +87,14 @@ export fn test3d(
     _ = outlierPtr;
     _ = outlierCutoff;
     _ = outlierRadius;
+    _ = weights;
     const xVec = Vec.initAuto(xBins, xs[0..len], xDomain[0], xDomain[1]) catch |e| return Vec.errString(e);
     const yVec = Vec.initAuto(yBins, ys[0..len], yDomain[0], yDomain[1]) catch |e| return Vec.errString(e);
     const zVec = Vec.initAuto(zBins, zs[0..len], zDomain[0], zDomain[1]) catch |e| return Vec.errString(e);
     xDomain.* = .{ xVec.min, xVec.max };
     yDomain.* = .{ yVec.min, yVec.max };
     zDomain.* = .{ zVec.min, zVec.max };
-    const ws = if (weights) |ws| ws[0..len] else null;
-    bin.bin3d(bins, assignments[0..len], ws, xVec, yVec, zVec);
+    bin.bin3d(bins, assignments[0..len], xVec, yVec, zVec);
     return 0;
 }
 
@@ -145,7 +145,7 @@ export fn bin3d(
         for (assignments) |a, i| {
             outlier[i] = if (a != math.maxInt(usize) and boolEdt[a] == 1) 1 else 0;
         }
-    }
+    } else for (outlier) |*o| o.* = 0;
     return 0;
 }
 
