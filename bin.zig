@@ -13,77 +13,21 @@ pub fn colorize(colors: []Rgba, vs: anytype, ramp: []const Rgba) void {
     }
 }
 
-// note: can do the usize conversions earlier too, just make them overflow-aware or something?
-// pub fn count2d(bins: []u32, xs: anytype, ys: anytype) void {
-//     const xBins = xs.nBins;
-//     const len = xs.data.len;
-//     var i: usize = 0;
-//     while (i < len) : (i += 1) {
-//         const x = xs.binPcBounds(i);
-//         const y = ys.binPcBounds(i);
-//         if (x.inBounds and y.inBounds) {
-//             const i_bin = @floatToInt(usize, y.index * xBins + x.index);
-//             bins[i_bin] += 1;
-//         }
-//     }
-// }
-
 pub fn count2d(bins: []u32, xs: anytype, ys: anytype) void {
-    // not faster than non-simd with n=4, but n=8 is a bit faster
-    const n = 8;
-    const xBins = @splat(n, xs.nBins);
+    const xBins = xs.nBins;
     const len = xs.data.len;
     var i: usize = 0;
-    const x_lo = @splat(n, xs.trueMin);
-    const x_hi = @splat(n, xs.trueMax);
-    const x_min = @splat(n, xs.min);
-    const x_scale = @splat(n, xs.scale);
-
-    const y_lo = @splat(n, ys.trueMin);
-    const y_hi = @splat(n, ys.trueMax);
-    const y_min = @splat(n, ys.min);
-    const y_scale = @splat(n, ys.scale);
-
-    while (i < len) : (i += n) {
-        const x = @Vector(n, f32){
-            xs.data[i],
-            xs.data[i + 1],
-            xs.data[i + 2],
-            xs.data[i + 3],
-            xs.data[i + 4],
-            xs.data[i + 5],
-            xs.data[i + 6],
-            xs.data[i + 7],
-        };
-        const x_in_bounds_lo = x_lo <= x;
-        const x_in_bounds_hi = x <= x_hi;
-        const x_index = @floor((x - x_min) * x_scale);
-
-        const y = @Vector(n, f32){
-            ys.data[i],
-            ys.data[i + 1],
-            ys.data[i + 2],
-            ys.data[i + 3],
-            ys.data[i + 4],
-            ys.data[i + 5],
-            ys.data[i + 6],
-            ys.data[i + 7],
-        };
-        const y_in_bounds_lo = y_lo <= y;
-        const y_in_bounds_hi = y <= y_hi;
-        const y_index = @floor((y - y_min) * y_scale);
-
-        const f_index = y_index * xBins + x_index;
-
-        var j: usize = 0;
-        while (j < n) : (j += 1) {
-            if (x_in_bounds_lo[j] and x_in_bounds_hi[j] and y_in_bounds_lo[j] and y_in_bounds_hi[j]) {
-                const i_bin = @floatToInt(usize, f_index[j]);
-                bins[i_bin] += 1;
-            }
+    while (i < len) : (i += 1) {
+        const x = xs.binPcBounds(i);
+        const y = ys.binPcBounds(i);
+        if (x.inBounds and y.inBounds) {
+            const i_bin = @floatToInt(usize, y.index * xBins + x.index);
+            bins[i_bin] += 1;
         }
     }
 }
+
+// pub
 
 // pub fn count2d(bins: []u32, xs: anytype, ys: anytype) void {
 //     const xBins = xs.nBins;
@@ -252,6 +196,63 @@ pub fn count2d(bins: []u32, xs: anytype, ys: anytype) void {
 //             assignments[i_data] = i_bin;
 //         } else {
 //             assignments[i_data] = math.maxInt(usize);
+//         }
+//     }
+// }
+
+// fn count2dSimd(bins: []u32, xs: anytype, ys: anytype) void {
+//     // not faster than non-simd with n=4, but n=8 is a bit faster
+//     const n = 8;
+//     const xBins = @splat(n, xs.nBins);
+//     const len = xs.data.len;
+//     var i: usize = 0;
+//     const x_lo = @splat(n, xs.trueMin);
+//     const x_hi = @splat(n, xs.trueMax);
+//     const x_min = @splat(n, xs.min);
+//     const x_scale = @splat(n, xs.scale);
+
+//     const y_lo = @splat(n, ys.trueMin);
+//     const y_hi = @splat(n, ys.trueMax);
+//     const y_min = @splat(n, ys.min);
+//     const y_scale = @splat(n, ys.scale);
+
+//     while (i < len) : (i += n) {
+//         const x = @Vector(n, f32){
+//             xs.data[i],
+//             xs.data[i + 1],
+//             xs.data[i + 2],
+//             xs.data[i + 3],
+//             xs.data[i + 4],
+//             xs.data[i + 5],
+//             xs.data[i + 6],
+//             xs.data[i + 7],
+//         };
+//         const x_in_bounds_lo = x_lo <= x;
+//         const x_in_bounds_hi = x <= x_hi;
+//         const x_index = @floor((x - x_min) * x_scale);
+
+//         const y = @Vector(n, f32){
+//             ys.data[i],
+//             ys.data[i + 1],
+//             ys.data[i + 2],
+//             ys.data[i + 3],
+//             ys.data[i + 4],
+//             ys.data[i + 5],
+//             ys.data[i + 6],
+//             ys.data[i + 7],
+//         };
+//         const y_in_bounds_lo = y_lo <= y;
+//         const y_in_bounds_hi = y <= y_hi;
+//         const y_index = @floor((y - y_min) * y_scale);
+
+//         const f_index = y_index * xBins + x_index;
+
+//         var j: usize = 0;
+//         while (j < n) : (j += 1) {
+//             if (x_in_bounds_lo[j] and x_in_bounds_hi[j] and y_in_bounds_lo[j] and y_in_bounds_hi[j]) {
+//                 const i_bin = @floatToInt(usize, f_index[j]);
+//                 bins[i_bin] += 1;
+//             }
 //         }
 //     }
 // }
