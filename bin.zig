@@ -70,9 +70,10 @@ fn f2i(x: f64) usize {
     return @floatToInt(usize, x);
 }
 
+// call this count3d?
 pub fn bin3d(bins: []u32, xs: Vec, ys: Vec, zs: Vec) void {
-    const xBins = @intToFloat(f64, xs.nBins);
-    const yBins = @intToFloat(f64, ys.nBins);
+    const xBins = xs.nBinsF64;
+    const yBins = ys.nBinsF64;
     const len = xs.data.len;
     var i: usize = 0;
     while (i < len) : (i += 1) {
@@ -85,6 +86,24 @@ pub fn bin3d(bins: []u32, xs: Vec, ys: Vec, zs: Vec) void {
         }
     }
 }
+
+pub fn count(bins: []u32, vecs: anytype) void {
+    const len = vecs[0].data.len;
+    var i: usize = 0;
+    while (i < len) : (i += 1) {
+        var f_bin: f64 = vecs[vecs.len - 1].binPc(i);
+        comptime var i_vec = vecs.len - 2;
+        inline while (i_vec >= 0) : (i_vec -= 1) {
+            const vec = vecs[i_vec];
+            f_bin = f_bin * vec.nBinsF64 + vec.binPc(i);
+        }
+        if (!math.isNan(f_bin)) {
+            const i_bin = @floatToInt(usize, f_bin);
+            bins[i_bin] += 1;
+        }
+    }
+}
+
 // bins[i_bin] += all_in_bounds
 // assignments[i] = i_bin + !all_in_bounds * math.maxInt(usize);
 

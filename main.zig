@@ -64,38 +64,55 @@ export fn bin2d(
     return 0;
 }
 
-export fn test3d(
+export fn count1d(
     // zig fmt: off
     binsPtr: [*]u32,
-    assignmentsPtr: [*]usize,
+    xBins: usize, xs: [*]const f64, xDomain: *[2]f64,
+    len: usize,
+    // zig fmt: on
+) f64 {
+    const bins = binsPtr[0..xBins];
+    const xVec = Vec.initAuto(xBins, xs[0..len], xDomain[0], xDomain[1]) catch |e| return Vec.errString(e);
+    xDomain.* = .{ xVec.min, xVec.max };
+    bin.count(bins, .{xVec});
+    return 0;
+}
+
+export fn count2d(
+    // zig fmt: off
+    binsPtr: [*]u32,
+    xBins: usize, xs: [*]const f64, xDomain: *[2]f64,
+    yBins: usize, ys: [*]const f64, yDomain: *[2]f64,
+    len: usize,
+    // zig fmt: on
+) f64 {
+    const bins = binsPtr[0 .. xBins * yBins];
+    const xVec = Vec.initAuto(xBins, xs[0..len], xDomain[0], xDomain[1]) catch |e| return Vec.errString(e);
+    xDomain.* = .{ xVec.min, xVec.max };
+    const yVec = Vec.initAuto(yBins, ys[0..len], yDomain[0], yDomain[1]) catch |e| return Vec.errString(e);
+    yDomain.* = .{ yVec.min, yVec.max };
+    bin.count(bins, .{ xVec, yVec });
+    // _ = bins;
+    return 0;
+}
+
+export fn count3d(
+    // zig fmt: off
+    binsPtr: [*]u32,
     xBins: usize, xs: [*]const f64, xDomain: *[2]f64,
     yBins: usize, ys: [*]const f64, yDomain: *[2]f64,
     zBins: usize, zs: [*]const f64, zDomain: *[2]f64,
-    weights: ?[*]const f64, len: usize,
-    binsEdtPtr: [*]f64, vPtr: [*]usize, fPtr: [*]f64, zPtr: [*]f64,
-    outlierPtr: [*]u8, outlierCutoff: f64, outlierRadius: f64,
+    len: usize,
     // zig fmt: on
 ) f64 {
-    const nBins = xBins * yBins * zBins;
-    const bins = binsPtr[0..nBins];
-    const assignments = assignmentsPtr[0..len];
-    // const outlier = outlierPtr[0..len];
-    _ = assignments;
-    _ = binsEdtPtr;
-    _ = vPtr;
-    _ = fPtr;
-    _ = zPtr;
-    _ = outlierPtr;
-    _ = outlierCutoff;
-    _ = outlierRadius;
-    _ = weights;
+    const bins = binsPtr[0 .. xBins * yBins * zBins];
     const xVec = Vec.initAuto(xBins, xs[0..len], xDomain[0], xDomain[1]) catch |e| return Vec.errString(e);
-    const yVec = Vec.initAuto(yBins, ys[0..len], yDomain[0], yDomain[1]) catch |e| return Vec.errString(e);
-    const zVec = Vec.initAuto(zBins, zs[0..len], zDomain[0], zDomain[1]) catch |e| return Vec.errString(e);
     xDomain.* = .{ xVec.min, xVec.max };
+    const yVec = Vec.initAuto(yBins, ys[0..len], yDomain[0], yDomain[1]) catch |e| return Vec.errString(e);
     yDomain.* = .{ yVec.min, yVec.max };
+    const zVec = Vec.initAuto(zBins, zs[0..len], zDomain[0], zDomain[1]) catch |e| return Vec.errString(e);
     zDomain.* = .{ zVec.min, zVec.max };
-    bin.bin3d(bins, xVec, yVec, zVec);
+    bin.count(bins, .{ xVec, yVec, zVec });
     return 0;
 }
 
@@ -149,6 +166,11 @@ export fn bin3d(
     } else for (outlier) |*o| o.* = 0;
     return 0;
 }
+
+
+// todo: colorizeCounts, which requires generalizing vec to work w/ float32
+// todo: Vec(f32), Vec(f64); how to deal with eps64? could just adaptively find a number that,
+// when added to the bin number causes the maximum
 
 export fn colorize(
     // zig fmt: off

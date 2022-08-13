@@ -18,6 +18,7 @@ max: f64,
 // Scale multiplier to rescale (value - min) to [0, nbins - eps].
 scale: f64,
 nBins: usize,
+nBinsF64: f64,
 
 // Store the true min and max for faster bounds checks
 trueMin: f64,
@@ -60,9 +61,10 @@ pub noinline fn initMinMax(nBins: usize, data: []const f64, min: f64, max: f64) 
     // This eps value can be subtracted from an f64 < 32768^2 to decrease it, and
     // can be added to an f64 < prevfloat(32768^2) to increase it. Used to slightly
     // perturb bin positions downwards so that binIndex assigns the correct bin
-    // to the maximum value.
+    // to the maximum value. Note: Needs testing; not fully confident this works.
     const eps64 = 1e-7;
-
+    // can be subtracted from (2^12 = 4096) to decrease it, so we can have up to 4k bins in f32 mode?
+    // const eps32 = 3e-4;
     // Scale factor from [min, max] to [0..bins.len - eps]. The epsilon ensures
     // that maximum point gets mapped into the largest bin rather than beyond it.
     // If max is equal to min, we want to map all value to the zeroth bin.
@@ -74,6 +76,7 @@ pub noinline fn initMinMax(nBins: usize, data: []const f64, min: f64, max: f64) 
         .max = max,
         .scale = scale,
         .nBins = nBins,
+        .nBinsF64 = @intToFloat(f64, nBins),
         .trueMin = math.min(min, max),
         .trueMax = math.max(min, max),
     };
