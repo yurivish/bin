@@ -5,40 +5,98 @@ const assert = std.debug.assert;
 
 pub const Rgba = packed struct { r: u8, g: u8, b: u8, a: u8 };
 
-pub fn bin(bins: []f64, assignments: []usize, maybe_weights: ?[]const f64, vecs: anytype) void {
-    assert(vecs.len > 0);
-    // if the weight vector has length 1, broadcast it.
-    const weights = if (maybe_weights) |weights| weights else &[1]f64{1};
-    const i_weight: usize = if (maybe_weights) |_| 1 else 0;
-    const n_data = vecs[0].data.len;
-    var i_data: usize = 0;
-    while (i_data < n_data) : (i_data += 1) {
-        // iterate over dimensions in reverse to compute i_bin.
-        var i_bin: usize = 0;
-        var all_in_bounds = true;
-        comptime var i_vec = vecs.len - 1;
-        inline while (i_vec >= 0) : (i_vec -= 1) {
-            const vec = vecs[i_vec];
-            const val = vec.data[i_data];
-            all_in_bounds = all_in_bounds and vec.inBounds(val);
-            if (all_in_bounds) i_bin = i_bin * vec.nBins + vec.bin(val);
-        }
-        if (all_in_bounds) {
-            bins[i_bin] += weights[i_weight * i_data];
-            assignments[i_data] = i_bin;
-        } else {
-            assignments[i_data] = math.maxInt(usize);
-        }
-    }
-}
-
-pub fn colorize(colors: []Rgba, vs: Vec, ramp: []Rgba) void {
+pub fn colorize(colors: []Rgba, vs: anytype, ramp: []const Rgba) void {
     // Compute a color for each bin by looking up the appropriate ramp value
     const unknown = Rgba{ .r = 255, .g = 0, .b = 255, .a = 255 };
     for (vs.data) |v, i| {
         colors[i] = if (vs.inBounds(v)) ramp[vs.bin(v)] else unknown;
     }
 }
+
+// note: can do the usize conversions earlier too, just make them overflow-aware or something?
+// pub fn count2d(bins: []u32, xs: anytype, ys: anytype) void {
+//     const xBins = xs.nBins;
+//     const len = xs.data.len;
+//     var i: usize = 0;
+//     while (i < len) : (i += 1) {
+//         const x = xs.binPcBounds(i);
+//         const y = ys.binPcBounds(i);
+//         if (x.inBounds and y.inBounds) {
+//             const i_bin = @floatToInt(usize, y.index * xBins + x.index);
+//             bins[i_bin] += 1;
+//         }
+//     }
+// }
+
+pub fn count2d(bins: []u32, xs: anytype, ys: anytype) void {
+    // not faster than non-simd with n=4, but n=8 is a bit faster
+    const n = 8;
+    const xBins = @splat(n, xs.nBins);
+    const len = xs.data.len;
+    var i: usize = 0;
+    const x_lo = @splat(n, xs.trueMin);
+    const x_hi = @splat(n, xs.trueMax);
+    const x_min = @splat(n, xs.min);
+    const x_scale = @splat(n, xs.scale);
+
+    const y_lo = @splat(n, ys.trueMin);
+    const y_hi = @splat(n, ys.trueMax);
+    const y_min = @splat(n, ys.min);
+    const y_scale = @splat(n, ys.scale);
+
+    while (i < len) : (i += n) {
+        const x = @Vector(n, f32){
+            xs.data[i],
+            xs.data[i + 1],
+            xs.data[i + 2],
+            xs.data[i + 3],
+            xs.data[i + 4],
+            xs.data[i + 5],
+            xs.data[i + 6],
+            xs.data[i + 7],
+        };
+        const x_in_bounds_lo = x_lo <= x;
+        const x_in_bounds_hi = x <= x_hi;
+        const x_index = @floor((x - x_min) * x_scale);
+
+        const y = @Vector(n, f32){
+            ys.data[i],
+            ys.data[i + 1],
+            ys.data[i + 2],
+            ys.data[i + 3],
+            ys.data[i + 4],
+            ys.data[i + 5],
+            ys.data[i + 6],
+            ys.data[i + 7],
+        };
+        const y_in_bounds_lo = y_lo <= y;
+        const y_in_bounds_hi = y <= y_hi;
+        const y_index = @floor((y - y_min) * y_scale);
+
+        const f_index = y_index * xBins + x_index;
+
+        var j: usize = 0;
+        while (j < n) : (j += 1) {
+            if (x_in_bounds_lo[j] and x_in_bounds_hi[j] and y_in_bounds_lo[j] and y_in_bounds_hi[j]) {
+                const i_bin = @floatToInt(usize, f_index[j]);
+                bins[i_bin] += 1;
+            }
+        }
+    }
+}
+
+// pub fn count2d(bins: []u32, xs: anytype, ys: anytype) void {
+//     const xBins = xs.nBins;
+//     const len = xs.data.len;
+//     var i: usize = 0;
+//     while (i < len) : (i += 1) {
+//         var f_bin = ys.binPc(i) * xBins + xs.binPc(i);
+//         if (!math.isNan(f_bin)) {
+//             const i_bin = @floatToInt(usize, f_bin);
+//             bins[i_bin] += 1;
+//         }
+//     }
+// }
 
 // pub fn bin1d(bins: []f64, assignments: []usize, xs: Vec) void {
 //     for (xs.data) |x, i| {
@@ -66,43 +124,22 @@ pub fn colorize(colors: []Rgba, vs: Vec, ramp: []Rgba) void {
 //     }
 // }
 
-fn f2i(x: f64) usize {
-    return @floatToInt(usize, x);
-}
-
-// call this count3d?
-pub fn bin3d(bins: []u32, xs: Vec, ys: Vec, zs: Vec) void {
-    const xBins = xs.nBinsF64;
-    const yBins = ys.nBinsF64;
-    const len = xs.data.len;
-    var i: usize = 0;
-    while (i < len) : (i += 1) {
-        var f_bin = zs.binPc(i);
-        f_bin = f_bin * yBins + ys.binPc(i);
-        f_bin = f_bin * xBins + xs.binPc(i);
-        if (!math.isNan(f_bin)) {
-            const i_bin = @floatToInt(usize, f_bin);
-            bins[i_bin] += 1;
-        }
-    }
-}
-
-pub fn count(bins: []u32, vecs: anytype) void {
-    const len = vecs[0].data.len;
-    var i: usize = 0;
-    while (i < len) : (i += 1) {
-        var f_bin: f64 = vecs[vecs.len - 1].binPc(i);
-        comptime var i_vec = vecs.len - 2;
-        inline while (i_vec >= 0) : (i_vec -= 1) {
-            const vec = vecs[i_vec];
-            f_bin = f_bin * vec.nBinsF64 + vec.binPc(i);
-        }
-        if (!math.isNan(f_bin)) {
-            const i_bin = @floatToInt(usize, f_bin);
-            bins[i_bin] += 1;
-        }
-    }
-}
+// pub fn count(comptime T: type, bins: []u32, vecs: anytype) void {
+//     const len = vecs[0].data.len;
+//     var i: usize = 0;
+//     while (i < len) : (i += 1) {
+//         var f_bin: T = vecs[vecs.len - 1].binPc(i);
+//         comptime var i_vec = vecs.len - 2;
+//         inline while (i_vec >= 0) : (i_vec -= 1) {
+//             const vec = vecs[i_vec];
+//             f_bin = f_bin * vec.nBins + vec.binPc(i);
+//         }
+//         if (!math.isNan(f_bin)) {
+//             const i_bin = @floatToInt(usize, f_bin);
+//             bins[i_bin] += 1;
+//         }
+//     }
+// }
 
 // bins[i_bin] += all_in_bounds
 // assignments[i] = i_bin + !all_in_bounds * math.maxInt(usize);
@@ -176,3 +213,45 @@ pub fn count(bins: []u32, vecs: anytype) void {
 // is equivalent to:
 //   i_bin = xyBins * zs.bin(z) + xBins * ys.bin(y) + xs.bin(x);
 
+// pub fn count3d(bins: []u32, xs: Vec, ys: Vec, zs: Vec) void {
+//     const xBins = xs.nBinsF64;
+//     const yBins = ys.nBinsF64;
+//     const len = xs.data.len;
+//     var i: usize = 0;
+//     while (i < len) : (i += 1) {
+//         var f_bin = zs.binPc(i);
+//         f_bin = f_bin * yBins + ys.binPc(i);
+//         f_bin = f_bin * xBins + xs.binPc(i);
+//         if (!math.isNan(f_bin)) {
+//             const i_bin = @floatToInt(usize, f_bin);
+//             bins[i_bin] += 1;
+//         }
+//     }
+// }
+
+// pub fn bin(bins: []f64, assignments: []usize, maybe_weights: ?[]const f64, vecs: anytype) void {
+//     assert(vecs.len > 0);
+//     // if the weight vector has length 1, broadcast it.
+//     const weights = if (maybe_weights) |weights| weights else &[1]f64{1};
+//     const i_weight: usize = if (maybe_weights) |_| 1 else 0;
+//     const n_data = vecs[0].data.len;
+//     var i_data: usize = 0;
+//     while (i_data < n_data) : (i_data += 1) {
+//         // iterate over dimensions in reverse to compute i_bin.
+//         var i_bin: usize = 0;
+//         var all_in_bounds = true;
+//         comptime var i_vec = vecs.len - 1;
+//         inline while (i_vec >= 0) : (i_vec -= 1) {
+//             const vec = vecs[i_vec];
+//             const val = vec.data[i_data];
+//             all_in_bounds = all_in_bounds and vec.inBounds(val);
+//             if (all_in_bounds) i_bin = i_bin * vec.nBins + vec.bin(val);
+//         }
+//         if (all_in_bounds) {
+//             bins[i_bin] += weights[i_weight * i_data];
+//             assignments[i_data] = i_bin;
+//         } else {
+//             assignments[i_data] = math.maxInt(usize);
+//         }
+//     }
+// }

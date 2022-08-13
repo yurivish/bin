@@ -63,10 +63,11 @@ pub noinline fn initMinMax(nBins: usize, data: []const f64, min: f64, max: f64) 
     // perturb bin positions downwards so that binIndex assigns the correct bin
     // to the maximum value. Note: Needs testing; not fully confident this works.
     const eps64 = 1e-7;
-    // can be subtracted from (2^12 = 4096) to decrease it, so we can have up to 4k bins in f32 mode?
-    // const eps32 = 3e-4;
+    // can be subtracted from f32 (2^12 = 4096) to decrease it, so we can have up to 4k bins in f32 mode?
+    // const eps32 = 0.000244140625
     // Scale factor from [min, max] to [0..bins.len - eps]. The epsilon ensures
     // that maximum point gets mapped into the largest bin rather than beyond it.
+    // It does squish all of the projected values slightly, but I haven't found this to be an issue for my use cases.
     // If max is equal to min, we want to map all value to the zeroth bin.
     const denom = if (max - min == 0) math.inf(f64) else max - min;
     const scale = (@intToFloat(f64, nBins) - eps64) / denom;
