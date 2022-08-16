@@ -8,7 +8,7 @@ const Rgba = bin.Rgba;
 
 export fn count2d(
     // zig fmt: off
-    binsPtr: [*]u32,
+    binsPtr: [*]u32, normalizedBinsPtr: [*]u8,
     xBins: usize, xs: [*]const f32, xDomain: *[2]f32,
     yBins: usize, ys: [*]const f32, yDomain: *[2]f32,
     len: usize,
@@ -21,7 +21,16 @@ export fn count2d(
     yDomain.* = .{ yVec.min, yVec.max };
     // bin.count(f32, bins, .{ xVec, yVec });
     bin.count2d(bins, xVec, yVec);
-    // _ = bins;
+
+    const normalizedBins = normalizedBinsPtr[0 .. xBins * yBins];
+    var maxBin: u32 = 1; // avoid dividing by zero
+    for (bins) |b| maxBin = math.max(maxBin, b);
+    for (bins) |b, i| {
+        if (b == 0) normalizedBins[i] = 0 else {
+            const val = (b * 255) / maxBin;
+            normalizedBins[i] = @intCast(u8, val);
+        }
+    }
     return 0;
 }
 

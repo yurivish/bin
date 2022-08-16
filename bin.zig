@@ -20,8 +20,38 @@ pub fn count2d(bins: []u32, xs: anytype, ys: anytype) void {
     while (i < len) : (i += 1) {
         const x = xs.binPcBounds(i);
         const y = ys.binPcBounds(i);
-        if (x.inBounds and y.inBounds) {
-            const i_bin = @floatToInt(usize, y.index * xBins + x.index);
+        // if (x.inBounds and y.inBounds) {
+        //     const i_bin = @floatToInt(usize, y.index * xBins + x.index);
+        //     bins[i_bin] += 1;
+        // }
+        {
+            @setRuntimeSafety(false);
+            const b = @boolToInt(x.inBounds and y.inBounds);
+            const i_bin = b * @floatToInt(usize, y.index * xBins + x.index);
+            bins[i_bin] += b;
+        }
+    }
+}
+
+fn f2u(index: f32) usize {
+    return @floatToInt(usize, index);
+}
+
+pub fn count3d(bins: []u32, xs: anytype, ys: anytype, zs: anytype) void {
+    // caution: untested
+    const xBins = f2u(xs.nBins);
+    const xyBins = f2u(xs.nBins * ys.nBins);
+    const len = xs.data.len;
+    var i: usize = 0;
+    while (i < len) : (i += 1) {
+        const x = xs.binPcBounds(i);
+        const y = ys.binPcBounds(i);
+        const z = zs.binPcBounds(i);
+
+        // need to do all this if float32 since f32 cannot represent 4096^3
+
+        if (x.inBounds and y.inBounds and z.inBounds) {
+            const i_bin = xyBins * f2u(z.index) + xBins * f2u(y.index) + x.index;
             bins[i_bin] += 1;
         }
     }
