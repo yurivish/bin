@@ -20,15 +20,9 @@ pub fn count2d(bins: []u32, xs: anytype, ys: anytype) void {
     while (i < len) : (i += 1) {
         const x = xs.binPcBounds(i);
         const y = ys.binPcBounds(i);
-        // if (x.inBounds and y.inBounds) {
-        //     const i_bin = @floatToInt(usize, y.index * xBins + x.index);
-        //     bins[i_bin] += 1;
-        // }
-        {
-            @setRuntimeSafety(false);
-            const b = @boolToInt(x.inBounds and y.inBounds);
-            const i_bin = b * @floatToInt(usize, y.index * xBins + x.index);
-            bins[i_bin] += b;
+        if (x.inBounds and y.inBounds) {
+            const i_bin = @floatToInt(usize, y.index * xBins + x.index);
+            bins[i_bin] += 1;
         }
     }
 }
