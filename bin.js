@@ -36,7 +36,8 @@ export function tileCounts(out, lo, hi, level, searchBefore, searchAfter) {
   const loCodeScaled = lo >>> shift;
   const hiCodeScaled = hi >>> shift;
   const xTileLo = decode2x(loCodeScaled);
-  const xTileHi = decode2y(loCodeScaled);
+  const xTileHi = decode2x(hiCodeScaled);
+  const yTileLo = decode2y(loCodeScaled);
   const xTiles = xTileHi - xTileLo + 1
   splitIntoContiguousRanges(loCodeScaled, hiCodeScaled, (range) => {
     const loCode = (range.min << shift) >>> 0; // first code of the first tile in this range
@@ -50,14 +51,14 @@ export function tileCounts(out, lo, hi, level, searchBefore, searchAfter) {
     ) {
       const hiIndex = searchBefore(code);
       const x = decode2x(tileCode) - xTileLo;
-      const y = decode2y(tileCode) - xTileHi;
+      const y = decode2y(tileCode) - yTileLo;
       const tileIndex = xTiles * y + x;
       out[tileIndex] = hiIndex - loIndex;
       loIndex = hiIndex;
     }
     const hiIndex = searchAfter(hiCode);
     const x = decode2x(tileCode) - xTileLo;
-    const y = decode2y(tileCode) - xTileHi;
+    const y = decode2y(tileCode) - yTileLo;
     const tileIndex = xTiles * y + x;
     out[tileIndex] = hiIndex - loIndex;
   });
