@@ -6,12 +6,24 @@ const NextVec = @import("nextvec.zig").NextVec;
 const Vec = NextVec(f32);
 const Rgba = bin.Rgba;
 
-export fn count2d(
+export fn count2dRanges(
     // zig fmt: off
-    binsPtr: [*]u32, normalizedBinsPtr: [*]u8,
+    binsPtr: [*]u32,
     xBins: usize, xs: [*]const f32, xDomain: *[2]f32,
     yBins: usize, ys: [*]const f32, yDomain: *[2]f32,
     len: usize,
+    rangesPtr: [*]u32, rangesLen: usize,
+    // zig fmt: on
+) f64 {
+    return 0;
+}
+
+export fn count2d(
+    // zig fmt: off
+    binsPtr: [*]u32, normalizedBinsPtr: [*]f32,
+    xBins: usize, xs: [*]const f32, xDomain: *[2]f32,
+    yBins: usize, ys: [*]const f32, yDomain: *[2]f32,
+    len: usize, computeNormalizedBins: bool,
     // zig fmt: on
 ) f64 {
     const bins = binsPtr[0 .. xBins * yBins];
@@ -22,13 +34,15 @@ export fn count2d(
     // bin.count(f32, bins, .{ xVec, yVec });
     bin.count2d(bins, xVec, yVec);
 
-    const normalizedBins = normalizedBinsPtr[0 .. xBins * yBins];
-    var maxBin: u32 = 1; // avoid dividing by zero
-    for (bins) |b| maxBin = math.max(maxBin, b);
-    for (bins) |b, i| {
-        if (b == 0) normalizedBins[i] = 0 else {
-            const val = (b * 255) / maxBin;
-            normalizedBins[i] = @intCast(u8, val);
+    if (computeNormalizedBins) {
+        const normalizedBins = normalizedBinsPtr[0 .. xBins * yBins];
+        var maxBin: f32 = 0.01; // avoid dividing by zero
+        for (normalizedBins) |*b, i| {
+            b.* = @log2(1.0 + @intToFloat(f32, bins[i]));
+            maxBin = math.max(maxBin, b.*);
+        }
+        for (normalizedBins) |*b| {
+            b.* = b.* / maxBin;
         }
     }
     return 0;
