@@ -2,7 +2,9 @@
 // Tile: Power-of-2-sized and power-of-2-aligned bin in Morton space
 
 export function tileIndexRanges(out, lo, hi, level, searchBefore, searchAfter) {
-  // return an array of arrays of index ranges in z-order. The indices for individual tiles can be found by looking at differences between successive range elements
+  // returns an array ofrepresenting contiguous index ranges in z-order.
+  // each range is preceded by its scaled-down min and max Morton codes:
+  // [min1, max1, x1_1, ..., x1_n, min2, max2, x2_1, , ..., x2_n]
   rangeCheck(lo, hi, level);
   const shift = 2 * level; // bitshift factor to downscale [lo, hi] so that each tile is represented by a single z-order index
   const tileSize = 2 ** shift; // a tile at `level` is 2^level along each side, so contains 2^(2*level) elements
@@ -27,9 +29,7 @@ export function tileIndexRanges(out, lo, hi, level, searchBefore, searchAfter) {
   return nRanges; // used to not need to reset the array after the fact, ie. can have junk but we know how many subranges
 }
 
-// todo: remove dependency on xMaxTiles, and simply treat fill the prefix of the `out` array
-// as if (lo, hi) indicate the entire range
-export function tileCounts(out, lo, hi, level, xMaxTiles, searchBefore, searchAfter) {
+export function tileCounts(out, lo, hi, level, searchBefore, searchAfter) {
   rangeCheck(lo, hi, level);
   const shift = 2 * level;
   const tileSize = 2 ** shift; // a tile at `level` is 2^level along each side
@@ -37,6 +37,7 @@ export function tileCounts(out, lo, hi, level, xMaxTiles, searchBefore, searchAf
   const hiCodeScaled = hi >>> shift;
   const xTileLo = decode2x(loCodeScaled);
   const xTileHi = decode2y(loCodeScaled);
+  const xTiles = xTileHi - xTileLo + 1
   splitIntoContiguousRanges(loCodeScaled, hiCodeScaled, (range) => {
     const loCode = (range.min << shift) >>> 0; // first code of the first tile in this range
     const hiCode = ((range.max << shift) >>> 0) + (tileSize - 1); // last code of the last tile
@@ -50,14 +51,14 @@ export function tileCounts(out, lo, hi, level, xMaxTiles, searchBefore, searchAf
       const hiIndex = searchBefore(code);
       const x = decode2x(tileCode) - xTileLo;
       const y = decode2y(tileCode) - xTileHi;
-      const tileIndex = xMaxTiles * y + x;
+      const tileIndex = xTiles * y + x;
       out[tileIndex] = hiIndex - loIndex;
       loIndex = hiIndex;
     }
     const hiIndex = searchAfter(hiCode);
     const x = decode2x(tileCode) - xTileLo;
     const y = decode2y(tileCode) - xTileHi;
-    const tileIndex = xMaxTiles * y + x;
+    const tileIndex = xTiles * y + x;
     out[tileIndex] = hiIndex - loIndex;
   });
   return out;
