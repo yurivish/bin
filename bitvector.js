@@ -27,8 +27,8 @@ class NaiveBitVector {
 // fast rank
 class SimpleBitVector {
   constructor(ones, length) {
-    // `ones` should be a sorted array of the locations of 1 bits
-    const n = Math.ceil(length / 32); // can also use u64
+    // `ones` should be a sorted array of the unique locations of 1 bits
+    const n = Math.ceil(length / 32 /* does this work for large numbers? */); // can also use u64
     const blocks = new Uint32Array(n); // packed bit vector blocks
     for (let i = 0; i < ones.length; i++) {
       const pos = ones[i]; // bit position to set
@@ -42,6 +42,8 @@ class SimpleBitVector {
       rankSuperblocks[i] = rankSuperblocks[i - 1] + popcount(blocks[i]);
     this.blocks = blocks;
     this.rankSuperblocks = rankSuperblocks;
+    this.numOnes = ones.length;
+    this.length = length;
   }
   access(i) {
     const blockIndex = i >>> 5;
@@ -50,22 +52,20 @@ class SimpleBitVector {
     const target = 1 << bitOffset; // mask out the target bit
     return (block & target) === target; // return true if the masked bit is set
   }
-  rank1_early_out(i) {
-    const blockIndex = i >>> 5;
-    const rankSuperbock = this.rankSuperblocks[blockIndex];
-    const block = this.blocks[blockIndex]; // declaring here improves random access perf
-    const lowBitIndex = i & 31;
-    if (lowBitIndex === 31) return rankSuperbock;
-    const mask = 0xfffffffe << lowBitIndex;
-    return rankSuperbock - popcount(block & mask);
-  }
   rank1(i) {
+    if (i < 0) return 0;
+    // if (i < 0) throw new Error("i < 0");
+    if (i >= this.length) return this.numOnes;
+
     const blockIndex = i >>> 5;
     const rankSuperbock = this.rankSuperblocks[blockIndex];
     const block = this.blocks[blockIndex];
     const lowBitIndex = i & 31;
     const mask = 0xfffffffe << lowBitIndex;
-    return rankSuperbock - popcount(block & mask);
+    const v = rankSuperbock - popcount(block & mask);
+    // todo: check bounds
+    // if (Number.isNaN(v)) `throw new Error("nan result from simplevector.rank1");
+    return v;
   }
   rank0(i) {
     // note: the final block is padded with zeros so rank0 will return
@@ -73,18 +73,32 @@ class SimpleBitVector {
     // within the final block.
     return i - this.rank1(i) + 1;
   }
+  // rank1_early_out(i) {
+  //   const blockIndex = i >>> 5;
+  //   const rankSuperbock = this.rankSuperblocks[blockIndex];
+  //   const block = this.blocks[blockIndex]; // declaring here improves random access perf
+  //   const lowBitIndex = i & 31;
+  //   if (lowBitIndex === 31) return rankSuperbock;
+  //   const mask = 0xfffffffe << lowBitIndex;
+  //   return rankSuperbock - popcount(block & mask);
+  // }
 }
 
 // fast rank and select (in progress)
 class SimpleSelectBitVector {
   select1(i) {
+    // arg is not an index; rename from i?
+    // if (i < 1) return 0; // NOTE: unconventional!
     if (i < 1) throw new Error("out of bounds: i < 1");
-    if (i > this.numOnes) throw new Error("out of bounds: i > numOnes");
-    const selectSuperblockIndex = (i - 1) >>> 5; // >> SsBitsPow2
+    if (i > this.numOnes)
+      throw new Error(
+        "out of bounds: i > numOnes: " + i + " vs. " + this.numOnes
+      );
+    const selectSuperblockIndex = (i - 1) >>> 5; // >>> SsBitsPow2
     const selectSuperblock = this.selectSuperblocks[selectSuperblockIndex];
     const adjustment = selectSuperblock & 31; // number of 1 bits in this block before the (32k+1)th bit
     let prevBlockRank = (selectSuperblockIndex << 5) - adjustment; // cumulative rank of previous block
-    let blockIndex = selectSuperblock >> 5; // >> SsBitsPow2; index of next block to scan
+    let blockIndex = selectSuperblock >>> 5; // >>> SsBitsPow2; index of next block to scan
     let blockRank = this.rankSuperblocks[blockIndex]; // cumulative rank up to and including blockIndex
     while (blockRank < i) {
       prevBlockRank = blockRank;
@@ -95,7 +109,7 @@ class SimpleSelectBitVector {
     if (block === undefined) throw new Error("undef block");
     for (let r = prevBlockRank + 1; r < i; r++) block &= block - 1;
     return (blockIndex << 5) /* << bitsPerBlockPow2 */ + trailing0(block);
-    // hint can be {blockIndex, prevBlockRank} encoded like a select block, or similar; to allow us to avoid the select superblock lookup...
+    // hint can be {blockIndex, prevBlockRank} encoded like a select block, or similar; to allow us to avoid the select superblock lookup and having to iterate forwards from it...
   }
 
   constructor(ones, length) {
@@ -130,6 +144,7 @@ class SimpleSelectBitVector {
     this.selectSuperblocks = selectSuperblocks;
     this.numOnes = ones.length;
   }
+
   access(i) {
     const blockIndex = i >>> 5;
     const bitOffset = i & 31;
@@ -159,6 +174,104 @@ class SimpleSelectBitVector {
     // incorrect results if called with an out-of-bounds index that is
     // within the final block.
     return i - this.rank1(i) + 1;
+  }
+}
+
+// returns block indices of all zero 32-blocks
+const zeroBlocks = (a, universeSize) => {
+  const blocks = new Uint8Array(Math.ceil(universeSize / 32));
+  for (let i = 0; i < a.length; i++) blocks[a[i] >>> 5] = 1;
+  // return d3.sum(blocks);
+  const ones = new Uint32Array(d3.sum(blocks, (d) => !d));
+  let n = 0;
+  for (let i = 0; i < blocks.length; i++) if (blocks[i] === 0) ones[n++] = i;
+  return ones;
+}
+
+const uniq = (a) => {
+  let unique = new Uint32Array(a); // filter in place
+  let prev = unique[0];
+  let n = 1;
+  for (let i = 1; i < unique.length; i++) {
+    const cur = unique[i];
+    if (prev !== cur) {
+      unique[n++] = cur;
+      prev = cur;
+    }
+  }
+  return new Uint32Array(unique.slice(0, n));
+}
+
+class PlainMultiSet {
+  constructor(data, universeSize) {
+    // data is sorted, may contain repetitions; todo: special-case for speed when no repetitions?
+    let unique = new Uint32Array(data); // filter in place
+    let prev = unique[0];
+    let n = 1;
+    for (let i = 1; i < unique.length; i++) {
+      const cur = unique[i];
+      if (prev !== cur) {
+        unique[n++] = cur;
+        prev = cur;
+      }
+    }
+    unique = new Uint32Array(unique.subarray(0, n));
+    this.occupancy = new SimpleBitVector(unique, universeSize);
+    this.multiplicity = new SimpleSelectBitVector(
+      multiplicityOnes(data),
+      data.length
+    );
+    this.max = data[data.length - 1]; // todo: does not handle zero data;
+    this.length = data.length;
+    this.universeSize = universeSize;
+  }
+  rank1(i) {
+    if (i < 0) return 0; //throw new Error("i < 0");
+    if (i > this.max) return this.length;
+    const offset = this.occupancy.rank1(i);
+    if (offset === 0) return 0;
+    return this.multiplicity.select1(offset); // searchRight
+  }
+}
+
+class MultiSet {
+  constructor(data, universeSize) {
+    // data is sorted, may contain repetitions; todo: special-case for speed when no repetitions?
+    let unique = uniq(data);
+    const zeroPositions = zeroBlocks(unique, Math.ceil(unique.length / 32));
+    this.zeros = new SimpleBitVector(
+      zeroPositions,
+      Math.ceil(unique.length / 32)
+    );
+    let nz = 0;
+    for (let i = 0; i < unique.length; i++) {
+      const d = unique[i];
+      const block = d >>> 5;
+      // how many zero blocks were there before this block?
+      while (zeroPositions[nz] < block && nz < zeroPositions.length) nz++;
+      unique[i] -= nz << 5;
+    }
+    // return unique;
+
+    this.occupancy = new SimpleBitVector(unique, universeSize);
+    this.multiplicity = new SimpleSelectBitVector(
+      multiplicityOnes(data),
+      data.length
+    );
+    this.max = data[data.length - 1]; // todo: does not handle zero data;
+    this.length = data.length;
+    this.universeSize = universeSize;
+  }
+  rank1(i) {
+    // figure out how to support the optimization where we don't rerun the select if the answer is the same as the previous rank answer
+    // if (i < 0) return 0; // throw new Error("i < 0");
+    if (i > this.max) return this.length;
+    i -= this.zeros.rank1(i >>> 5) << 5;
+    // if (i < 0) return 0;
+    const offset = this.occupancy.rank1(i);
+    if (offset === 0) return 0;
+    
+    return this.multiplicity.select1(offset); // searchRight
   }
 }
 
