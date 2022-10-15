@@ -1,0 +1,1 @@
+reduce memory: start bitarrays at the rank with the first 1, rather than always at zero.
