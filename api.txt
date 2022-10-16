@@ -1,3 +1,5 @@
+Use the multi-year dogs data as a demo? Clean the dog data
+
 Fast multiset construction
 
 need: occupancy bitvector w/ rank
@@ -20,7 +22,7 @@ make a BitVectorBuilder and SelectBitVectorBuilder
 
 class BitVectorBuilder {
 	initialize(length) {
-		const n = Math.ceil(length >> 5);
+		const n = Math.ceil(length / 32);
 		this.blocks = new Uint32Array(n);
 	}
 
@@ -33,8 +35,14 @@ class BitVectorBuilder {
 
 class SelectBitVectorBuilder {
 	initialize(length) {
-		const n = Math.ceil(length >> 5);
+		const n = Math.ceil(length / 32);
 		this.blocks = new Uint32Array(n);
+		const m = Math.ceil(n / 32)
+		this.zeroSuperblocks = new Uint32Array(Math.ceil(n / 32)); // cumulative sums
+
+		// there are n/32 zero blocks (they are zero superblocks)
+		// we can just store each 
+		this.zeroSuperblocks = new Uint32Array().fill(-1 >>> 0);
 		// will need to be resized down at the end; don't
 		// know the number of ones ahead of time
 		this.selectSuperblocks = new Uint32Array(n);
@@ -44,10 +52,14 @@ class SelectBitVectorBuilder {
 	}
 	one(position) {
 		const blockIndex = position >>> 5 - numZeroBlocks;
+		const zeroBlockIndex = blockIndex >>> 5
+
 		if (blockIndex - this.prevBlockIndex > 1) {
-			numNewZeroBlocks = blockIndex - prevBlockIndex - 1;
-			numZeroBlocks += numNewZeroBlocks;
-			blockIndex -= numNewZeroBlocks;
+			// this one introduces new zero blocks.
+			// numNewZeroBlocks = blockIndex - prevBlockIndex - 1;
+			// while (numZeroBlocks <
+			// numZeroBlocks += numNewZeroBlocks;
+			// blockIndex -= numNewZeroBlocks;
 			// need to mark zero blocks 
 		}
 		const bitOffset = position & 31;
@@ -89,5 +101,6 @@ API Design
 		return 1d index on morton codes
 
 	queryTiles(out, index, x1, y1, x2, y2, tileSize)
+		1d linear queries
 
 	queryTile(index, x, y, tileSize)

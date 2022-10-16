@@ -1,1 +1,7 @@
-reduce memory: start bitarrays at the rank with the first 1, rather than always at zero.
+reduce memory:
+	start bitarrays at the rank with the first 1, rather than always at zero.
+reduce runtime:
+	batch select queries
+	avoid redundant select when next result same as previous
+	binary search zero-compressed select block range
+
