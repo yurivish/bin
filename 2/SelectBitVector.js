@@ -12,6 +12,8 @@ export class SelectBitVector {
     this.prevOnePosition = -1;
   }
   
+  // maybe we should do the interleave select superblock creation with block creation, and lift the restriction on strictly ascending ones required 
+  // (like the rank bitvector)
   one(position) {
     if (position <= this.prevOnePosition) throw new Error('ones must be added in strictly-ascending order');
     this.prevOnePosition = position;

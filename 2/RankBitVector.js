@@ -5,21 +5,19 @@ export class RankBitVector {
     const n = Math.ceil(length / 32);
     this.blocks = new Uint32Array(n);
     this.numOnes = 0;
-    this.prevOnePosition = -1;
+    this.maxOnePosition = -1;
   }
 
   one(position) {
-    if (position <= this.prevOnePosition) throw new Error('ones must be added in strictly-ascending order');
-    this.prevOnePosition = position;
     const blockIndex = position >>> 5;
     const bitOffset = position & 31;
     this.blocks[blockIndex] |= 1 << bitOffset;
     this.numOnes += 1;
-    this.prevOnePosition = position;
+    if (position > this.maxOnePosition) this.maxOnePosition = position;
   }
 
   finish() {
-    this.length = this.prevOnePosition + 1;
+    this.length = this.maxOnePosition + 1;
     const numBlocks = Math.ceil(this.length / 32);
     if (numBlocks < this.blocks.length) {
       this.blocks = this.blocks.slice(0, numBlocks);
