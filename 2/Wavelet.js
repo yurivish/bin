@@ -110,6 +110,7 @@ export class WaveletMatrix {
   // This implements the 'strict' version, using only this.levels and this.numZeros.
   rank(symbol, i) {
     if (this.numLevels === 0) return 0;
+    i += 1;
     let p = 0; // index of the start of the current node
     let l = 0; // level index
     let a = 0;
