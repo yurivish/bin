@@ -22,7 +22,6 @@ export class RankBitVector {
     if (numBlocks < this.blocks.length) {
       this.blocks = this.blocks.slice(0, numBlocks);
     }
-    console.log('numBlocks',numBlocks,this.blocks.length)
     // compute rank superblocks (cumulative sum of 1 bits per block)
     this.rankSuperblocks = new Uint32Array(numBlocks);
     this.rankSuperblocks[0] = popcount(this.blocks[0]);
@@ -39,5 +38,15 @@ export class RankBitVector {
     const lowBitIndex = i & 31;
     const mask = 0xfffffffe << lowBitIndex;
     return rankSuperbock - popcount(block & mask);
+  }
+
+  rank0(i) {
+    if (i < 0) return 0;
+    if (i >= this.length) return this.numOnes;
+    // note: the final block is padded with zeros so rank0 will return
+    // incorrect results if called with an out-of-bounds index that is
+    // within the final block. So we do the bounds checks here too.
+    // can optimize via copy-pasting the rank1 impl in here.
+    return i - this.rank1(i) + 1;
   }
 }
