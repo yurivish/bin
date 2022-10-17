@@ -85,10 +85,10 @@ export class WaveletMatrix {
   }
 
   access(i) {
-    if (i < 0 || i > this.length) throw new Error('access: out of bounds')
+    if (i < 0 || i > this.length) throw new Error('access: out of bounds');
     let l = 0; // level index
     let a = 0;
-    let b = 2 ** this.numLevels - 1
+    let b = 2 ** this.numLevels - 1;
     while (a !== b) {
       const level = this.levels[l];
       if (level.access(i) === 0) {
@@ -97,8 +97,8 @@ export class WaveletMatrix {
         b = (a + b) >>> 1;
       } else {
         // go right
-        const z = this.numZeros[l];
-        i = z + level.rank1(i - 1);
+        const nz = this.numZeros[l];
+        i = nz + level.rank1(i - 1);
         a = ((a + b) >>> 1) + 1;
       }
       l += 1;
@@ -125,9 +125,9 @@ export class WaveletMatrix {
         b = (a + b) >>> 1;
       } else {
         // go right
-        const z = this.numZeros[l];
-        i = z + level.rank1(i - 1);
-        p = z + level.rank1(p - 1);
+        const nz = this.numZeros[l];
+        i = nz + level.rank1(i - 1);
+        p = nz + level.rank1(p - 1);
         a = ((a + b) >>> 1) + 1;
       }
       l += 1;
@@ -135,6 +135,73 @@ export class WaveletMatrix {
     }
     return i - p;
   }
+
+  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp
+  // Range quantile query returning the kth largest value in A[i, j).
+  // I wonder if there's a way to early-out in this implementation; as
+  // written, it always looks through all levels. Does this have implications
+  // for e.g. a Huffman-shaped wavelet matrix?
+  quantile(i, j, k) {
+    if (i > j) throw new Error('i must be <= j');
+    if (j > this.length) throw new Error('j must be < wavelet matrix length');
+    if (k < 0 || k >= j - i) throw new Error('k cannot be less than zero or exceed length of range [i, j)');
+    const msbMask = 1 << this.maxLevel;
+    let symbol = 0;
+    for (let p = 0; p < this.numLevels; p++) {
+      const level = this.levels[p];
+      const i0 = level.rank0(i - 1);
+      const j0 = level.rank0(j - 1);
+      const z = j0 - i0;
+      if (k < z) {
+        i = i0;
+        j = j0;
+      } else {
+        symbol |= msbMask >>> p;
+        k -= z;
+        const nz = this.numZeros[p];
+        i = nz + (i - i0); // === nz + level.rank1(i - 1);
+        j = nz + (j - j0); // === nz + level.rank1(j - 1);
+      }
+    }
+    return { symbol, frequency: j - i };
+  }
+
+  // Note: Compact Data Structures: A Practical Approach contains a
+  // pseudocode implementation for Wavelet Trees as Algorithm 6.16.
+  // Incomplete draft below.
+  //   quantile(symbol, i, j, k) {
+  //     let l = 0;
+  //     let a = 0;
+  //     let b = 2 ** this.numLevels - 1;
+  //     while (a < b) {
+  //       const level = this.levels[l];
+  //       const m = (a + b) >>> 1;
+  //       let il = level.rank0(i - 1) + 1;
+  //       let jl = level.rank0(j);
+  //       // frequency of 0 elements in the range at this level
+  //       let n = jl - il + 1;
+  //       if (n <= k) {
+  //         // i = il;
+  //         // j = jl;
+  //         b = m;
+  //         // go left
+  //         i = //il - 1;
+  //         j = //jl - (1 - level.access(j))
+  //       } else {
+  //         // i = i - il + 1;
+  //         // j = j - jl;
+  //         a = m + 1;
+  //         k = n - l;
+
+  //         // go right
+  //         // const z = this.numZeros[l];
+  //         // i = z + level.rank1(i - 1);
+  //         // j = z + level.rank1(j - 1);
+  //       }
+  //       l += 1;
+  //     }
+  //     return { value: a, frequency: j - i + 1 }
+  //   }
 }
 
 // note: incomplete
