@@ -6,6 +6,7 @@ export class RankBitVector {
     this.blocks = new Uint32Array(n);
     this.numOnes = 0;
     this.maxOnePosition = -1;
+    this.length = length;
   }
 
   one(position) {
@@ -17,8 +18,8 @@ export class RankBitVector {
   }
 
   finish() {
-    this.length = this.maxOnePosition + 1;
-    const numBlocks = Math.ceil(this.length / 32);
+    this.storedLength = this.maxOnePosition + 1;
+    const numBlocks = Math.ceil(this.storedLength / 32);
     if (numBlocks < this.blocks.length) {
       this.blocks = this.blocks.slice(0, numBlocks);
     }
@@ -31,7 +32,7 @@ export class RankBitVector {
 
   rank1(i) {
     if (i < 0) return 0;
-    if (i >= this.length) return this.numOnes;
+    if (i >= this.storedLength) return this.numOnes;
     const blockIndex = i >>> 5;
     const rankSuperbock = this.rankSuperblocks[blockIndex];
     const block = this.blocks[blockIndex];
@@ -42,11 +43,19 @@ export class RankBitVector {
 
   rank0(i) {
     if (i < 0) return 0;
-    if (i >= this.length) return this.numOnes;
+    if (i >= this.length) return this.length - this.numOnes;
     // note: the final block is padded with zeros so rank0 will return
     // incorrect results if called with an out-of-bounds index that is
     // within the final block. So we do the bounds checks here too.
     // can optimize via copy-pasting the rank1 impl in here.
     return i - this.rank1(i) + 1;
+  }
+
+  access(i) {
+    const blockIndex = i >>> 5;
+    const bitOffset = i & 31;
+    const block = this.blocks[blockIndex];
+    const targetMask = 1 << bitOffset; // mask out the target bit
+    return block & targetMask;
   }
 }

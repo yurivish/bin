@@ -10,6 +10,7 @@ export class SelectBitVector {
     this.numZeroBlocks = 0;
     this.prevUncompressedBlockIndex = -1;
     this.prevOnePosition = -1;
+    this.length = length;
   }
   
   // maybe we should do the interleave select superblock creation with block creation, and lift the restriction on strictly ascending ones required 
@@ -44,8 +45,8 @@ export class SelectBitVector {
   }
 
   finish() {
-    this.length = this.prevOnePosition + 1
-    const numBlocks = Math.ceil(this.length / 32);    
+    this.storedLength = this.maxOnePosition + 1;
+    const numBlocks = Math.ceil(this.storedLength / 32);    
     if (numBlocks < this.blocks.length) {
       this.blocks = this.blocks.slice(0, numBlocks);
       this.precedingZeroBlocks = this.precedingZeroBlocks.slice(0, numBlocks);
