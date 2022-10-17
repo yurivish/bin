@@ -2,3 +2,4 @@
 zig-cache
 Makefile
 bin.wasm
+*/**/*.bundle.js
