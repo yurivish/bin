@@ -82,6 +82,13 @@ export class WaveletMatrix {
     this.numLevels = numLevels;
     this.maxLevel = maxLevel;
     this.length = data.length;
+
+    this.symbols = new Uint32Array(this.alphabetSize);
+    for (let s = 0; s < this.symbols.length; s++) this.symbols[s] = s;
+    this.P = new Uint32Array(this.alphabetSize);
+    this.I = new Uint32Array(this.alphabetSize);
+    this.A = new Uint32Array(this.alphabetSize);
+    this.B = new Uint32Array(this.alphabetSize);
   }
 
   access(i) {
@@ -110,25 +117,28 @@ export class WaveletMatrix {
   // This implements the 'strict' version, using only this.levels and this.numZeros.
   rank(symbol, i) {
     if (this.numLevels === 0) return 0;
-    i += 1;
     let p = 0; // index of the start of the current node
     let l = 0; // level index
     let a = 0; // left symbol index
     let b = (1 << this.numLevels) - 1; // right symbol index
     let levelBitMask = 1 << this.maxLevel;
+    i += 1;
     while (a !== b) {
       const level = this.levels[l];
       const m = (a + b) >>> 1;
+      const i0 = level.rank0(i - 1);
+      const p0 = level.rank0(p - 1);
+
       if ((symbol & levelBitMask) === 0) {
         // go left
-        i = level.rank0(i - 1);
-        p = level.rank0(p - 1);
+        i = i0;
+        p = p0;
         b = m;
       } else {
         // go right
         const nz = this.numZeros[l];
-        i = nz + level.rank1(i - 1);
-        p = nz + level.rank1(p - 1);
+        i = nz + (i - i0); // === nz + level.rank1(i - 1);
+        p = nz + (p - p0); // === nz + level.rank1(p - 1);
         a = m + 1;
       }
       l += 1;
@@ -137,11 +147,56 @@ export class WaveletMatrix {
     return i - p;
   }
 
+  // Batched rank: https://www.sciencedirect.com/science/article/pii/S0890540112001526#se0100
+  // This version rearranges the computation to make level bitvector accesses contiguous in time,
+  // but does no other rearrangements.
+  batchedRank(i) {
+    const { symbols, P, I, A, B } = this;
+    P.fill(0);
+    I.fill(i + 1);
+    A.fill(0);
+    B.fill((1 << this.numLevels) - 1);
+    let levelBitMask = 1 << this.maxLevel;
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const nz = this.numZeros[l];
+      for (let s = 0; s < symbols.length; s++) {
+        const symbol = symbols[s];
+        const p = P[s];
+        const i = I[s];
+        const a = A[s];
+        const b = B[s];
+        // if (a === b) continue;
+        const m = (a + b) >>> 1;
+        const i0 = level.rank0(i - 1);
+        const p0 = level.rank0(p - 1);
+
+        if ((symbol & levelBitMask) === 0) {
+          // go left
+          I[s] = i0;
+          P[s] = p0;
+          B[s] = m;
+        } else {
+          // go right
+          I[s] = nz + (i - i0);
+          P[s] = nz + (p - p0);
+          A[s] = m + 1;
+        }
+      }
+      levelBitMask >>>= 1;
+    }
+    for (let i = 0; i < I.length; i++) I[i] -= P[i];
+    return I;
+  }
+
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
   // Range quantile query returning the kth largest symbol in A[i, j).
   // I wonder if there's a way to early-out in this implementation; as
   // written, it always looks through all levels. Does this have implications
   // for e.g. a Huffman-shaped wavelet matrix?
+  // Note: this  may be noticeably slower (needs rigorous testing) than the previous
+  // version that looped over all levels rather than bisecting a symbol interval
+  // when the tree is balanced. Might be worth keeping both implementations around.
   quantile(i, j, k) {
     if (i > j) throw new Error('i must be <= j');
     if (j > this.length) throw new Error('j must be < wavelet matrix length');
