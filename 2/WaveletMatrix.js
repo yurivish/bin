@@ -88,7 +88,7 @@ export class WaveletMatrix {
     if (i < 0 || i > this.length) throw new Error('access: out of bounds');
     let l = 0; // level index
     let a = 0;
-    let b = 2 ** this.numLevels - 1;
+    let b = (1 << this.numLevels) - 1;
     while (a !== b) {
       const level = this.levels[l];
       if (level.access(i) === 0) {
@@ -136,7 +136,7 @@ export class WaveletMatrix {
     return i - p;
   }
 
-  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp
+  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
   // Range quantile query returning the kth largest symbol in A[i, j).
   // I wonder if there's a way to early-out in this implementation; as
   // written, it always looks through all levels. Does this have implications
@@ -149,23 +149,61 @@ export class WaveletMatrix {
     if (k < 0 || k >= j - i) throw new Error('k cannot be less than zero or exceed length of range [i, j)');
     const msbMask = 1 << this.maxLevel;
     let symbol = 0;
-    for (let p = 0; p < this.numLevels; p++) {
-      const level = this.levels[p];
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
       const i0 = level.rank0(i - 1);
       const j0 = level.rank0(j - 1);
-      const z = j0 - i0;
-      if (k < z) {
+      const count = j0 - i0;
+      if (k < count) {
         i = i0;
         j = j0;
       } else {
-        symbol |= msbMask >>> p;
-        k -= z;
-        const nz = this.numZeros[p];
+        symbol |= msbMask >>> l;
+        k -= count;
+        const nz = this.numZeros[l];
         i = nz + (i - i0); // === nz + level.rank1(i - 1);
         j = nz + (j - j0); // === nz + level.rank1(j - 1);
       }
     }
     return { symbol, frequency: j - i };
+  }
+
+  // Returns the number of values with symbol strictly less than the given symbol.
+  // This is kind of like a ranged rank operation over a symbol range.
+  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
+  less(i, j, symbol) {
+    if (i < 0) throw new Error('i must be >= 0');
+    if (i > j) throw new Error('i must be <= j');
+    if (j > this.length) throw new Error('j must be < wavelet matrix length');
+    if (symbol <= 0) return 0;
+    if (symbol >= this.alphabetSize) return this.length;
+    let levelBitMask = 1 << this.maxLevel;
+    let count = 0;
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const i0 = level.rank0(i - 1);
+      const j0 = level.rank0(j - 1);
+      if ((symbol & levelBitMask) === 0) {
+        i = i0;
+        j = j0;
+      } else {
+        count += j0 - i0;
+        const nz = this.numZeros[l];
+        // we can simplifiy this way since i and j are both
+        // in range and rank0(i) === i - this.rank1(i) + 1
+        i = nz + (i - i0); // === nz + level.rank1(i - 1);
+        j = nz + (j - j0); // === nz + level.rank1(j - 1);
+      }
+      levelBitMask >>>= 1;
+    }
+    return count;
+  }
+
+  // Returns the number of occurrences of symbols [lower, upper)
+  // in the index range [i, j).
+  count(i, j, lower, upper) {
+    if (lower > upper) throw new Error('lower must be <= upper');
+    return this.less(i, j, upper) - this.less(i, j, lower);
   }
 }
 

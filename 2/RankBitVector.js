@@ -43,11 +43,13 @@ export class RankBitVector {
 
   rank0(i) {
     if (i < 0) return 0;
+    // We check against length here, rather than storedLength,
+    // since we need to count the implicitly-represented zeros.
     if (i >= this.length) return this.length - this.numOnes;
     // note: the final block is padded with zeros so rank0 will return
     // incorrect results if called with an out-of-bounds index that is
     // within the final block. So we do the bounds checks here too.
-    // can optimize via copy-pasting the rank1 impl in here.
+    // Can optimize via copy-pasting the rank1 impl in here.
     return i - this.rank1(i) + 1;
   }
 
