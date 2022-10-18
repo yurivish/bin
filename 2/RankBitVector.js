@@ -2,6 +2,8 @@ import { popcount } from './util';
 
 export class RankBitVector {
   constructor(length) {
+    // todo: interleave rank and bits blocks for improved rank performance (access slows down)
+    // todo: make a RankSelectBitVector for noninterleaved noncompressed rank/select
     const n = Math.ceil(length / 32);
     this.blocks = new Uint32Array(n);
     this.numOnes = 0;
