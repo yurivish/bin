@@ -87,8 +87,8 @@ export class WaveletMatrix {
   access(i) {
     if (i < 0 || i > this.length) throw new Error('access: out of bounds');
     let l = 0; // level index
-    let a = 0;
-    let b = (1 << this.numLevels) - 1;
+    let a = 0; // left symbol index
+    let b = (1 << this.numLevels) - 1; // right symbol index
     while (a !== b) {
       const level = this.levels[l];
       if (level.access(i) === 0) {
@@ -113,22 +113,23 @@ export class WaveletMatrix {
     i += 1;
     let p = 0; // index of the start of the current node
     let l = 0; // level index
-    let a = 0;
-    let b = 2 ** this.numLevels - 1;
+    let a = 0; // left symbol index
+    let b = (1 << this.numLevels) - 1; // right symbol index
     let levelBitMask = 1 << this.maxLevel;
     while (a !== b) {
       const level = this.levels[l];
+      const m = (a + b) >>> 1;
       if ((symbol & levelBitMask) === 0) {
         // go left
         i = level.rank0(i - 1);
         p = level.rank0(p - 1);
-        b = (a + b) >>> 1;
+        b = m;
       } else {
         // go right
         const nz = this.numZeros[l];
         i = nz + level.rank1(i - 1);
         p = nz + level.rank1(p - 1);
-        a = ((a + b) >>> 1) + 1;
+        a = m + 1;
       }
       l += 1;
       levelBitMask >>>= 1;
@@ -142,6 +143,78 @@ export class WaveletMatrix {
   // written, it always looks through all levels. Does this have implications
   // for e.g. a Huffman-shaped wavelet matrix?
   quantile(i, j, k) {
+    if (i > j) throw new Error('i must be <= j');
+    if (j > this.length) throw new Error('j must be < wavelet matrix length');
+    if (k < 0 || k >= j - i) throw new Error('k cannot be less than zero or exceed length of range [i, j)');
+    let symbol = 0;
+    let l = 0;
+    let a = 0; // left symbol index
+    let b = (1 << this.numLevels) - 1; // right symbol index
+    let levelBitMask = 1 << this.maxLevel;
+    while (a !== b) {
+      const level = this.levels[l];
+      const m = (a + b) >>> 1;
+      const i0 = level.rank0(i - 1);
+      const j0 = level.rank0(j - 1);
+      const count = j0 - i0;
+      if (k < count) {
+        // go left
+        i = i0;
+        j = j0;
+        b = m;
+      } else {
+        symbol |= levelBitMask;
+        k -= count;
+        const nz = this.numZeros[l];
+        i = nz + (i - i0); // === nz + level.rank1(i - 1);
+        j = nz + (j - j0); // === nz + level.rank1(j - 1);
+        a = m + 1;
+      }
+      l += 1;
+      levelBitMask >>>= 1;
+    }
+    return { symbol, frequency: j - i };
+  }
+
+  less(i, j, symbol) {
+    if (i < 0) throw new Error('i must be >= 0');
+    if (i > j) throw new Error('i must be <= j');
+    if (j > this.length) throw new Error('j must be < wavelet matrix length');
+    if (symbol <= 0) return 0;
+    if (symbol >= this.alphabetSize) return this.length;
+    let l = 0; // level index
+    let a = 0; // left symbol index
+    let b = (1 << this.numLevels) - 1; // right symbol index // right symbol
+    let count = 0;
+    let levelBitMask = 1 << this.maxLevel;
+    while (a !== b) {
+      const level = this.levels[l];
+      const m = (a + b) >>> 1;
+      const i0 = level.rank0(i - 1);
+      const j0 = level.rank0(j - 1);
+      if ((symbol & levelBitMask) === 0) {
+        i = i0;
+        j = j0;
+        b = m;
+      } else {
+        count += j0 - i0;
+        const nz = this.numZeros[l];
+        // we can express rank1 in terms of rank0
+        // since i and j are both in bounds and
+        //    rank0(i)   = i - rank1(i) + 1
+        // => rank0(i-1) = i-1 - rank1(i-1) + 1
+        // => rank0(i-1) = i - rank1(i-1)
+        i = nz + (i - i0); // === nz + level.rank1(i - 1);
+        j = nz + (j - j0); // === nz + level.rank1(j - 1);
+        a = m + 1;
+      }
+      l += 1;
+      levelBitMask >>>= 1;
+    }
+    return count;
+  }
+
+  __quantile(i, j, k) {
     if (i > j) throw new Error('i must be <= j');
     if (j > this.length) throw new Error('j must be < wavelet matrix length');
     if (k < 0 || k >= j - i) throw new Error('k cannot be less than zero or exceed length of range [i, j)');
@@ -169,7 +242,7 @@ export class WaveletMatrix {
   // Returns the number of values with symbol strictly less than the given symbol.
   // This is kind of like a ranged rank operation over a symbol range.
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
-  less(i, j, symbol) {
+  __less(i, j, symbol) {
     if (i < 0) throw new Error('i must be >= 0');
     if (i > j) throw new Error('i must be <= j');
     if (j > this.length) throw new Error('j must be < wavelet matrix length');
