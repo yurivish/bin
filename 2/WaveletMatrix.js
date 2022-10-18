@@ -141,8 +141,6 @@ export class WaveletMatrix {
   // I wonder if there's a way to early-out in this implementation; as
   // written, it always looks through all levels. Does this have implications
   // for e.g. a Huffman-shaped wavelet matrix?
-  // Note: Compact Data Structures: A Practical Approach contains a
-  // pseudocode implementation for Wavelet Trees as Algorithm 6.16.
   quantile(i, j, k) {
     if (i > j) throw new Error('i must be <= j');
     if (j > this.length) throw new Error('j must be < wavelet matrix length');
@@ -189,8 +187,11 @@ export class WaveletMatrix {
       } else {
         count += j0 - i0;
         const nz = this.numZeros[l];
-        // we can simplifiy this way since i and j are both
-        // in range and rank0(i) === i - this.rank1(i) + 1
+        // we can express rank1 in terms of rank0
+        // since i and j are both in bounds and
+        //    rank0(i)   = i - rank1(i) + 1
+        // => rank0(i-1) = i-1 - rank1(i-1) + 1
+        // => rank0(i-1) = i - rank1(i-1)
         i = nz + (i - i0); // === nz + level.rank1(i - 1);
         j = nz + (j - j0); // === nz + level.rank1(j - 1);
       }
