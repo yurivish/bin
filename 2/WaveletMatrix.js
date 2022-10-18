@@ -148,8 +148,10 @@ export class WaveletMatrix {
   }
 
   // Batched rank: https://www.sciencedirect.com/science/article/pii/S0890540112001526#se0100
-  // This version rearranges the computation to make level bitvector accesses contiguous in time,
-  // but does no other rearrangements.
+  // This version rearranges the computation to make level bitvector accesses contiguous in time.
+  // Since we proceed from high bits to low bits, we save on rank queries when a symbol has the
+  // same level bit as its predecessor. Currently done with an `if`; could instead be a nested
+  // loop where the inner loop iterates all of the contiguous symbols with the same bit.
   batchedRank(i) {
     const { symbols, P, I, A, B } = this;
     P.fill(0);
@@ -158,20 +160,32 @@ export class WaveletMatrix {
     B.fill((1 << this.numLevels) - 1);
     let levelBitMask = 1 << this.maxLevel;
     for (let l = 0; l < this.numLevels; l++) {
+      console.log('levelBitMask', levelBitMask);
       const level = this.levels[l];
       const nz = this.numZeros[l];
+      let i0 = level.rank0(I[0] - 1);
+      let p0 = level.rank0(P[0] - 1);
+      let prevSymbolLevelBit = this.symbols[0] & levelBitMask;
       for (let s = 0; s < symbols.length; s++) {
         const symbol = symbols[s];
         const p = P[s];
         const i = I[s];
         const a = A[s];
         const b = B[s];
-        // if (a === b) continue;
+        if (a === b) continue; // slows things down, it seems
         const m = (a + b) >>> 1;
-        const i0 = level.rank0(i - 1);
-        const p0 = level.rank0(p - 1);
 
-        if ((symbol & levelBitMask) === 0) {
+        // one alternation: process all lefts and then process all rights
+        // const n = levelBitMask
+
+        const symbolLevelBit = symbol & levelBitMask;
+        if (symbolLevelBit !== prevSymbolLevelBit) {
+          // if (l === 1) console.log('rank!', symbol)
+          i0 = level.rank0(i - 1);
+          p0 = level.rank0(p - 1);
+          prevSymbolLevelBit = symbolLevelBit;
+        }
+        if (symbolLevelBit === 0) {
           // go left
           I[s] = i0;
           P[s] = p0;
