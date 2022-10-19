@@ -152,7 +152,7 @@ export class WaveletMatrix {
   // loop where the inner loop iterates all of the contiguous symbols with the same bit.
   // note: this comment is out of date, but the strategy it describes could be useful for arbitrary symbol sets.
   // we should also try implementing a batched rank over a contiguous symbol range that returns individual counts.
-  batchedRank(i) {
+  batchedRank(i) { // todo: call this allRanks? ranks?
     const { symbols, P, I } = this;
     // P.fill(123);
     // I.fill(123); // clear for easier debugging
@@ -189,6 +189,16 @@ export class WaveletMatrix {
       for (let n = Math.min(numLeafNodes, numLevelNodes); n > 0; ) {
         n -= 1;
 
+        // sketch of how we might support symbol selection
+        // const i = I[n];
+        // const i0 = level.rank0(i - 1);
+        // switch(levelSelector /* could be a u64 */) {
+        // case right: I[2 * n] = nz + (i - i0); break;
+        // case both: I[2 * n + 1] = nz + (i - i0);
+        // case left: I[2 * n] = i0;
+        // }
+        // if (levelSelector === both) N <<= 1;
+
         const i = I[n];
         const i0 = level.rank0(i - 1);
         I[2 * n] = i0;
@@ -198,6 +208,7 @@ export class WaveletMatrix {
         const p0 = level.rank0(p - 1);
         P[2 * n] = p0;
         P[2 * n + 1] = nz + (p - p0);
+
         // question: how can we bail out early in the case of an unbalanced tree?
         // question: how can we use similar logic to query arbitrary symbol ranges?
         // question: can we use similar logic to query arbitrary symbol sets?
@@ -260,6 +271,7 @@ export class WaveletMatrix {
     return { symbol, frequency: j - i };
   }
 
+  // todo: describe
   less(i, j, symbol) {
     if (i < 0) throw new Error('i must be >= 0');
     if (i > j) throw new Error('i must be <= j');
@@ -283,11 +295,6 @@ export class WaveletMatrix {
       } else {
         count += j0 - i0;
         const nz = this.numZeros[l];
-        // we can express rank1 in terms of rank0
-        // since i and j are both in bounds and
-        //    rank0(i)   = i - rank1(i) + 1
-        // => rank0(i-1) = i-1 - rank1(i-1) + 1
-        // => rank0(i-1) = i - rank1(i-1)
         i = nz + (i - i0); // === nz + level.rank1(i - 1);
         j = nz + (j - j0); // === nz + level.rank1(j - 1);
         a = m + 1;
@@ -323,6 +330,14 @@ export class WaveletMatrix {
     return { symbol, frequency: j - i };
   }
 
+  // note:
+  // we can express rank1 in terms of rank0
+  // since i and j are both in bounds and
+  //    rank0(i)   = i - rank1(i) + 1
+  // => rank0(i-1) = i-1 - rank1(i-1) + 1
+  // => rank0(i-1) = i - rank1(i-1)
+  
+
   // Returns the number of values with symbol strictly less than the given symbol.
   // This is kind of like a ranged rank operation over a symbol range.
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
@@ -344,11 +359,6 @@ export class WaveletMatrix {
       } else {
         count += j0 - i0;
         const nz = this.numZeros[l];
-        // we can express rank1 in terms of rank0
-        // since i and j are both in bounds and
-        //    rank0(i)   = i - rank1(i) + 1
-        // => rank0(i-1) = i-1 - rank1(i-1) + 1
-        // => rank0(i-1) = i - rank1(i-1)
         i = nz + (i - i0); // === nz + level.rank1(i - 1);
         j = nz + (j - j0); // === nz + level.rank1(j - 1);
       }
