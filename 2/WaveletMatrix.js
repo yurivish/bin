@@ -178,7 +178,7 @@ export class WaveletMatrix {
       prevP = P[Nmax];
       // Perform all left and right mappings to the next level of the tree.
       // reach level, we go both left and right for each existing entry in
-      // the array (when we come to a fork in the road, we take it).
+      // the array (when we come to a fork in the road, we take it both directions).
       // We started out with a single index i and p; at level zero we want
       // to expand go both left and right; then at level one we want to go
       // both left and right for the level zero "lefts", and same for the rights;
@@ -193,7 +193,7 @@ export class WaveletMatrix {
       for (let n = l === this.maxLevel ? Nmax : N; n > 0; ) {
         n -= 1;
 
-        const i = I[n]; // note: maybe we should offset these by 1 so the compiler knows we never write from where we read
+        const i = I[n];
         const i0 = level.rank0(i - 1);
         I[2 * n] = i0;
         I[2 * n + 1] = nz + (i - i0);
