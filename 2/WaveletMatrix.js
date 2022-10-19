@@ -153,6 +153,8 @@ export class WaveletMatrix {
   // we should also try implementing a batched rank over a contiguous symbol range that returns individual counts.
   batchedRank(i) {
     const { symbols, P, I } = this;
+    P.fill(0);
+    I.fill(0); // clear for easier debugging
     P[0] = 0;
     I[0] = i + 1;
     let levelBitMask = 1 << this.maxLevel;
@@ -166,23 +168,14 @@ export class WaveletMatrix {
     //   2 * n < alphabetSize - 1
     //   n < (alphabetSize - 1) / 2
     const Nmax = ((this.alphabetSize - 1) >>> 1) + (1 - (this.alphabetSize % 2));
+    let prevI = 0; // we want to store I[Nmax] for the level maxLevels - 1 so 
+    let prevP = 0; // that we have it around to compute the final rank value if needed.
+
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
-
-      // special case when we don't need to compute two values since the second one
-      // would go beyond the end of the array (can only happen on the last level)
-      if (l === this.maxLevel && alphabetSizeIsOdd) {
-        const n = Nmax;
-        const i = I[n];
-        const i0 = level.rank0(i - 1);
-        I[2 * n] = i0;
-
-        const p = P[n];
-        const p0 = level.rank0(p - 1);
-        P[2 * n] = p0;
-      }
-
+      prevI = I[Nmax];
+      prevP = P[Nmax];
       // Perform all left and right mappings to the next level of the tree.
       // reach level, we go both left and right for each existing entry in
       // the array (when we come to a fork in the road, we take it).
@@ -195,12 +188,12 @@ export class WaveletMatrix {
       // since we do two per tree node and eg. an 8-symbol tree has 4 + 2 + 1 = 7 nodes.
       // additionally, all of the rank operations at a level are done in a row.
       // todo: better explanation, docs, and cleaner + commented code.
-      // todo: can we generalize this to arbitrary symbol sets? is it already general 
+      // todo: can we generalize this to arbitrary symbol sets? is it already general
       // (based on this.symbols)? I think we need to adjust Nmax to the size of the symbol set.
       for (let n = l === this.maxLevel ? Nmax : N; n > 0; ) {
         n -= 1;
 
-        const i = I[n];
+        const i = I[n]; // note: maybe we should offset these by 1 so the compiler knows we never write from where we read
         const i0 = level.rank0(i - 1);
         I[2 * n] = i0;
         I[2 * n + 1] = nz + (i - i0);
@@ -209,12 +202,17 @@ export class WaveletMatrix {
         const p0 = level.rank0(p - 1);
         P[2 * n] = p0;
         P[2 * n + 1] = nz + (p - p0);
-
         // question: how can we bail out early in the case of an unbalanced tree?
       }
       levelBitMask >>>= 1;
       N <<= 1;
     }
+
+    if (alphabetSizeIsOdd) {
+      I[2 * Nmax] = this.levels[this.maxLevel].rank0(prevI - 1);
+      P[2 * Nmax] = this.levels[this.maxLevel].rank0(prevP - 1);
+    }
+
     for (let i = 0; i < I.length; i++) I[i] -= P[i];
     return I;
   }
