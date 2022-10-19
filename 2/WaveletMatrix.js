@@ -115,6 +115,7 @@ export class WaveletMatrix {
   // This implements the 'strict' version, using only this.levels and this.numZeros.
   rank(symbol, i) {
     if (this.numLevels === 0) return 0;
+    if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
     let p = 0; // index of the start of the current node
     let l = 0; // level index
     let a = 0; // left symbol index
@@ -153,29 +154,21 @@ export class WaveletMatrix {
   // we should also try implementing a batched rank over a contiguous symbol range that returns individual counts.
   batchedRank(i) {
     const { symbols, P, I } = this;
-    P.fill(0);
-    I.fill(0); // clear for easier debugging
+    // P.fill(123);
+    // I.fill(123); // clear for easier debugging
     P[0] = 0;
     I[0] = i + 1;
     let levelBitMask = 1 << this.maxLevel;
-    let N = 1; // tracks the number of branching paths; 2 * N paths at the current level.
-    const alphabetSizeIsOdd = this.alphabetSize % 2 === 1; // used to detect if we need to special-case the last symbol
-    // don't go beyond the last symbol when len(symbols) is not a power of 2
-    //   we want n
-    //     s. t.
-    //   2 * n + 1 < alphabetSize
-    //     so nmax has to be
-    //   2 * n < alphabetSize - 1
-    //   n < (alphabetSize - 1) / 2
-    const Nmax = ((this.alphabetSize - 1) >>> 1) + (1 - (this.alphabetSize % 2));
-    let prevI = 0; // we want to store I[Nmax] for the level maxLevels - 1 so 
-    let prevP = 0; // that we have it around to compute the final rank value if needed.
+    let numLevelNodes = 1; // tracks the number of branching paths; 2 * numLevelNodes paths at the current level (2 * leaves at this level).
+    const numLeafNodes = this.alphabetSize >>> 1; // don't go beyond the last symbol when len(symbols) is not a power of 2
+    let prevI = 0; // we want to store I[numLeafNodes] for the level maxLevels - 1 so that
+    let prevP = 0; // we have it around to compute the final rank value if needed.
 
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
-      prevI = I[Nmax];
-      prevP = P[Nmax];
+      prevI = I[numLeafNodes];
+      prevP = P[numLeafNodes];
       // Perform all left and right mappings to the next level of the tree.
       // reach level, we go both left and right for each existing entry in
       // the array (when we come to a fork in the road, we take it both directions).
@@ -189,8 +182,11 @@ export class WaveletMatrix {
       // additionally, all of the rank operations at a level are done in a row.
       // todo: better explanation, docs, and cleaner + commented code.
       // todo: can we generalize this to arbitrary symbol sets? is it already general
-      // (based on this.symbols)? I think we need to adjust Nmax to the size of the symbol set.
-      for (let n = l === this.maxLevel ? Nmax : N; n > 0; ) {
+      // (based on this.symbols)? I think we need to adjust numLeafNodes to the size of the symbol set.
+      // all levels other than the last are completely filled if we assume that the number of levels is
+      // the closest power of two to the number of symbols, but otherwise any level may benefit from
+      // the reduction in the number of iterations.
+      for (let n = Math.min(numLeafNodes, numLevelNodes); n > 0; ) {
         n -= 1;
 
         const i = I[n];
@@ -203,14 +199,19 @@ export class WaveletMatrix {
         P[2 * n] = p0;
         P[2 * n + 1] = nz + (p - p0);
         // question: how can we bail out early in the case of an unbalanced tree?
+        // question: how can we use similar logic to query arbitrary symbol ranges?
+        // question: can we use similar logic to query arbitrary symbol sets?
       }
       levelBitMask >>>= 1;
-      N <<= 1;
+      numLevelNodes <<= 1;
     }
 
-    if (alphabetSizeIsOdd) {
-      I[2 * Nmax] = this.levels[this.maxLevel].rank0(prevI - 1);
-      P[2 * Nmax] = this.levels[this.maxLevel].rank0(prevP - 1);
+    // If the alphabet size is odd, fill in the rank of the final symbol since
+    // it was not filled in the previous loop, which operates two symbols at a time.
+    if (this.alphabetSize % 2 === 1) {
+      const level = this.levels[this.maxLevel];
+      I[2 * numLeafNodes] = level.rank0(prevI - 1);
+      P[2 * numLeafNodes] = level.rank0(prevP - 1);
     }
 
     for (let i = 0; i < I.length; i++) I[i] -= P[i];
