@@ -3,4 +3,4 @@ export { SelectBitVector } from './SelectBitVector';
 export { RankMultiSet } from './RankMultiSet';
 export { NaiveBitVector } from './NaiveBitVector';
 export { popcount, trailing0 } from './util';
-export { WaveletMatrix } from './WaveletMatrix';
+export { WaveletMatrix, BOTH, LEFT, RIGHT, STOP } from './WaveletMatrix';

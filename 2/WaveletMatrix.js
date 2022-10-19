@@ -1,7 +1,10 @@
 import { RankBitVector } from './RankBitVector';
-const LEFT = 0;
-const RIGHT = 1;
-const BOTH = 2;
+
+// bit selectors
+export const LEFT = 0; // select left bit
+export const RIGHT = 1; // select right bit
+export const BOTH = 2; // select both bits (eg. rank: return ranks for both subtrees)
+export const STOP = 3; // stop at this level (eg. rank: return sums so far)
 
 // note: implements a binary wavelet matrix that always splits on power-of-two
 // alphabet boundaries, rather than splitting based on the true alphabet midpoint.
@@ -242,40 +245,28 @@ export class WaveletMatrix {
   }
 
   ranks(i, bitSelectors) {
+    // note: bitSelectors could be a u64 for up to 32 levels (2 bits per selector)
+    if (bitSelectors.length != this.numLevels) throw new Error('bitSelectors.length must be equal to numLevels');
     let len = 1;
-    const maxNumSymbols = this.alphabetSize;
     // important: round up. This means that for odd alphabet sizes,
     // we will computer an extra element if we went 'both' directions,
     // which will be omitted from the return value with `subarray`.
-    const halfLimit = Math.ceil(maxNumSymbols / 2);
+    const numSymbols = this.alphabetSize;
+    const halfLimit = Math.ceil(numSymbols / 2);
 
     const { P, I } = this;
     // P.fill(123);
     // I.fill(123); // clear for easier debugging
 
-    P[0] = 0;
     I[0] = clamp(i + 1, 1, this.length);
+    P[0] = 0;
 
     let levelBitMask = 1 << this.maxLevel;
-    for (let l = 0; l < this.numLevels; l++) {
+    loop: for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
       const selector = bitSelectors[l];
       switch (selector) {
-        case LEFT:
-          for (let n = 0; n < len; n++) {
-            // go left
-            I[n] = level.rank0(I[n] - 1);
-            P[n] = level.rank0(P[n] - 1);
-          }
-          break;
-        case RIGHT:
-          for (let n = 0; n < len; n++) {
-            // go right
-            I[n] = nz + level.rank1(I[n] - 1);
-            P[n] = nz + level.rank1(P[n] - 1);
-          }
-          break;
         case BOTH:
           for (let n = Math.min(len, halfLimit); n > 0; ) {
             n -= 1;
@@ -290,8 +281,24 @@ export class WaveletMatrix {
             P[2 * n + 1] = nz + p1; // go right
             P[2 * n] = p - p1; // go left (=== level.rank0(p - 1))
           }
-          len = Math.min(2 * len, maxNumSymbols);
+          len = Math.min(2 * len, numSymbols);
           break;
+        case LEFT:
+          for (let n = 0; n < len; n++) {
+            // go left
+            I[n] = level.rank0(I[n] - 1);
+            P[n] = level.rank0(P[n] - 1);
+          }
+          break;
+        case RIGHT:
+          for (let n = 0; n < len; n++) {
+            // go right
+            I[n] = nz + level.rank1(I[n] - 1);
+            P[n] = nz + level.rank1(P[n] - 1);
+          }
+          break;
+        case STOP:
+          break loop;
       }
       levelBitMask >>>= 1;
     }
