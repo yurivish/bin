@@ -141,7 +141,7 @@ export class WaveletMatrix {
     let a = 0; // left symbol index
     let b = (1 << this.numLevels) - 1; // right symbol index
     let levelBitMask = 1 << this.maxLevel;
-    i += 1;
+    i = clamp(i + 1, 1, this.length);
     while (a !== b) {
       const level = this.levels[l];
       const m = (a + b) >>> 1;
@@ -179,7 +179,7 @@ export class WaveletMatrix {
     // P.fill(123);
     // I.fill(123); // clear for easier debugging
     P[0] = 0;
-    I[0] = i + 1;
+    I[0] = clamp(i + 1, 1, this.length);
     let levelBitMask = 1 << this.maxLevel;
     let numLevelNodes = 1; // tracks the number of branching paths; 2 * numLevelNodes paths at the current level (2 * leaves at this level).
     const numLeafNodes = this.alphabetSize >>> 1; // don't go beyond the last symbol when len(symbols) is not a power of 2
@@ -238,7 +238,7 @@ export class WaveletMatrix {
     }
 
     for (let i = 0; i < I.length; i++) I[i] -= P[i];
-    return I;
+    return I.slice(0, this.alphabetSize);
   }
 
   ranks(i, bitSelectors) {
@@ -254,7 +254,7 @@ export class WaveletMatrix {
     // I.fill(123); // clear for easier debugging
 
     P[0] = 0;
-    I[0] = i + 1;
+    I[0] = clamp(i + 1, 1, this.length);
 
     let levelBitMask = 1 << this.maxLevel;
     for (let l = 0; l < this.numLevels; l++) {
@@ -296,7 +296,7 @@ export class WaveletMatrix {
       levelBitMask >>>= 1;
     }
     for (let i = 0; i < len; i++) I[i] -= P[i];
-    return I.subarray(0, len);
+    return I.subarray(0, len).slice();
   }
 
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
@@ -466,4 +466,8 @@ function bitReverse32(v) {
   // swap 2-byte long pairs
   v = (v >>> 16) | (v << 16);
   return v;
+}
+
+function clamp(x, lo, hi) {
+  return x < lo ? lo : x > hi ? hi : x;
 }
