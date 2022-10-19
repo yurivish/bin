@@ -168,6 +168,7 @@ export class WaveletMatrix {
     return i - p;
   }
 
+  // todo: remove, but not before adding more comments to `ranks`.
   // Batched rank: https://www.sciencedirect.com/science/article/pii/S0890540112001526#se0100
   // Returns the rank of all the symbols. I think this is now superseded by the "ranks" function.
   // This version rearranges the computation to make level bitvector accesses contiguous in time.
@@ -409,11 +410,12 @@ export class WaveletMatrix {
 
   // note:
   // we can express rank1 in terms of rank0
-  // since i and j are both in bounds and
+  // when i and j are both in bounds:
   //    rank0(i)   = i - rank1(i) + 1
   // => rank0(i-1) = i-1 - rank1(i-1) + 1
   // => rank0(i-1) = i - rank1(i-1)
-
+  // and vice versa (see impl. of rank0)
+  
   // Returns the number of values with symbol strictly less than the given symbol.
   // This is kind of like a ranged rank operation over a symbol range.
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
