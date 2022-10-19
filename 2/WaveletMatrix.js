@@ -192,6 +192,9 @@ export class WaveletMatrix {
       // In the end, I think we perform just under 2 * len(symbols) - 1 rank operations
       // since we do two per tree node and eg. an 8-symbol tree has 4 + 2 + 1 = 7 nodes.
       // additionally, all of the rank operations at a level are done in a row.
+      // todo: better explanation, docs, and cleaner + commented code.
+      // todo: can we generalize this to arbitrary symbol sets? is it already general 
+      // (based on this.symbols)? I think we need to adjust Nmax to the size of the symbol set.
       for (let n = l === this.maxLevel ? Nmax : N; n > 0; ) {
         n -= 1;
 
