@@ -149,6 +149,8 @@ export class WaveletMatrix {
   // Since we proceed from high bits to low bits, we save on rank queries when a symbol has the
   // same level bit as its predecessor. Currently done with an `if`; could instead be a nested
   // loop where the inner loop iterates all of the contiguous symbols with the same bit.
+  // note: this comment is out of date, but the strategy is describes could be useful for arbitrary symbolsets.
+  // we should also try implementing a batched rank over a contiguous symbol range that returns individual counts.
   batchedRank(i) {
     const { symbols, P, I } = this;
     P[0] = 0;
