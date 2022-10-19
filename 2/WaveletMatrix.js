@@ -87,8 +87,6 @@ export class WaveletMatrix {
     for (let s = 0; s < this.symbols.length; s++) this.symbols[s] = s;
     this.P = new Uint32Array(this.alphabetSize);
     this.I = new Uint32Array(this.alphabetSize);
-    this.A = new Uint32Array(this.alphabetSize);
-    this.B = new Uint32Array(this.alphabetSize);
   }
 
   access(i) {
@@ -128,7 +126,6 @@ export class WaveletMatrix {
       const m = (a + b) >>> 1;
       const i0 = level.rank0(i - 1);
       const p0 = level.rank0(p - 1);
-
       if ((symbol & levelBitMask) === 0) {
         // go left
         i = i0;
@@ -153,51 +150,65 @@ export class WaveletMatrix {
   // same level bit as its predecessor. Currently done with an `if`; could instead be a nested
   // loop where the inner loop iterates all of the contiguous symbols with the same bit.
   batchedRank(i) {
-    const { symbols, P, I, A, B } = this;
-    P.fill(0);
-    I.fill(i + 1);
-    A.fill(0);
-    B.fill((1 << this.numLevels) - 1);
+    const { symbols, P, I } = this;
+    P[0] = 0;
+    I[0] = i + 1;
     let levelBitMask = 1 << this.maxLevel;
+    let N = 1; // tracks the number of branching paths; 2 * N paths at the current level.
+    const alphabetSizeIsOdd = this.alphabetSize % 2 === 1; // used to detect if we need to special-case the last symbol
+    // don't go beyond the last symbol when len(symbols) is not a power of 2
+    //   we want n
+    //     s. t.
+    //   2 * n + 1 < alphabetSize
+    //     so nmax has to be
+    //   2 * n < alphabetSize - 1
+    //   n < (alphabetSize - 1) / 2
+    const Nmax = ((this.alphabetSize - 1) >>> 1) + (1 - (this.alphabetSize % 2));
     for (let l = 0; l < this.numLevels; l++) {
-      console.log('levelBitMask', levelBitMask);
       const level = this.levels[l];
       const nz = this.numZeros[l];
-      let i0 = level.rank0(I[0] - 1);
-      let p0 = level.rank0(P[0] - 1);
-      let prevSymbolLevelBit = this.symbols[0] & levelBitMask;
-      for (let s = 0; s < symbols.length; s++) {
-        const symbol = symbols[s];
-        const p = P[s];
-        const i = I[s];
-        const a = A[s];
-        const b = B[s];
-        if (a === b) continue; // slows things down, it seems
-        const m = (a + b) >>> 1;
 
-        // one alternation: process all lefts and then process all rights
-        // const n = levelBitMask
+      // special case when we don't need to compute two values since the second one
+      // would go beyond the end of the array (can only happen on the last level)
+      if (l === this.maxLevel && alphabetSizeIsOdd) {
+        const n = Nmax;
+        const i = I[n];
+        const i0 = level.rank0(i - 1);
+        I[2 * n] = i0;
 
-        const symbolLevelBit = symbol & levelBitMask;
-        if (symbolLevelBit !== prevSymbolLevelBit) {
-          // if (l === 1) console.log('rank!', symbol)
-          i0 = level.rank0(i - 1);
-          p0 = level.rank0(p - 1);
-          prevSymbolLevelBit = symbolLevelBit;
-        }
-        if (symbolLevelBit === 0) {
-          // go left
-          I[s] = i0;
-          P[s] = p0;
-          B[s] = m;
-        } else {
-          // go right
-          I[s] = nz + (i - i0);
-          P[s] = nz + (p - p0);
-          A[s] = m + 1;
-        }
+        const p = P[n];
+        const p0 = level.rank0(p - 1);
+        P[2 * n] = p0;
+      }
+
+      // Perform all left and right mappings to the next level of the tree.
+      // reach level, we go both left and right for each existing entry in
+      // the array (when we come to a fork in the road, we take it).
+      // We started out with a single index i and p; at level zero we want
+      // to expand go both left and right; then at level one we want to go
+      // both left and right for the level zero "lefts", and same for the rights;
+      // this way we don't have to perform O(len(symbols)) rank ops at each level
+      // and can instead perform O(level) rank ops where level is O(log2(len(symbols))).
+      // In the end, I think we perform just under 2 * len(symbols) - 1 rank operations
+      // since we do two per tree node and eg. an 8-symbol tree has 4 + 2 + 1 = 7 nodes.
+      // additionally, all of the rank operations at a level are done in a row.
+      for (let n = l === this.maxLevel ? Nmax : N; n > 0; ) {
+        n -= 1;
+
+        const i = I[n];
+        const i0 = level.rank0(i - 1);
+        I[2 * n] = i0;
+        I[2 * n + 1] = nz + (i - i0);
+
+        const p = P[n];
+        const p0 = level.rank0(p - 1);
+        P[2 * n] = p0;
+        P[2 * n + 1] = nz + (p - p0);
+
+        // question: how can we bail out early in the case of an unbalanced tree?
       }
       levelBitMask >>>= 1;
+      N <<= 1;
     }
     for (let i = 0; i < I.length; i++) I[i] -= P[i];
     return I;
