@@ -1,4 +1,7 @@
 import { RankBitVector } from './RankBitVector';
+const LEFT = 0;
+const RIGHT = 1;
+const BOTH = 2;
 
 // note: implements a binary wavelet matrix that always splits on power-of-two
 // alphabet boundaries, rather than splitting based on the true alphabet midpoint.
@@ -12,6 +15,22 @@ export class WaveletMatrix {
     const n = data.length;
     const numLevels = Math.ceil(Math.log2(alphabetSize));
     const maxLevel = numLevels - 1;
+
+    // for each level, store the number of nodes at that level..
+    // for a balanced binary tree, there are twice as many nodes
+    // at each child level as its parent level, other than the
+    // final level, which is limited by the alphabet size.
+    // (the previous levels are also limited by the alphabet size,
+    // but the way that we determine the number of levels means
+    // at the only power of 2 that may be greater than alphabetSize
+    // is the last one.
+    // This will look different with Huffman-shaped matrices!
+    // const numLeafNodes = Math.ceil(this.alphabetSize / 2); // ! there are alphabetSize 'virtual' leaves
+    // const numNodes = new Uint32Array(numLevels);
+    // numNodes[0] = 1;
+    // for (let i=1;i<maxLevel;i++) numNodes[i] = 2 * numNodes[i-1];
+    // numNodes[maxLevel] = numLeafNodes;
+
     // todo: can we get away with non-pow2, storing just one entry per symbol?
     const hist = new Uint32Array(2 ** numLevels);
     const borders = new Uint32Array(2 ** numLevels);
@@ -80,13 +99,14 @@ export class WaveletMatrix {
     this.alphabetSize = alphabetSize;
     this.numZeros = numZeros;
     this.numLevels = numLevels;
+    // this.numNodes = numNodes;
     this.maxLevel = maxLevel;
     this.length = data.length;
 
     this.symbols = new Uint32Array(this.alphabetSize);
     for (let s = 0; s < this.symbols.length; s++) this.symbols[s] = s;
-    this.P = new Uint32Array(this.alphabetSize);
-    this.I = new Uint32Array(this.alphabetSize);
+    this.P = new Uint32Array(this.alphabetSize + 1); // extra space for the full 'both' path
+    this.I = new Uint32Array(this.alphabetSize + 1); // case and an odd alphabet size
   }
 
   access(i) {
@@ -146,13 +166,15 @@ export class WaveletMatrix {
   }
 
   // Batched rank: https://www.sciencedirect.com/science/article/pii/S0890540112001526#se0100
+  // Returns the rank of all the symbols. I think this is now superseded by the "ranks" function.
   // This version rearranges the computation to make level bitvector accesses contiguous in time.
   // Since we proceed from high bits to low bits, we save on rank queries when a symbol has the
   // same level bit as its predecessor. Currently done with an `if`; could instead be a nested
   // loop where the inner loop iterates all of the contiguous symbols with the same bit.
   // note: this comment is out of date, but the strategy it describes could be useful for arbitrary symbol sets.
   // we should also try implementing a batched rank over a contiguous symbol range that returns individual counts.
-  batchedRank(i) { // todo: call this allRanks? ranks?
+  batchedRank(i) {
+    // todo: call this allRanks? ranks?
     const { symbols, P, I } = this;
     // P.fill(123);
     // I.fill(123); // clear for easier debugging
@@ -189,16 +211,6 @@ export class WaveletMatrix {
       for (let n = Math.min(numLeafNodes, numLevelNodes); n > 0; ) {
         n -= 1;
 
-        // sketch of how we might support symbol selection
-        // const i = I[n];
-        // const i0 = level.rank0(i - 1);
-        // switch(levelSelector /* could be a u64 */) {
-        // case right: I[2 * n] = nz + (i - i0); break;
-        // case both: I[2 * n + 1] = nz + (i - i0);
-        // case left: I[2 * n] = i0;
-        // }
-        // if (levelSelector === both) N <<= 1;
-
         const i = I[n];
         const i0 = level.rank0(i - 1);
         I[2 * n] = i0;
@@ -227,6 +239,64 @@ export class WaveletMatrix {
 
     for (let i = 0; i < I.length; i++) I[i] -= P[i];
     return I;
+  }
+
+  ranks(i, bitSelectors) {
+    let len = 1;
+    const maxNumSymbols = this.alphabetSize;
+    // important: round up. This means that for odd alphabet sizes,
+    // we will computer an extra element if we went 'both' directions,
+    // which will be omitted from the return value with `subarray`.
+    const halfLimit = Math.ceil(maxNumSymbols / 2);
+
+    const { P, I } = this;
+    // P.fill(123);
+    // I.fill(123); // clear for easier debugging
+
+    P[0] = 0;
+    I[0] = i + 1;
+
+    let levelBitMask = 1 << this.maxLevel;
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const nz = this.numZeros[l];
+      const selector = bitSelectors[l];
+      switch (selector) {
+        case LEFT:
+          for (let n = 0; n < len; n++) {
+            // go left
+            I[n] = level.rank0(I[n] - 1);
+            P[n] = level.rank0(P[n] - 1);
+          }
+          break;
+        case RIGHT:
+          for (let n = 0; n < len; n++) {
+            // go right
+            I[n] = nz + level.rank1(I[n] - 1);
+            P[n] = nz + level.rank1(P[n] - 1);
+          }
+          break;
+        case BOTH:
+          for (let n = Math.min(len, halfLimit); n > 0; ) {
+            n -= 1;
+            const i = I[n];
+            const p = P[n];
+
+            const i1 = level.rank1(i - 1);
+            I[2 * n + 1] = nz + i1; // go right
+            I[2 * n] = i - i1; // go left (=== level.rank0(i - 1))
+
+            const p1 = level.rank1(p - 1);
+            P[2 * n + 1] = nz + p1; // go right
+            P[2 * n] = p - p1; // go left (=== level.rank0(p - 1))
+          }
+          len = Math.min(2 * len, maxNumSymbols);
+          break;
+      }
+      levelBitMask >>>= 1;
+    }
+    for (let i = 0; i < len; i++) I[i] -= P[i];
+    return I.subarray(0, len);
   }
 
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
@@ -336,7 +406,6 @@ export class WaveletMatrix {
   //    rank0(i)   = i - rank1(i) + 1
   // => rank0(i-1) = i-1 - rank1(i-1) + 1
   // => rank0(i-1) = i - rank1(i-1)
-  
 
   // Returns the number of values with symbol strictly less than the given symbol.
   // This is kind of like a ranged rank operation over a symbol range.
