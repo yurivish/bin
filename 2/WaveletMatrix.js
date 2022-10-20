@@ -349,11 +349,9 @@ export class WaveletMatrix {
 
   approxSizeInMegabytes() {
     let numBits = 0
-    // assume rank bitvector [todo: have the vector determine its bit size]
+    // assume rank bitvector 32 bits per block, plus 32 bits per accompanying rank block
     for (const level of this.levels) numBits += 2 * 32 * level.blocks.length; 
-    const numBytes = numBits / 8
-    const numMegabytes = numBytes / 10e6
-    return numMegabytes
+    return numBits / 8e6 // 8M bits in a megabyte
   }
 
 
