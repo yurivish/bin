@@ -134,39 +134,228 @@ export class WaveletMatrix {
     return a;
   }
 
+  // todo: consistency w/ count of whether the symbol specifier comes first or last
+
   // Adapted from Compact Data Structures: A Practical Approach (Algorithm 6.6)
+  // Searches [first, last).
   // This implements the 'strict' version, using only this.levels and this.numZeros.
-  rank(symbol, i) {
+  // I noticed that by setting the initial value of P, we can do rank range queries rather than requiring two calls to rank.
+  rank(symbol, first, last) {
     if (this.numLevels === 0) return 0;
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
-    let p = 0; // index of the start of the current node
+    if (first > last) throw new Error('last must be <= first');
+    if (first === last) return 0;
+    if (first > this.length) throw new Error('first must be < wavelet matrix length');
     let l = 0; // level index
     let a = 0; // left symbol index
     let b = (1 << this.numLevels) - 1; // right symbol index
     let levelBitMask = 1 << this.maxLevel;
-    i = clamp(i + 1, 1, this.length);
+    // try enforcing tidiness for now rather than how the plain bitvectors do it
+    // first = clamp(first, 0, this.length - 1); // index of the start of the current node
+    // last = clamp(last, 1, this.length);
     while (a !== b) {
       const level = this.levels[l];
       const m = (a + b) >>> 1;
-      const i0 = level.rank0(i - 1);
-      const p0 = level.rank0(p - 1);
+      const last0 = level.rank0(last - 1);
+      const first0 = level.rank0(first - 1); // todo: so strange that we need to do rank of a negative number when first is 0...
       if ((symbol & levelBitMask) === 0) {
         // go left
-        i = i0;
-        p = p0;
+        last = last0;
+        first = first0;
         b = m;
       } else {
         // go right
         const nz = this.numZeros[l];
-        i = nz + (i - i0); // === nz + level.rank1(i - 1);
-        p = nz + (p - p0); // === nz + level.rank1(p - 1);
+        last = nz + (last - last0); // === nz + level.rank1(last - 1);
+        first = nz + (first - first0); // === nz + level.rank1(first - 1);
         a = m + 1;
       }
       l += 1;
       levelBitMask >>>= 1;
     }
-    return i - p;
+    return last - first;
   }
+
+
+  ranks(selectors, first, last) {
+    if (first === undefined || last === undefined) throw 'wat'
+    if (first > last) throw new Error('last must be <= first');
+    // if (first === last) return 0; // todo: return a 0 array of the number of returned symbols
+    if (first > this.length) throw new Error('first must be < wavelet matrix length');
+    // note: bit selectors could be a u64 for up to 32 levels (2 bits per selector)
+    if (selectors.length != this.numLevels) throw new Error('selectors.length must be equal to numLevels');
+    let len = 1;
+    // important: round up. This means that for odd alphabet sizes,
+    // we will computer an extra element if we went 'both' directions,
+    // which will be omitted from the return value with `subarray`.
+    const numSymbols = this.alphabetSize;
+    const halfLimit = Math.ceil(numSymbols / 2);
+
+    const { P, I } = this;
+    // P.fill(123);
+    // I.fill(123); // clear for easier debugging
+
+
+    I[0] = last// clamp(last + 1, 1, this.length);
+    P[0] = first; // todo: would starting this off at nonzero allow us to do a 'range count'? or do I need to do 2 'ranks' calls after all
+
+    let levelBitMask = 1 << this.maxLevel;
+    loop: for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const nz = this.numZeros[l];
+      const selector = selectors[l];
+      switch (selector) {
+        case BOTH:
+          for (let n = Math.min(len, halfLimit); n > 0; ) {
+            n -= 1;
+            const last = I[n];
+            const p = P[n];
+
+            const last1 = level.rank1(last - 1);
+            I[2 * n + 1] = nz + last1; // go right
+            I[2 * n] = last - last1; // go left (=== level.rank0(last - 1))
+
+            const p1 = level.rank1(p - 1);
+            P[2 * n + 1] = nz + p1; // go right
+            P[2 * n] = p - p1; // go left (=== level.rank0(p - 1))
+          }
+          len = Math.min(2 * len, numSymbols);
+          break;
+        case LEFT:
+          for (let n = 0; n < len; n++) {
+            // go left
+            I[n] = level.rank0(I[n] - 1);
+            P[n] = level.rank0(P[n] - 1);
+          }
+          break;
+        case RIGHT:
+          for (let n = 0; n < len; n++) {
+            // go right
+            I[n] = nz + level.rank1(I[n] - 1);
+            P[n] = nz + level.rank1(P[n] - 1);
+          }
+          break;
+        case STOP:
+          break loop;
+      }
+      levelBitMask >>>= 1;
+    }
+    for (let i = 0; i < len; i++) I[i] -= P[i];
+    return I.subarray(0, len).slice();
+  }
+
+  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
+  // Range quantile query returning the kth largest symbol in A[i, j).
+  // I wonder if there's a way to early-out in this implementation; as
+  // written, it always looks through all levels. Does this have implications
+  // for e.g. a Huffman-shaped wavelet matrix?
+  // Note: this  may be noticeably slower (needs rigorous testing) than the previous
+  // version that looped over all levels rather than bisecting a symbol interval
+  // when the tree is balanced. Might be worth keeping both implementations around.
+  quantile(i, j, k) {
+    if (i > j) throw new Error('i must be <= j');
+    if (j > this.length) throw new Error('j must be < wavelet matrix length');
+    if (k < 0 || k >= j - i) throw new Error('k cannot be less than zero or exceed length of range [i, j)');
+    let symbol = 0;
+    let l = 0;
+    let a = 0; // left symbol index
+    let b = (1 << this.numLevels) - 1; // right symbol index
+    let levelBitMask = 1 << this.maxLevel;
+    while (a !== b) {
+      const level = this.levels[l];
+      const m = (a + b) >>> 1;
+      const i0 = level.rank0(i - 1);
+      const j0 = level.rank0(j - 1);
+      const count = j0 - i0;
+      if (k < count) {
+        // go left
+        i = i0;
+        j = j0;
+        b = m;
+      } else {
+        symbol |= levelBitMask;
+        k -= count;
+        const nz = this.numZeros[l];
+        i = nz + (i - i0); // === nz + level.rank1(i - 1);
+        j = nz + (j - j0); // === nz + level.rank1(j - 1);
+        a = m + 1;
+      }
+      l += 1;
+      levelBitMask >>>= 1;
+    }
+    return { symbol, frequency: j - i };
+  }
+
+  // Returns the number of values with symbol strictly less than the given symbol.
+  // This is kind of like a ranged rank operation over a symbol range.
+  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
+  less(i, j, symbol) {
+    if (i < 0) throw new Error('i must be >= 0');
+    if (i > j) throw new Error('i must be <= j');
+    if (j > this.length) throw new Error('j must be < wavelet matrix length');
+    if (symbol <= 0) return 0;
+    if (symbol >= this.alphabetSize) return this.length;
+    let l = 0; // level index
+    let a = 0; // left symbol index
+    let b = (1 << this.numLevels) - 1; // right symbol index // right symbol
+    let count = 0;
+    let levelBitMask = 1 << this.maxLevel;
+    while (a !== b) {
+      const level = this.levels[l];
+      const m = (a + b) >>> 1;
+      const i0 = level.rank0(i - 1);
+      const j0 = level.rank0(j - 1);
+      if ((symbol & levelBitMask) === 0) {
+        i = i0;
+        j = j0;
+        b = m;
+      } else {
+        count += j0 - i0;
+        const nz = this.numZeros[l];
+        i = nz + (i - i0); // === nz + level.rank1(i - 1);
+        j = nz + (j - j0); // === nz + level.rank1(j - 1);
+        a = m + 1;
+      }
+      l += 1;
+      levelBitMask >>>= 1;
+    }
+    return count;
+  }
+
+  // note:
+  // we can express rank1 in terms of rank0
+  // when i and j are both in bounds:
+  //    rank0(i)   = i - rank1(i) + 1
+  // => rank0(i-1) = i-1 - rank1(i-1) + 1
+  // => rank0(i-1) = i - rank1(i-1)
+  // and vice versa (see impl. of rank0)
+
+  // Returns the number of occurrences of symbols [lower, upper)
+  // in the index range [i, j).
+  count(i, j, lower, upper) {
+    if (lower > upper) throw new Error('lower must be <= upper');
+    return this.less(i, j, upper) - this.less(i, j, lower);
+  }
+
+  allSelector() {
+    return new Uint8Array(this.numLevels).fill(BOTH)
+  }
+
+  selector(prefix) {
+    const ret = new Uint8Array(this.numLevels).fill(STOP);
+    ret.set(prefix);
+    return ret;
+  }
+
+  approxSizeInMegabytes() {
+    let numBits = 0
+    // assume rank bitvector [todo: have the vector determine its bit size]
+    for (const level of this.levels) numBits += 2 * 32 * level.blocks.length; 
+    const numBytes = numBits / 8
+    const numMegabytes = numBytes / 10e6
+    return numMegabytes
+  }
+
 
   // todo: remove, but not before adding more comments to `ranks`.
   // Batched rank: https://www.sciencedirect.com/science/article/pii/S0890540112001526#se0100
@@ -245,212 +434,7 @@ export class WaveletMatrix {
     return I.slice(0, this.alphabetSize);
   }
 
-  ranks(i, bitSelectors) {
-    // note: bitSelectors could be a u64 for up to 32 levels (2 bits per selector)
-    if (bitSelectors.length != this.numLevels) throw new Error('bitSelectors.length must be equal to numLevels');
-    let len = 1;
-    // important: round up. This means that for odd alphabet sizes,
-    // we will computer an extra element if we went 'both' directions,
-    // which will be omitted from the return value with `subarray`.
-    const numSymbols = this.alphabetSize;
-    const halfLimit = Math.ceil(numSymbols / 2);
 
-    const { P, I } = this;
-    // P.fill(123);
-    // I.fill(123); // clear for easier debugging
-
-    I[0] = clamp(i + 1, 1, this.length);
-    P[0] = 0;
-
-    let levelBitMask = 1 << this.maxLevel;
-    loop: for (let l = 0; l < this.numLevels; l++) {
-      const level = this.levels[l];
-      const nz = this.numZeros[l];
-      const selector = bitSelectors[l];
-      switch (selector) {
-        case BOTH:
-          for (let n = Math.min(len, halfLimit); n > 0; ) {
-            n -= 1;
-            const i = I[n];
-            const p = P[n];
-
-            const i1 = level.rank1(i - 1);
-            I[2 * n + 1] = nz + i1; // go right
-            I[2 * n] = i - i1; // go left (=== level.rank0(i - 1))
-
-            const p1 = level.rank1(p - 1);
-            P[2 * n + 1] = nz + p1; // go right
-            P[2 * n] = p - p1; // go left (=== level.rank0(p - 1))
-          }
-          len = Math.min(2 * len, numSymbols);
-          break;
-        case LEFT:
-          for (let n = 0; n < len; n++) {
-            // go left
-            I[n] = level.rank0(I[n] - 1);
-            P[n] = level.rank0(P[n] - 1);
-          }
-          break;
-        case RIGHT:
-          for (let n = 0; n < len; n++) {
-            // go right
-            I[n] = nz + level.rank1(I[n] - 1);
-            P[n] = nz + level.rank1(P[n] - 1);
-          }
-          break;
-        case STOP:
-          break loop;
-      }
-      levelBitMask >>>= 1;
-    }
-    for (let i = 0; i < len; i++) I[i] -= P[i];
-    return I.subarray(0, len).slice();
-  }
-
-  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
-  // Range quantile query returning the kth largest symbol in A[i, j).
-  // I wonder if there's a way to early-out in this implementation; as
-  // written, it always looks through all levels. Does this have implications
-  // for e.g. a Huffman-shaped wavelet matrix?
-  // Note: this  may be noticeably slower (needs rigorous testing) than the previous
-  // version that looped over all levels rather than bisecting a symbol interval
-  // when the tree is balanced. Might be worth keeping both implementations around.
-  quantile(i, j, k) {
-    if (i > j) throw new Error('i must be <= j');
-    if (j > this.length) throw new Error('j must be < wavelet matrix length');
-    if (k < 0 || k >= j - i) throw new Error('k cannot be less than zero or exceed length of range [i, j)');
-    let symbol = 0;
-    let l = 0;
-    let a = 0; // left symbol index
-    let b = (1 << this.numLevels) - 1; // right symbol index
-    let levelBitMask = 1 << this.maxLevel;
-    while (a !== b) {
-      const level = this.levels[l];
-      const m = (a + b) >>> 1;
-      const i0 = level.rank0(i - 1);
-      const j0 = level.rank0(j - 1);
-      const count = j0 - i0;
-      if (k < count) {
-        // go left
-        i = i0;
-        j = j0;
-        b = m;
-      } else {
-        symbol |= levelBitMask;
-        k -= count;
-        const nz = this.numZeros[l];
-        i = nz + (i - i0); // === nz + level.rank1(i - 1);
-        j = nz + (j - j0); // === nz + level.rank1(j - 1);
-        a = m + 1;
-      }
-      l += 1;
-      levelBitMask >>>= 1;
-    }
-    return { symbol, frequency: j - i };
-  }
-
-  // todo: describe
-  less(i, j, symbol) {
-    if (i < 0) throw new Error('i must be >= 0');
-    if (i > j) throw new Error('i must be <= j');
-    if (j > this.length) throw new Error('j must be < wavelet matrix length');
-    if (symbol <= 0) return 0;
-    if (symbol >= this.alphabetSize) return this.length;
-    let l = 0; // level index
-    let a = 0; // left symbol index
-    let b = (1 << this.numLevels) - 1; // right symbol index // right symbol
-    let count = 0;
-    let levelBitMask = 1 << this.maxLevel;
-    while (a !== b) {
-      const level = this.levels[l];
-      const m = (a + b) >>> 1;
-      const i0 = level.rank0(i - 1);
-      const j0 = level.rank0(j - 1);
-      if ((symbol & levelBitMask) === 0) {
-        i = i0;
-        j = j0;
-        b = m;
-      } else {
-        count += j0 - i0;
-        const nz = this.numZeros[l];
-        i = nz + (i - i0); // === nz + level.rank1(i - 1);
-        j = nz + (j - j0); // === nz + level.rank1(j - 1);
-        a = m + 1;
-      }
-      l += 1;
-      levelBitMask >>>= 1;
-    }
-    return count;
-  }
-
-  __quantile(i, j, k) {
-    if (i > j) throw new Error('i must be <= j');
-    if (j > this.length) throw new Error('j must be < wavelet matrix length');
-    if (k < 0 || k >= j - i) throw new Error('k cannot be less than zero or exceed length of range [i, j)');
-    const msbMask = 1 << this.maxLevel;
-    let symbol = 0;
-    for (let l = 0; l < this.numLevels; l++) {
-      const level = this.levels[l];
-      const i0 = level.rank0(i - 1);
-      const j0 = level.rank0(j - 1);
-      const count = j0 - i0;
-      if (k < count) {
-        i = i0;
-        j = j0;
-      } else {
-        symbol |= msbMask >>> l;
-        k -= count;
-        const nz = this.numZeros[l];
-        i = nz + (i - i0); // === nz + level.rank1(i - 1);
-        j = nz + (j - j0); // === nz + level.rank1(j - 1);
-      }
-    }
-    return { symbol, frequency: j - i };
-  }
-
-  // note:
-  // we can express rank1 in terms of rank0
-  // when i and j are both in bounds:
-  //    rank0(i)   = i - rank1(i) + 1
-  // => rank0(i-1) = i-1 - rank1(i-1) + 1
-  // => rank0(i-1) = i - rank1(i-1)
-  // and vice versa (see impl. of rank0)
-  
-  // Returns the number of values with symbol strictly less than the given symbol.
-  // This is kind of like a ranged rank operation over a symbol range.
-  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
-  __less(i, j, symbol) {
-    if (i < 0) throw new Error('i must be >= 0');
-    if (i > j) throw new Error('i must be <= j');
-    if (j > this.length) throw new Error('j must be < wavelet matrix length');
-    if (symbol <= 0) return 0;
-    if (symbol >= this.alphabetSize) return this.length;
-    let levelBitMask = 1 << this.maxLevel;
-    let count = 0;
-    for (let l = 0; l < this.numLevels; l++) {
-      const level = this.levels[l];
-      const i0 = level.rank0(i - 1);
-      const j0 = level.rank0(j - 1);
-      if ((symbol & levelBitMask) === 0) {
-        i = i0;
-        j = j0;
-      } else {
-        count += j0 - i0;
-        const nz = this.numZeros[l];
-        i = nz + (i - i0); // === nz + level.rank1(i - 1);
-        j = nz + (j - j0); // === nz + level.rank1(j - 1);
-      }
-      levelBitMask >>>= 1;
-    }
-    return count;
-  }
-
-  // Returns the number of occurrences of symbols [lower, upper)
-  // in the index range [i, j).
-  count(i, j, lower, upper) {
-    if (lower > upper) throw new Error('lower must be <= upper');
-    return this.less(i, j, upper) - this.less(i, j, lower);
-  }
 }
 
 // Reverse the lowest `numBits` bits of `v`.
