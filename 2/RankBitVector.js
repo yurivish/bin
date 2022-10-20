@@ -1,5 +1,6 @@
 import { popcount } from './util';
 
+// todo: consider the space required during construction; can we reduce it?
 export class RankBitVector {
   constructor(length) {
     // todo: interleave rank and bits blocks for improved rank performance (access slows down)
@@ -12,6 +13,7 @@ export class RankBitVector {
   }
 
   one(position) {
+    if (position >= this.length) throw new Error('position must be < length')
     const blockIndex = position >>> 5;
     const bitOffset = position & 31;
     this.blocks[blockIndex] |= 1 << bitOffset;
@@ -61,5 +63,12 @@ export class RankBitVector {
     const block = this.blocks[blockIndex];
     const targetMask = 1 << bitOffset; // mask out the target bit
     return block & targetMask;
+  }
+
+  approxSizeInBits() {
+    // ignores fixed-size fields
+    const blockBits = 8 * this.blocks.length * this.blocks.BYTES_PER_ELEMENT
+    const rankSuperblockBits = 8 * this.rankSuperblocks.length * this.rankSuperblocks.BYTES_PER_ELEMENT
+    return blockBits + rankSuperblockBits
   }
 }

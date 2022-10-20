@@ -176,9 +176,8 @@ export class WaveletMatrix {
     return last - first;
   }
 
-
   ranks(selectors, first, last) {
-    if (first === undefined || last === undefined) throw 'wat'
+    if (first === undefined || last === undefined) throw 'wat';
     if (first > last) throw new Error('last must be <= first');
     // if (first === last) return 0; // todo: return a 0 array of the number of returned symbols
     if (first > this.length) throw new Error('first must be < wavelet matrix length');
@@ -195,8 +194,7 @@ export class WaveletMatrix {
     // P.fill(123);
     // I.fill(123); // clear for easier debugging
 
-
-    I[0] = last// clamp(last + 1, 1, this.length);
+    I[0] = last; // clamp(last + 1, 1, this.length);
     P[0] = first; // todo: would starting this off at nonzero allow us to do a 'range count'? or do I need to do 2 'ranks' calls after all
 
     let levelBitMask = 1 << this.maxLevel;
@@ -338,7 +336,7 @@ export class WaveletMatrix {
   }
 
   allSelector() {
-    return new Uint8Array(this.numLevels).fill(BOTH)
+    return new Uint8Array(this.numLevels).fill(BOTH);
   }
 
   selector(prefix) {
@@ -347,13 +345,14 @@ export class WaveletMatrix {
     return ret;
   }
 
-  approxSizeInMegabytes() {
-    let numBits = 0
-    // assume rank bitvector 32 bits per block, plus 32 bits per accompanying rank block
-    for (const level of this.levels) numBits += 2 * 32 * level.blocks.length; 
-    return numBits / 8e6 // 8M bits in a megabyte
+  approxSizeInBits() {
+    // ignores fixed-size fields
+    let size = 0;
+    for (const level of this.levels) {
+      size += level.approxSizeInBits();
+    }
+    return size;
   }
-
 
   // todo: remove, but not before adding more comments to `ranks`.
   // Batched rank: https://www.sciencedirect.com/science/article/pii/S0890540112001526#se0100
@@ -431,8 +430,6 @@ export class WaveletMatrix {
     for (let i = 0; i < I.length; i++) I[i] -= P[i];
     return I.slice(0, this.alphabetSize);
   }
-
-
 }
 
 // Reverse the lowest `numBits` bits of `v`.

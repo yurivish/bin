@@ -1,5 +1,6 @@
 import { popcount, trailing0 } from './util';
 
+// todo: consider the space required during construction; can we reduce it?
 export class SelectBitVector {
   constructor(length) {
     const n = Math.ceil(length / 32);
@@ -16,6 +17,7 @@ export class SelectBitVector {
   // maybe we should do the interleave select superblock creation with block creation, and lift the restriction on strictly ascending ones required 
   // (like the rank bitvector)
   one(position) {
+    if (position >= this.length) throw new Error('position must be < length')
     if (position <= this.prevOnePosition) throw new Error('ones must be added in strictly-ascending order');
     this.prevOnePosition = position;
 
@@ -45,8 +47,8 @@ export class SelectBitVector {
   }
 
   finish() {
-    this.storedLength = this.maxOnePosition + 1;
-    const numBlocks = Math.ceil(this.storedLength / 32);    
+    this.storedLength = this.prevOnePosition + 1;
+    const numBlocks = Math.ceil(this.storedLength / 32) - this.numZeroBlocks;
     if (numBlocks < this.blocks.length) {
       this.blocks = this.blocks.slice(0, numBlocks);
       this.precedingZeroBlocks = this.precedingZeroBlocks.slice(0, numBlocks);
@@ -85,5 +87,13 @@ export class SelectBitVector {
     if (block === undefined) throw new Error('undef block');
     for (let r = prevBlockRank + 1; r < i; r++) block &= block - 1;
     return ((this.precedingZeroBlocks[blockIndex] + blockIndex) << 5) + trailing0(block);
+  }
+
+  approxSizeInBits() {
+    // ignores fixed-size fields
+    const blockBits = 8 * this.blocks.length * this.blocks.BYTES_PER_ELEMENT
+    const rankSuperblockBits = 8 * this.rankSuperblocks.length * this.rankSuperblocks.BYTES_PER_ELEMENT
+    const selectSuperblockBits = 8 * this.selectSuperblocks.length * this.selectSuperblocks.BYTES_PER_ELEMENT
+    return blockBits + rankSuperblockBits + selectSuperblockBits
   }
 }
