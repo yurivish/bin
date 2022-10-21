@@ -1,3 +1,4 @@
+
 import { popcount } from './util';
 
 // todo: consider the space required during construction; can we reduce it?
@@ -58,11 +59,12 @@ export class RankBitVector {
   }
 
   access(i) {
+    if (i < 0 || i > this.length) throw new Error('access: out of bounds');
     const blockIndex = i >>> 5;
     const bitOffset = i & 31;
     const block = this.blocks[blockIndex];
     const targetMask = 1 << bitOffset; // mask out the target bit
-    return block & targetMask;
+    return +Boolean(block & targetMask);
   }
 
   approxSizeInBits() {

@@ -1,5 +1,5 @@
 export { RankBitVector } from './RankBitVector';
-export { SelectBitVector } from './SelectBitVector';
+export { ZeroCompressedBitVector } from './ZeroCompressedBitVector';
 export { RankMultiSet, AccessMultiSet } from './MultiSet';
 export { NaiveBitVector } from './NaiveBitVector';
 export { popcount, trailing0 } from './util';

@@ -1,4 +1,5 @@
 import { RankBitVector } from './RankBitVector';
+import { ZeroCompressedBitVector } from './ZeroCompressedBitVector';
 
 // bit selectors
 export const LEFT = 0; // select left bit
@@ -41,6 +42,8 @@ export class WaveletMatrix {
     // Initialize the level bit vectors
     for (let i = 0; i < numLevels; i++) {
       levels[i] = new RankBitVector(data.length);
+      // try this once bits can be added to it out-of-order
+      // levels[i] = new ZeroCompressedBitVector(data.length, { rank: true });
     }
     const level0 = levels[0];
     const highBitMask = 1 << maxLevel;
@@ -241,6 +244,14 @@ export class WaveletMatrix {
     for (let i = 0; i < len; i++) I[i] -= P[i];
     return I.subarray(0, len).slice();
   }
+  
+  // i think this is the bigger performance analysis for the rank of all individual symbols:
+  // σ        = numLevels
+  // k <= 2^σ = alphabetSize
+  // k - 1    = numNodes = number of rank queries for all symbols rank via ranks()
+  // 2σ * k   = number of rank queries for all symbols rank via rank();
+  
+
 
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
   // Range quantile query returning the kth largest symbol in A[i, j).
