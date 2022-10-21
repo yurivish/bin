@@ -177,7 +177,7 @@ export class WaveletMatrix {
   }
 
   // note: less and rank look *very* similar - can we compute the less values 'for (almost) free' here,
-  // by also adding to each element's count when we go right?
+  // by also adding to each element's count when we go right? probably, but is it useful...
   // and i think when we STOP, we want to add to each symbol the count
   // as if we went right for all subsequent levels.
   // is this related to numZeros at those lower levels? need to be careful...
@@ -428,83 +428,6 @@ export class WaveletMatrix {
       size += level.approxSizeInBits();
     }
     return size;
-  }
-
-  // todo: remove, but not before adding more comments to `ranks`.
-  // Batched rank: https://www.sciencedirect.com/science/article/pii/S0890540112001526#se0100
-  // Returns the rank of all the symbols. I think this is now superseded by the "ranks" function.
-  // This version rearranges the computation to make level bitvector accesses contiguous in time.
-  // Since we proceed from high bits to low bits, we save on rank queries when a symbol has the
-  // same level bit as its predecessor. Currently done with an `if`; could instead be a nested
-  // loop where the inner loop iterates all of the contiguous symbols with the same bit.
-  // note: this comment is out of date, but the strategy it describes could be useful for arbitrary symbol sets.
-  // we should also try implementing a batched rank over a contiguous symbol range that returns individual counts.
-  batchedRank(i) {
-    // todo: call this allRanks? ranks?
-    const { symbols, P, I } = this;
-    // P.fill(123);
-    // I.fill(123); // clear for easier debugging
-    P[0] = 0;
-    I[0] = clamp(i + 1, 1, this.length);
-    let levelBitMask = 1 << this.maxLevel;
-    let numLevelNodes = 1; // tracks the number of branching paths; 2 * numLevelNodes paths at the current level (2 * leaves at this level).
-    const numLeafNodes = this.alphabetSize >>> 1; // don't go beyond the last symbol when len(symbols) is not a power of 2
-    let prevI = 0; // we want to store I[numLeafNodes] for the level maxLevels - 1 so that
-    let prevP = 0; // we have it around to compute the final rank value if needed.
-
-    for (let l = 0; l < this.numLevels; l++) {
-      const level = this.levels[l];
-      const nz = this.numZeros[l];
-      prevI = I[numLeafNodes];
-      prevP = P[numLeafNodes];
-      // Perform all left and right mappings to the next level of the tree.
-      // reach level, we go both left and right for each existing entry in
-      // the array (when we come to a fork in the road, we take it both directions).
-      // We started out with a single index i and p; at level zero we want
-      // to expand go both left and right; then at level one we want to go
-      // both left and right for the level zero "lefts", and same for the rights;
-      // this way we don't have to perform O(len(symbols)) rank ops at each level
-      // and can instead perform O(level) rank ops where level is O(log2(len(symbols))).
-      // In the end, I think we perform just under 2 * len(symbols) - 1 rank operations
-      // since we do two per tree node and eg. an 8-symbol tree has 4 + 2 + 1 = 7 nodes.
-      // additionally, all of the rank operations at a level are done in a row.
-      // todo: better explanation, docs, and cleaner + commented code.
-      // todo: can we generalize this to arbitrary symbol sets? is it already general
-      // (based on this.symbols)? I think we need to adjust numLeafNodes to the size of the symbol set.
-      // all levels other than the last are completely filled if we assume that the number of levels is
-      // the closest power of two to the number of symbols, but otherwise any level may benefit from
-      // the reduction in the number of iterations.
-      for (let n = Math.min(numLeafNodes, numLevelNodes); n > 0; ) {
-        n -= 1;
-
-        const i = I[n];
-        const i0 = level.rank0(i - 1);
-        I[2 * n] = i0;
-        I[2 * n + 1] = nz + (i - i0);
-
-        const p = P[n];
-        const p0 = level.rank0(p - 1);
-        P[2 * n] = p0;
-        P[2 * n + 1] = nz + (p - p0);
-
-        // question: how can we bail out early in the case of an unbalanced tree?
-        // question: how can we use similar logic to query arbitrary symbol ranges?
-        // question: can we use similar logic to query arbitrary symbol sets?
-      }
-      levelBitMask >>>= 1;
-      numLevelNodes <<= 1;
-    }
-
-    // If the alphabet size is odd, fill in the rank of the final symbol since
-    // it was not filled in the previous loop, which operates two symbols at a time.
-    if (this.alphabetSize % 2 === 1) {
-      const level = this.levels[this.maxLevel];
-      I[2 * numLeafNodes] = level.rank0(prevI - 1);
-      P[2 * numLeafNodes] = level.rank0(prevP - 1);
-    }
-
-    for (let i = 0; i < I.length; i++) I[i] -= P[i];
-    return I.slice(0, this.alphabetSize);
   }
 }
 
