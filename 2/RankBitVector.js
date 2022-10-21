@@ -1,7 +1,8 @@
-
 import { popcount } from './util';
 
 // todo: consider the space required during construction; can we reduce it?
+// todo: use the same { rank: true, select: true } constructor to support both ops;
+// though here, select implies rank. and we may want larger rank blocks for select.
 export class RankBitVector {
   constructor(length) {
     // todo: interleave rank and bits blocks for improved rank performance (access slows down)
