@@ -153,9 +153,6 @@ export class WaveletMatrix {
     let a = 0; // left symbol index
     let b = (1 << this.numLevels) - 1; // right symbol index
     let levelBitMask = 1 << this.maxLevel;
-    // try enforcing tidiness for now rather than how the plain bitvectors do it
-    // first = clamp(first, 0, this.length - 1); // index of the start of the current node
-    // last = clamp(last, 1, this.length);
     while (a !== b) {
       const level = this.levels[l];
       const m = (a + b) >>> 1;
@@ -179,6 +176,13 @@ export class WaveletMatrix {
     return last - first;
   }
 
+  // note: less and rank look *very* similar - can we compute the less values 'for (almost) free' here,
+  // by also adding to each element's count when we go right?
+  // and i think when we STOP, we want to add to each symbol the count
+  // as if we went right for all subsequent levels.
+  // is this related to numZeros at those lower levels? need to be careful...
+  // could make a lesses function, and another that does both, if we ever need both...
+  // is there a way to do range less in one pass? maybe just track 2 counts or something
   ranks(selectors, first, last) {
     if (first === undefined || last === undefined) throw 'wat';
     if (first > last) throw new Error('last must be <= first');
@@ -186,7 +190,7 @@ export class WaveletMatrix {
     if (first > this.length) throw new Error('first must be < wavelet matrix length');
     // note: bit selectors could be a u64 for up to 32 levels (2 bits per selector)
     if (selectors.length != this.numLevels) throw new Error('selectors.length must be equal to numLevels');
-    let len = 1;
+    let len = 1; // number of symbols we're currently tracking / updating
     // important: round up. This means that for odd alphabet sizes,
     // we will computer an extra element if we went 'both' directions,
     // which will be omitted from the return value with `subarray`.
@@ -270,6 +274,7 @@ export class WaveletMatrix {
     let a = 0; // left symbol index
     let b = (1 << this.numLevels) - 1; // right symbol index
     let levelBitMask = 1 << this.maxLevel;
+    // question: do we ever go less than numLevels iterations?
     while (a !== b) {
       const level = this.levels[l];
       const m = (a + b) >>> 1;
@@ -326,6 +331,39 @@ export class WaveletMatrix {
         a = m + 1;
       }
       l += 1;
+      levelBitMask >>>= 1;
+    }
+    return count;
+  }
+
+  // Restore the cleaner version that iterate through all levels each time.
+  // I think with balance trees this is always the case, at least for certain operations.
+  // if we ever have unbalanced trees using prefix free codes, I think this means that
+  // the codes will be strictly ascending in terms of the number of bits they use.
+  // which means that we can use a look up table for the cumulative number of codes below
+  // a certain bit length that is of length #bits (store #bits => code offset) or such. so
+  // based on the symbol code, we can tell in O(numLevels) the number of levels to traverse.
+  __less(i, j, symbol) {
+    if (i < 0) throw new Error('i must be >= 0');
+    if (i > j) throw new Error('i must be <= j');
+    if (j > this.length) throw new Error('j must be < wavelet matrix length');
+    if (symbol <= 0) return 0;
+    if (symbol >= this.alphabetSize) return this.length;
+    let levelBitMask = 1 << this.maxLevel;
+    let count = 0;
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const i0 = level.rank0(i - 1);
+      const j0 = level.rank0(j - 1);
+      if ((symbol & levelBitMask) === 0) {
+        i = i0;
+        j = j0;
+      } else {
+        count += j0 - i0;
+        const nz = this.numZeros[l];
+        i = nz + (i - i0); // === nz + level.rank1(i - 1);
+        j = nz + (j - j0); // === nz + level.rank1(j - 1);
+      }
       levelBitMask >>>= 1;
     }
     return count;
@@ -451,7 +489,6 @@ function bitReverse(v, numBits) {
 }
 
 // Adapted from https://graphics.stanford.edu/~seander/bithacks.html#ReverseParallel
-// Follow this operation by a >>> shift to
 function bitReverse32(v) {
   // unsigned int v; // 32-bit word to reverse bit order
   // swap odd and even bits

@@ -75,8 +75,9 @@ export class ZeroCompressedBitVector {
     const bitOffset = position & 31;
     if (this.select) {
       if (this.numOnes % 32 === 0) {
+        // the index of the block containing the (32k)th 1 bit
         const selectSampleIndex = this.numOnes >>> 5;
-        // number of 1 bits in this block before the (32k+1)th bit
+        // number of 1 bits in this block before the (32k+1)th 1 bit
         const adjustment = popcount(this.blocks[blockIndex]);
         this.selectSuperblocks[selectSampleIndex] = (blockIndex << 5) | adjustment;
       }
