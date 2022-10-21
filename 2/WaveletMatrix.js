@@ -336,7 +336,34 @@ export class WaveletMatrix {
     return count;
   }
 
-  // Restore the cleaner version that iterate through all levels each time.
+  // is less related to the idea of the 'last' value in rank?
+  // ie. on the last (virtual) level, we want the position of
+  // the first instance of symbol S; that position IS the rank
+  // if we have not restricted the time range.
+  // so less is kinda the same as the ranks function (but slower)?
+  // could we have a class of bit selectors that allow you to choose
+  // successive prefixes of the code space, so that when we STOP we've
+  // got all the LESS values that we want? do we already have this implemented,
+  // in fact? if we calculate contiguous symbol range sums, then just do a 
+  // cumulative sum on that... voila?
+  // in short:
+  // - `ranks` allows us to compute sums of contiguous power of 2 symbol ranges
+  // - if we cumsum those sums, we get the less-than values for 
+  //   evenly-spaced power of 2 symbols, eg. sum for symbols < 4,
+  //   symbols < 8, symbols < 12, symbols < 16.
+  // todo: does the halfRange stuff still work with STOP sum ranges?
+  // seems to.
+  // so it's not possible to get the kind of power of two code ranges 
+  // from `ranks`that we use BEFORE range splitting. But I totally wonder
+  // if the set of bitselector-based contiguous sequences isn't exactly
+  // the same as what you get out of range-splitting...
+  // Plus will need one less query to get all the symbols below the lowest
+  // symbol covered by the `ranks` range 
+
+  // todo: include symbolset functionality to aid constructing ranks queries:
+  // https://observablehq.com/d/05a4c693328c3c34
+
+  // Restore the cleaner version that iterates through all levels each time.
   // I think with balance trees this is always the case, at least for certain operations.
   // if we ever have unbalanced trees using prefix free codes, I think this means that
   // the codes will be strictly ascending in terms of the number of bits they use.
