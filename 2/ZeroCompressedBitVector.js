@@ -4,7 +4,9 @@ import { popcount, trailing0 } from './util';
 // todo: do the zero compression after all ones exist in a subsequent filter pass
 // that's also the time to do select block indexing.
 // this would lift the restriction on "all ones must be added in order", which 
-// currently prevents the use of this bitvector with the wavelet matrix
+// currently prevents the use of this bitvector with the wavelet matrix.
+// this would let us add all indexing structures in the same pass, as we walk
+// along and compress.
 // todo: is there a way to factor out the common functionality to
 // avoid the conditional execution for rank or select indices?
 // todo: consider the space required during construction; can we reduce it?
