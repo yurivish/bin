@@ -3,7 +3,7 @@ import { popcount, trailing0 } from './util';
 
 // todo: do the zero compression after all ones exist in a subsequent filter pass
 // that's also the time to do select block indexing.
-// this would lift the restriction on "all ones must be added in order", which 
+// this would lift the restriction on "all ones must be added in order", which
 // currently prevents the use of this bitvector with the wavelet matrix.
 // this would let us add all indexing structures in the same pass, as we walk
 // along and compress.
@@ -60,7 +60,7 @@ export class ZeroCompressedBitVector {
       const prevBlockIndex = this.prevUncompressedBlockIndex - this.numZeroBlocks;
       const numNewZeroBlocks = uncompressedBlockIndex - this.prevUncompressedBlockIndex - 1;
       if (this.rank) {
-          for (let i = 0; i < numNewZeroBlocks; i++) {
+        for (let i = 0; i < numNewZeroBlocks; i++) {
           this.isZeroBlock.one(this.prevUncompressedBlockIndex + i + 1);
         }
       }
@@ -123,8 +123,8 @@ export class ZeroCompressedBitVector {
     i -= numPrecedingZeroBlocks << 5;
     if (i >= this.storedLength) return this.numOnes;
     const blockIndex = i >>> 5;
-    // whether i points inside a zero block; if yes, we will need 
-    // to adjust lowBitIndex so that we point to the last bit in 
+    // whether i points inside a zero block; if yes, we will need
+    // to adjust lowBitIndex so that we point to the last bit in
     // the closest nonzero block that precedes it.
     const lowBitIndex = isZeroBlock ? 0 : i & 31; // could be (1 - isZeroBlock) * (i & 31)
     const rankSuperbock = this.rankSuperblocks[blockIndex];
