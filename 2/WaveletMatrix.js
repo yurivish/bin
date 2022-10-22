@@ -128,6 +128,9 @@ export class WaveletMatrix {
     let b = (1 << this.numLevels) - 1; // right symbol index
     while (a !== b) {
       const level = this.levels[l];
+      // todo (for perf): can combine the access and rank
+      // queries, since they access the same block. will 
+      // need a method for this on bitvectors. 
       if (level.access(i) === 0) {
         // go left
         i = level.rank0(i - 1);
@@ -152,6 +155,9 @@ export class WaveletMatrix {
   // Searches [first, last).
   // This implements the 'strict' version, using only this.levels and this.numZeros.
   // I noticed that by setting the initial value of P, we can do rank range queries rather than requiring two calls to rank.
+  // todo: make a non-range rank version equivalent to rank(symbol, 0, j) that does the 'count' trick
+  // to count up the number of nz on all the levels where we went right (the purpose of 'first' when it is initialized to zero
+  // is the track the lower bound of the node with our target symbol, which is only ever bumped by nz when we go right.)
   rank(symbol, first, last) {
     if (this.numLevels === 0) return 0;
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
@@ -166,7 +172,7 @@ export class WaveletMatrix {
       const level = this.levels[l];
       const m = (a + b) >>> 1;
       const last0 = level.rank0(last - 1);
-      const first0 = level.rank0(first - 1); // todo: so strange that we need to do rank of a negative number when first is 0...
+      const first0 = level.rank0(first - 1);
       if ((symbol & levelBitMask) === 0) {
         // go left
         last = last0;

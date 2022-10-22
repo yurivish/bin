@@ -120,6 +120,8 @@ export class ZeroCompressedBitVector {
     const numPrecedingZeroBlocks = this.isZeroBlock.rank1(uncompressedBlockIndex - 1);
     // todo: find a way to avoid this extra memory access in most cases
     // (it's often in the same block as the call to rank1 above)
+    // note: wavelet matrix also wants a combined accessAndRank(i) to speed
+    // up wm.access(i).
     const isZeroBlock = this.isZeroBlock.access(uncompressedBlockIndex); // returns 0 or 1
     i -= numPrecedingZeroBlocks << 5;
     if (i >= this.storedLength) return this.numOnes;
