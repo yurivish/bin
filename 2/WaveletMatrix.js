@@ -118,10 +118,11 @@ export class WaveletMatrix {
     this.symbols = new Uint32Array(this.alphabetSize);
     for (let s = 0; s < this.symbols.length; s++) this.symbols[s] = s;
     // todo: do not materialize these until needed - alphabet might be big.
-    this.F = new Uint32Array(this.alphabetSize + 1); // extra space for the full 'both' path
-    this.L = new Uint32Array(this.alphabetSize + 1); // case and an odd alphabet size
-    this.C = new Uint32Array(this.alphabetSize + 1); // frequency info
-    this.S = new Uint32Array(this.alphabetSize + 1); // frequency info
+    // we add one because bit-selector based ranks might compute an extra symbol
+    const sz = Math.min(2 ** this.numLevels, this.alphabetSize + 1);
+    this.F = new Uint32Array(sz); // firsts
+    this.L = new Uint32Array(sz); // lasts
+    this.S = new Uint32Array(sz); // symbols
   }
 
   access(index) {
