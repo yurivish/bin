@@ -311,37 +311,8 @@ export class WaveletMatrix {
     return count;
   }
 
-  v1_rankRange(first, last, lower, upper) {
-    if (first < 0) throw new Error('first must be >= 0');
-    if (first > last) throw new Error('first must be <= last');
-    if (last > this.length) throw new Error('last must be < wavelet matrix length');
-    // todo: more checks, more errors (eg disallow upper > lower)
-    if (upper >= lower) return 0;
-    // if (symbol <= 0) return 0;
-    // if (symbol >= this.alphabetSize) return this.length;
-    let count = 0;
-    for (let l = 0; l < this.numLevels; l++) {
-      const level = this.levels[l];
-      const first1 = level.rank1(first - 1);
-      const last1 = level.rank1(last - 1);
-      const levelBitMask = 1 << (this.maxLevel - l);
-      if ((symbol & levelBitMask) === 0) {
-        // go left
-        first = first - first1; // = first0
-        last = last - last1; // = last0
-      } else {
-        // update count before going right
-        count += last - last1 - (first - first1); // = last0 - first0
-        // go right
-        const nz = this.numZeros[l];
-        first = nz + first1;
-        last = nz + last1;
-      }
-    }
-    return count;
-  }
-
-  report(first, last, lower, upper) {
+  // Returns all of the distinct symbols in the range [first, last) together with their counts.
+  ranksRange(first, last, lower, upper) {
     const { F, L, S } = this; // firsts, lasts, symbols
     // F.fill(123);
     // L.fill(123);
@@ -403,72 +374,6 @@ export class WaveletMatrix {
         }
       }
 
-      // update the length and move processed elements back to the front of the list.
-      len = F.length - (nextIndex + 1);
-      F.set(F.subarray(nextIndex + 1));
-      L.set(L.subarray(nextIndex + 1));
-      S.set(S.subarray(nextIndex + 1));
-    }
-    for (let i = 0; i < len; i++) L[i] -= F[i];
-    // if we traversed an odd number of levels, the ranges ended up reversed
-    // due to the way we move elements from the front to the end of the array while
-    // processing it back-to-front to avoid overwriting yet-to-be processed elements.
-    const counts = L.subarray(0, len);
-    const symbols = S.subarray(0, len);
-    if (this.numLevels & 1) {
-      counts.reverse();
-      symbols.reverse();
-    }
-    return { symbols: symbols.slice(), counts: counts.slice() };
-  }
-
-  // Returns all of the distinct symbols in the range [first, last) together with their counts.
-  distinct(first, last) {
-    const { F, L, S } = this; // firsts, lasts, symbols
-
-    F[0] = first;
-    L[0] = last;
-    S[0] = 0;
-    let len = 1;
-
-    // In each iteration, we traverse F/L/S back to front and place the processed results at the end of the array,
-    // stealing it it in from right to left. This allows us to turn an individual element into more than one
-    // processed element, for example if we want to recurse into both children of a node.
-    // due to the mechanics of this processing, the order of elements gets reversed each time, so we have
-    // a check at the end to reverse the elements one last time in case the total number of reversals was odd.
-    for (let l = 0; l < this.numLevels; l++) {
-      const level = this.levels[l];
-      const levelBitMask = 1 << (this.maxLevel - l);
-      let nextIndex = F.length - 1;
-      for (let i = len; i > 0; ) {
-        i -= 1;
-
-        const first = F[i];
-        const first1 = level.rank1(first - 1);
-        const first0 = first - first1;
-        const last = L[i];
-        const last1 = level.rank1(last - 1);
-        const last0 = last - last1;
-
-        const num0 = last0 - first0; // count of left children
-        if (num0 > 0) {
-          // go left
-          F[nextIndex] = first0;
-          L[nextIndex] = last0;
-          S[nextIndex] = S[i];
-          nextIndex -= 1;
-        }
-
-        const num1 = last1 - first1; // count of right children
-        if (num1 > 0) {
-          // go right
-          const nz = this.numZeros[l];
-          F[nextIndex] = nz + first1;
-          L[nextIndex] = nz + last1;
-          S[nextIndex] = S[i] | levelBitMask;
-          nextIndex -= 1;
-        }
-      }
       // update the length and move processed elements back to the front of the list.
       len = F.length - (nextIndex + 1);
       F.set(F.subarray(nextIndex + 1));
