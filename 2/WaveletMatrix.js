@@ -121,30 +121,27 @@ export class WaveletMatrix {
     this.I = new Uint32Array(this.alphabetSize + 1); // case and an odd alphabet size
   }
 
-  access(i) {
-    if (i < 0 || i > this.length) throw new Error('access: out of bounds');
-    let l = 0; // level index
-    let a = 0; // left symbol index
-    let b = (1 << this.numLevels) - 1; // right symbol index
-    while (a !== b) {
+  access(index) {
+    if (index < 0 || index > this.length) throw new Error('access: out of bounds');
+    let symbol = 0;
+    for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
-      // todo (for perf): can combine the access and rank
-      // queries, since they access the same block. will
-      // need a method for this on bitvectors.
-      if (level.access(i) === 0) {
+      const index1 = level.rank1(index - 1); // todo: combine rank and access queries since they access the same block
+      if (level.access(index) === 0) {
         // go left
-        i = level.rank0(i - 1);
-        b = (a + b) >>> 1;
+        index = index - index1; // = level.rank0(index - 1)
       } else {
         // go right
         const nz = this.numZeros[l];
-        i = nz + level.rank1(i - 1);
-        a = ((a + b) >>> 1) + 1;
+        index = nz + index1;
+        // update symbol
+        const levelBitMask = 1 << (this.maxLevel - l);
+        symbol |= levelBitMask;
       }
-      l += 1;
     }
-    return a;
+    return symbol;
   }
+
 
   rank(first, last, symbol) {
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
@@ -154,7 +151,6 @@ export class WaveletMatrix {
     if (this.numLevels === 0) return 0;
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
-      const nz = this.numZeros[l];
       const first1 = level.rank1(first - 1);
       const last1 = level.rank1(last - 1);
       const levelBitMask = 1 << (this.maxLevel - l);
@@ -164,6 +160,7 @@ export class WaveletMatrix {
         last = last - last1; // = level.rank0(last - 1)
       } else {
         // go right
+        const nz = this.numZeros[l];
         first = nz + first1;
         last = nz + last1;
       }
@@ -252,29 +249,30 @@ export class WaveletMatrix {
 
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
   // Range quantile query returning the kth largest symbol in A[i, j).
-  quantile(first, last, k) {
+  quantile(first, last, sortedIndex) {
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
-    if (k < 0 || k >= last - first)
-      throw new Error('k cannot be less than zero or exceed length of range [first, last)');
+    if (sortedIndex < 0 || sortedIndex >= last - first)
+      throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
     let symbol = 0;
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
-      const nz = this.numZeros[l];
       const first0 = level.rank0(first - 1);
       const last0 = level.rank0(last - 1);
       const count = last0 - first0;
-      if (k < count) {
+      if (sortedIndex < count) {
         // go left
         first = first0;
         last = last0;
       } else {
         // go right
-        const levelBitMask = 1 << (this.maxLevel - l);
-        symbol |= levelBitMask;
-        k -= count;
+        const nz = this.numZeros[l];
         first = nz + first - first0; // = nz + level.rank1(first - 1);
         last = nz + last - last0; // = nz + level.rank1(last - 1);
+        // update symbol and new target sorted index in the child node
+        const levelBitMask = 1 << (this.maxLevel - l);
+        symbol |= levelBitMask;
+        sortedIndex -= count;
       }
     }
     return { symbol, count: last - first };
