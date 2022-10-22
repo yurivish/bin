@@ -118,8 +118,8 @@ export class WaveletMatrix {
     this.symbols = new Uint32Array(this.alphabetSize);
     for (let s = 0; s < this.symbols.length; s++) this.symbols[s] = s;
     // todo: do not materialize these until needed - alphabet might be big.
-    this.P = new Uint32Array(this.alphabetSize + 1); // extra space for the full 'both' path
-    this.I = new Uint32Array(this.alphabetSize + 1); // case and an odd alphabet size
+    this.F = new Uint32Array(this.alphabetSize + 1); // extra space for the full 'both' path
+    this.L = new Uint32Array(this.alphabetSize + 1); // case and an odd alphabet size
     this.C = new Uint32Array(this.alphabetSize + 1); // frequency info
     this.S = new Uint32Array(this.alphabetSize + 1); // frequency info
   }
@@ -222,12 +222,12 @@ export class WaveletMatrix {
     const numSymbols = this.alphabetSize;
     const halfLimit = Math.ceil(numSymbols / 2);
 
-    const { P, I } = this;
-    // P.fill(123);
-    // I.fill(123); // clear for easier debugging
+    const { F, L } = this;
+    // F.fill(123);
+    // L.fill(123); // clear for easier debugging
 
-    I[0] = last; // clamp(last + 1, 1, this.length);
-    P[0] = first; // todo: would starting this off at nonzero allow us to do a 'range count'? or do I need to do 2 'ranks' calls after all
+    L[0] = last; // clamp(last + 1, 1, this.length);
+    F[0] = first; // todo: would starting this off at nonzero allow us to do a 'range count'? or do L need to do 2 'ranks' calls after all
 
     let levelBitMask = 1 << this.maxLevel;
     loop: for (let l = 0; l < this.numLevels; l++) {
@@ -238,31 +238,31 @@ export class WaveletMatrix {
         case BOTH:
           for (let n = Math.min(len, halfLimit); n > 0; ) {
             n -= 1;
-            const last = I[n];
-            const p = P[n];
+            const last = L[n];
+            const p = F[n];
 
             const last1 = level.rank1(last - 1);
-            I[2 * n + 1] = nz + last1; // go right
-            I[2 * n] = last - last1; // go left (=== level.rank0(last - 1))
+            L[2 * n + 1] = nz + last1; // go right
+            L[2 * n] = last - last1; // go left (=== level.rank0(last - 1))
 
             const p1 = level.rank1(p - 1);
-            P[2 * n + 1] = nz + p1; // go right
-            P[2 * n] = p - p1; // go left (=== level.rank0(p - 1))
+            F[2 * n + 1] = nz + p1; // go right
+            F[2 * n] = p - p1; // go left (=== level.rank0(p - 1))
           }
           len = Math.min(2 * len, numSymbols);
           break;
         case LEFT:
           for (let n = 0; n < len; n++) {
             // go left
-            I[n] = level.rank0(I[n] - 1);
-            P[n] = level.rank0(P[n] - 1);
+            L[n] = level.rank0(L[n] - 1);
+            F[n] = level.rank0(F[n] - 1);
           }
           break;
         case RIGHT:
           for (let n = 0; n < len; n++) {
             // go right
-            I[n] = nz + level.rank1(I[n] - 1);
-            P[n] = nz + level.rank1(P[n] - 1);
+            L[n] = nz + level.rank1(L[n] - 1);
+            F[n] = nz + level.rank1(F[n] - 1);
           }
           break;
         case STOP:
@@ -270,8 +270,8 @@ export class WaveletMatrix {
       }
       levelBitMask >>>= 1;
     }
-    for (let i = 0; i < len; i++) I[i] -= P[i];
-    return I.subarray(0, len).slice();
+    for (let i = 0; i < len; i++) L[i] -= F[i];
+    return L.subarray(0, len).slice();
   }
 
   // i think this is the bigger performance analysis for the rank of all individual symbols:
@@ -341,70 +341,151 @@ export class WaveletMatrix {
     return count;
   }
 
-  distinct(first, last, lower, upper) {
-    // distinct symbols and their counts (ranksRange)
-    const { P: F, I: L, C, S } = this; // first, last, count, symbol
-    F.fill(123);
-    L.fill(123);
-    C.fill(0);
-    S.fill(0);
-
+  report(first, last, lower, upper) {
+    const { F, L, S } = this; // firsts, lasts, symbols
+    // F.fill(123);
+    // L.fill(123);
+    // S.fill(123);
     F[0] = first;
     L[0] = last;
-    // C[0] = 0; // count of elements in the interval (first, last]
-    // S[0] = 0;
+    S[0] = 0;
     let len = 1;
 
+    let a = 0; // left symbol index
+    let b = (1 << this.numLevels) - 1; // right symbol index
+
+    // In each iteration, we traverse F/L/S back to front and place the processed results at the end of the array,
+    // stealing it it in from right to left. This allows us to turn an individual element into more than one
+    // processed element, for example if we want to recurse into both children of a node.
+    // due to the mechanics of this processing, the order of elements gets reversed each time, so we have
+    // a check at the end to reverse the elements one last time in case the total number of reversals was odd.
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
       const levelBitMask = 1 << (this.maxLevel - l);
       let nextIndex = F.length - 1;
-      console.log('len', len);
       for (let i = len; i > 0; ) {
         i -= 1;
+
         const first = F[i];
-        const last = L[i];
-
         const first1 = level.rank1(first - 1);
-        const last1 = level.rank1(last - 1);
-
         const first0 = first - first1;
+        const last = L[i];
+        const last1 = level.rank1(last - 1);
         const last0 = last - last1;
 
         const num0 = last0 - first0; // count of left children
-        const num1 = last1 - first1; // count of right children
-        const num = num0 + num1; // = last - first
-
-        console.log('num0', num0, 'num1', num1, 'num', num, last - first);
         if (num0 > 0) {
-          console.log('go left');
+          // go left if the left node range (a, b) overlaps [lower, upper)
+          const a = S[i];
+          const b = a | (levelBitMask - 1);
+          const intervalsOverlap = lower <= b && a < upper;
+          if (intervalsOverlap) {
+            F[nextIndex] = first0;
+            L[nextIndex] = last0;
+            S[nextIndex] = S[i];
+            nextIndex -= 1;
+          }
+        }
+
+        const num1 = last1 - first1; // count of right children
+        if (num1 > 0) {
+          // go right if the right node range (a, b) overlaps [lower, upper)
+          const a = S[i] | levelBitMask;
+          const b = a | (levelBitMask - 1);
+          const intervalsOverlap = lower <= b && a < upper;
+          if (intervalsOverlap) {
+            const nz = this.numZeros[l];
+            F[nextIndex] = nz + first1;
+            L[nextIndex] = nz + last1;
+            S[nextIndex] = a;
+            nextIndex -= 1;
+          }
+        }
+      }
+
+      // update the length and move processed elements back to the front of the list.
+      len = F.length - (nextIndex + 1);
+      F.set(F.subarray(nextIndex + 1));
+      L.set(L.subarray(nextIndex + 1));
+      S.set(S.subarray(nextIndex + 1));
+    }
+    for (let i = 0; i < len; i++) L[i] -= F[i];
+    // if we traversed an odd number of levels, the ranges ended up reversed
+    // due to the way we move elements from the front to the end of the array while
+    // processing it back-to-front to avoid overwriting yet-to-be processed elements.
+    const counts = L.subarray(0, len);
+    const symbols = S.subarray(0, len);
+    if (this.numLevels & 1) {
+      counts.reverse();
+      symbols.reverse();
+    }
+    return { symbols: symbols.slice(), counts: counts.slice() };
+  }
+
+  // Returns all of the distinct symbols in the range [first, last) together with their counts.
+  distinct(first, last) {
+    const { F, L, S } = this; // firsts, lasts, symbols
+
+    F[0] = first;
+    L[0] = last;
+    S[0] = 0;
+    let len = 1;
+
+    // In each iteration, we traverse F/L/S back to front and place the processed results at the end of the array,
+    // stealing it it in from right to left. This allows us to turn an individual element into more than one
+    // processed element, for example if we want to recurse into both children of a node.
+    // due to the mechanics of this processing, the order of elements gets reversed each time, so we have
+    // a check at the end to reverse the elements one last time in case the total number of reversals was odd.
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const levelBitMask = 1 << (this.maxLevel - l);
+      let nextIndex = F.length - 1;
+      for (let i = len; i > 0; ) {
+        i -= 1;
+
+        const first = F[i];
+        const first1 = level.rank1(first - 1);
+        const first0 = first - first1;
+        const last = L[i];
+        const last1 = level.rank1(last - 1);
+        const last0 = last - last1;
+
+        const num0 = last0 - first0; // count of left children
+        if (num0 > 0) {
           // go left
           F[nextIndex] = first0;
           L[nextIndex] = last0;
+          S[nextIndex] = S[i];
           nextIndex -= 1;
         }
 
+        const num1 = last1 - first1; // count of right children
         if (num1 > 0) {
           // go right
-          console.log('go right');
           const nz = this.numZeros[l];
           F[nextIndex] = nz + first1;
           L[nextIndex] = nz + last1;
-          C[nextIndex] = C[i] + num0;
           S[nextIndex] = S[i] | levelBitMask;
           nextIndex -= 1;
         }
       }
+      // update the length and move processed elements back to the front of the list.
       len = F.length - (nextIndex + 1);
-      console.log(F.length, nextIndex - 1, 'len:', len);
       F.set(F.subarray(nextIndex + 1));
       L.set(L.subarray(nextIndex + 1));
-      C.set(C.subarray(nextIndex + 1));
       S.set(S.subarray(nextIndex + 1));
     }
-    // F.subarray(0, len).map((f, i) => L[i] - f)
     for (let i = 0; i < len; i++) L[i] -= F[i];
-    return { symbols: S.subarray(0, len), counts: L.subarray(0, len) };
+    // if we traversed an odd number of levels, the ranges ended up reversed
+    // due to the way we move elements from the front to the end of the array while
+    // processing it back-to-front to avoid overwriting yet-to-be processed elements.
+    const counts = L.subarray(0, len);
+    const symbols = S.subarray(0, len);
+    if (this.numLevels & 1) {
+      counts.reverse();
+      symbols.reverse();
+    }
+    return { symbols: symbols.slice(), counts: counts.slice() };
   }
 
   // todo: include symbolset functionality to aid constructing ranks queries:
