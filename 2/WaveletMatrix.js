@@ -129,7 +129,7 @@ export class WaveletMatrix {
       const index1 = level.rank1(index - 1); // todo: combine rank and access queries since they access the same block
       if (level.access(index) === 0) {
         // go left
-        index = index - index1; // = level.rank0(index - 1)
+        index = index - index1; // = index0
       } else {
         // go right
         const nz = this.numZeros[l];
@@ -141,7 +141,6 @@ export class WaveletMatrix {
     }
     return symbol;
   }
-
 
   rank(first, last, symbol) {
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
@@ -156,8 +155,8 @@ export class WaveletMatrix {
       const levelBitMask = 1 << (this.maxLevel - l);
       if ((symbol & levelBitMask) === 0) {
         // go left
-        first = first - first1; // = level.rank0(first - 1)
-        last = last - last1; // = level.rank0(last - 1)
+        first = first - first1; // = first0
+        last = last - last1; // = last0
       } else {
         // go right
         const nz = this.numZeros[l];
@@ -166,6 +165,37 @@ export class WaveletMatrix {
       }
     }
     return last - first;
+  }
+
+  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
+  // Range quantile query returning the kth largest symbol in A[i, j).
+  quantile(first, last, sortedIndex) {
+    if (first > last) throw new Error('first must be <= last');
+    if (last > this.length) throw new Error('last must be < wavelet matrix length');
+    if (sortedIndex < 0 || sortedIndex >= last - first)
+      throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
+    let symbol = 0;
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const first0 = level.rank0(first - 1);
+      const last0 = level.rank0(last - 1);
+      const count = last0 - first0;
+      if (sortedIndex < count) {
+        // go left
+        first = first0;
+        last = last0;
+      } else {
+        // go right
+        const nz = this.numZeros[l];
+        first = nz + first - first0; // = nz + first1
+        last = nz + last - last0; // = nz + last1
+        // update symbol and new target sorted index in the child node
+        const levelBitMask = 1 << (this.maxLevel - l);
+        symbol |= levelBitMask;
+        sortedIndex -= count;
+      }
+    }
+    return { symbol, count: last - first };
   }
 
   // note: less and rank look *very* similar - can we compute the less values 'for (almost) free' here,
@@ -247,132 +277,41 @@ export class WaveletMatrix {
   // k - 1    = numNodes = number of rank queries for all symbols rank via ranks()
   // 2σ * k   = number of rank queries for all symbols rank via rank();
 
-  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
-  // Range quantile query returning the kth largest symbol in A[i, j).
-  quantile(first, last, sortedIndex) {
-    if (first > last) throw new Error('first must be <= last');
-    if (last > this.length) throw new Error('last must be < wavelet matrix length');
-    if (sortedIndex < 0 || sortedIndex >= last - first)
-      throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
-    let symbol = 0;
-    for (let l = 0; l < this.numLevels; l++) {
-      const level = this.levels[l];
-      const first0 = level.rank0(first - 1);
-      const last0 = level.rank0(last - 1);
-      const count = last0 - first0;
-      if (sortedIndex < count) {
-        // go left
-        first = first0;
-        last = last0;
-      } else {
-        // go right
-        const nz = this.numZeros[l];
-        first = nz + first - first0; // = nz + level.rank1(first - 1);
-        last = nz + last - last0; // = nz + level.rank1(last - 1);
-        // update symbol and new target sorted index in the child node
-        const levelBitMask = 1 << (this.maxLevel - l);
-        symbol |= levelBitMask;
-        sortedIndex -= count;
-      }
-    }
-    return { symbol, count: last - first };
-  }
 
   // Returns the number of values with symbol strictly less than the given symbol.
   // This is kind of like a ranged rank operation over a symbol range.
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
-  less(i, j, symbol) {
-    if (i < 0) throw new Error('i must be >= 0');
-    if (i > j) throw new Error('i must be <= j');
-    if (j > this.length) throw new Error('j must be < wavelet matrix length');
+  rankLess(first, last, symbol) {
+    if (first < 0) throw new Error('first must be >= 0');
+    if (first > last) throw new Error('first must be <= last');
+    if (last > this.length) throw new Error('last must be < wavelet matrix length');
     if (symbol <= 0) return 0;
     if (symbol >= this.alphabetSize) return this.length;
-    let l = 0; // level index
-    let a = 0; // left symbol index
-    let b = (1 << this.numLevels) - 1; // right symbol index // right symbol
-    let count = 0;
-    let levelBitMask = 1 << this.maxLevel;
-    while (a !== b) {
-      const level = this.levels[l];
-      const m = (a + b) >>> 1;
-      const i0 = level.rank0(i - 1);
-      const j0 = level.rank0(j - 1);
-      if ((symbol & levelBitMask) === 0) {
-        i = i0;
-        j = j0;
-        b = m;
-      } else {
-        count += j0 - i0;
-        const nz = this.numZeros[l];
-        i = nz + (i - i0); // === nz + level.rank1(i - 1);
-        j = nz + (j - j0); // === nz + level.rank1(j - 1);
-        a = m + 1;
-      }
-      l += 1;
-      levelBitMask >>>= 1;
-    }
-    return count;
-  }
-
-  // is less related to the idea of the 'last' value in rank?
-  // ie. on the last (virtual) level, we want the position of
-  // the first instance of symbol S; that position IS the rank
-  // if we have not restricted the time range.
-  // so less is kinda the same as the ranks function (but slower)?
-  // could we have a class of bit selectors that allow you to choose
-  // successive prefixes of the code space, so that when we STOP we've
-  // got all the LESS values that we want? do we already have this implemented,
-  // in fact? if we calculate contiguous symbol range sums, then just do a
-  // cumulative sum on that... voila?
-  // in short:
-  // - `ranks` allows us to compute sums of contiguous power of 2 symbol ranges
-  // - if we cumsum those sums, we get the less-than values for
-  //   evenly-spaced power of 2 symbols, eg. sum for symbols < 4,
-  //   symbols < 8, symbols < 12, symbols < 16.
-  // todo: does the halfRange stuff still work with STOP sum ranges?
-  // seems to.
-  // so it's not possible to get the kind of power of two code ranges
-  // from `ranks`that we use BEFORE range splitting. But I totally wonder
-  // if the set of bitselector-based contiguous sequences isn't exactly
-  // the same as what you get out of range-splitting...
-  // Plus will need one less query to get all the symbols below the lowest
-  // symbol covered by the `ranks` range
-
-  // todo: include symbolset functionality to aid constructing ranks queries:
-  // https://observablehq.com/d/05a4c693328c3c34
-
-  // Restore the cleaner version that iterates through all levels each time.
-  // I think with balance trees this is always the case, at least for certain operations.
-  // if we ever have unbalanced trees using prefix free codes, I think this means that
-  // the codes will be strictly ascending in terms of the number of bits they use.
-  // which means that we can use a look up table for the cumulative number of codes below
-  // a certain bit length that is of length #bits (store #bits => code offset) or such. so
-  // based on the symbol code, we can tell in O(numLevels) the number of levels to traverse.
-  __less(i, j, symbol) {
-    if (i < 0) throw new Error('i must be >= 0');
-    if (i > j) throw new Error('i must be <= j');
-    if (j > this.length) throw new Error('j must be < wavelet matrix length');
-    if (symbol <= 0) return 0;
-    if (symbol >= this.alphabetSize) return this.length;
-    let levelBitMask = 1 << this.maxLevel;
     let count = 0;
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
-      const i0 = level.rank0(i - 1);
-      const j0 = level.rank0(j - 1);
+      const first1 = level.rank1(first - 1);
+      const last1 = level.rank1(last - 1);
+      const levelBitMask = 1 << (this.maxLevel - l);
       if ((symbol & levelBitMask) === 0) {
-        i = i0;
-        j = j0;
+        // go left
+        first = first - first1; // = first0
+        last = last - last1; // = last0
       } else {
-        count += j0 - i0;
+        // update count before going right
+        count += (last - last1) - (first - first1); // = last0 - first0
+        // go right
         const nz = this.numZeros[l];
-        i = nz + (i - i0); // === nz + level.rank1(i - 1);
-        j = nz + (j - j0); // === nz + level.rank1(j - 1);
+        first = nz + first1;
+        last = nz + last1;
       }
-      levelBitMask >>>= 1;
     }
     return count;
   }
+
+
+  // todo: include symbolset functionality to aid constructing ranks queries:
+  // https://observablehq.com/d/05a4c693328c3c34
 
   // note:
   // we can express rank1 in terms of rank0
@@ -380,7 +319,7 @@ export class WaveletMatrix {
   //    rank0(i)   = i - rank1(i) + 1
   // => rank0(i-1) = i-1 - rank1(i-1) + 1
   // => rank0(i-1) = i - rank1(i-1)
-  // and vice versa (see impl. of rank0)
+  // and vice versa, so i0 = i - i1; (see impl. of rank0)
 
   // Returns the number of occurrences of symbols [lower, upper)
   // in the index range [i, j).
