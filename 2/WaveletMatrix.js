@@ -311,6 +311,81 @@ export class WaveletMatrix {
     return count;
   }
 
+  rankRange(first, last, lower, upper) {
+    const { F, L, S } = this; // firsts, lasts, symbols
+    F[0] = first;
+    L[0] = last;
+    S[0] = 0;
+    let len = 1;
+    let count = 0;
+
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const levelBitMask = 1 << (this.maxLevel - l);
+      let nextIndex = F.length - 1;
+      for (let i = len; i > 0; ) {
+        i -= 1;
+
+        const first = F[i];
+        const last = L[i];
+
+        // the range of symbols represented by this node
+        const a = S[i]; // leftmost symbol in this node
+        const b = a | levelBitMask | (levelBitMask - 1); // rightmost symbol in this node
+
+        // If this node is fully inside of [lower, upper), just count it.
+        // Otherwise, recurse into children. Any contiguous range is covered
+        // by O(numLevels) nodes (at most 2 * numLevels + 1, i think).
+        const containedWithinInterval = lower <= a && b < upper;
+        if (containedWithinInterval) {
+          count += last - first;
+        } else {
+          const first1 = level.rank1(first - 1);
+          const first0 = first - first1;
+          const last1 = level.rank1(last - 1);
+          const last0 = last - last1;
+
+          const num0 = last0 - first0; // count of left children
+          if (num0 > 0) {
+            // go left if the left node range (a, b) overlaps [lower, upper)
+            const b = a | (levelBitMask - 1); // rightmost symbol in the left child node
+            const intervalsOverlap = lower <= b && a < upper;
+            if (intervalsOverlap) {
+              F[nextIndex] = first0;
+              L[nextIndex] = last0;
+              S[nextIndex] = a;
+              nextIndex -= 1;
+            }
+          }
+
+          const num1 = last1 - first1; // count of right children
+          if (num1 > 0) {
+            // go right if the right node range (a, b) overlaps [lower, upper)
+            const a = S[i] | levelBitMask; // leftmost symbol in the right child node
+            const intervalsOverlap = lower <= b && a < upper;
+            if (intervalsOverlap) {
+              const nz = this.numZeros[l];
+              F[nextIndex] = nz + first1;
+              L[nextIndex] = nz + last1;
+              S[nextIndex] = a;
+              nextIndex -= 1;
+            }
+          }
+        }
+      }
+
+      // update the length and move processed elements back to the front of the list.
+      len = F.length - (nextIndex + 1);
+      F.set(F.subarray(nextIndex + 1));
+      L.set(L.subarray(nextIndex + 1));
+      S.set(S.subarray(nextIndex + 1));
+    }
+    for (let i = 0; i < len; i++) {
+      count += L[i] -= F[i];
+    }
+    return count;
+  }
+
   // Returns all of the distinct symbols in the range [first, last) together with their counts.
   ranksRange(first, last, lower, upper) {
     const { F, L, S } = this; // firsts, lasts, symbols
@@ -321,9 +396,6 @@ export class WaveletMatrix {
     L[0] = last;
     S[0] = 0;
     let len = 1;
-
-    let a = 0; // left symbol index
-    let b = (1 << this.numLevels) - 1; // right symbol index
 
     // In each iteration, we traverse F/L/S back to front and place the processed results at the end of the array,
     // stealing it it in from right to left. This allows us to turn an individual element into more than one
