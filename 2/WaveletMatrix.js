@@ -129,8 +129,8 @@ export class WaveletMatrix {
     while (a !== b) {
       const level = this.levels[l];
       // todo (for perf): can combine the access and rank
-      // queries, since they access the same block. will 
-      // need a method for this on bitvectors. 
+      // queries, since they access the same block. will
+      // need a method for this on bitvectors.
       if (level.access(i) === 0) {
         // go left
         i = level.rank0(i - 1);
@@ -279,6 +279,31 @@ export class WaveletMatrix {
   // version that looped over all levels rather than bisecting a symbol interval
   // when the tree is balanced. Might be worth keeping both implementations around.
   quantile(i, j, k) {
+    if (i > j) throw new Error('i must be <= j');
+    if (j > this.length) throw new Error('j must be < wavelet matrix length');
+    if (k < 0 || k >= j - i) throw new Error('k cannot be less than zero or exceed length of range [i, j)');
+    const msbMask = 1 << this.maxLevel;
+    let symbol = 0;
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const i0 = level.rank0(i - 1);
+      const j0 = level.rank0(j - 1);
+      const count = j0 - i0;
+      if (k < count) {
+        i = i0;
+        j = j0;
+      } else {
+        symbol |= msbMask >>> l; // (this.maxLevel - l)
+        k -= count;
+        const nz = this.numZeros[l];
+        i = nz + (i - i0); // === nz + level.rank1(i - 1);
+        j = nz + (j - j0); // === nz + level.rank1(j - 1);
+      }
+    }
+    return { symbol, frequency: j - i };
+  }
+
+  __quantile(i, j, k) {
     if (i > j) throw new Error('i must be <= j');
     if (j > this.length) throw new Error('j must be < wavelet matrix length');
     if (k < 0 || k >= j - i) throw new Error('k cannot be less than zero or exceed length of range [i, j)');
