@@ -117,8 +117,11 @@ export class WaveletMatrix {
 
     this.symbols = new Uint32Array(this.alphabetSize);
     for (let s = 0; s < this.symbols.length; s++) this.symbols[s] = s;
+    // todo: do not materialize these until needed - alphabet might be big.
     this.P = new Uint32Array(this.alphabetSize + 1); // extra space for the full 'both' path
     this.I = new Uint32Array(this.alphabetSize + 1); // case and an odd alphabet size
+    this.C = new Uint32Array(this.alphabetSize + 1); // frequency info
+    this.S = new Uint32Array(this.alphabetSize + 1); // frequency info
   }
 
   access(index) {
@@ -187,8 +190,8 @@ export class WaveletMatrix {
       } else {
         // go right
         const nz = this.numZeros[l];
-        first = nz + first - first0; // = nz + first1
-        last = nz + last - last0; // = nz + last1
+        first = nz + (first - first0); // = nz + first1
+        last = nz + (last - last0); // = nz + last1
         // update symbol and new target sorted index in the child node
         const levelBitMask = 1 << (this.maxLevel - l);
         symbol |= levelBitMask;
@@ -277,7 +280,6 @@ export class WaveletMatrix {
   // k - 1    = numNodes = number of rank queries for all symbols rank via ranks()
   // 2σ * k   = number of rank queries for all symbols rank via rank();
 
-
   // Returns the number of values with symbol strictly less than the given symbol.
   // This is kind of like a ranged rank operation over a symbol range.
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
@@ -299,7 +301,7 @@ export class WaveletMatrix {
         last = last - last1; // = last0
       } else {
         // update count before going right
-        count += (last - last1) - (first - first1); // = last0 - first0
+        count += last - last1 - (first - first1); // = last0 - first0
         // go right
         const nz = this.numZeros[l];
         first = nz + first1;
@@ -309,6 +311,101 @@ export class WaveletMatrix {
     return count;
   }
 
+  v1_rankRange(first, last, lower, upper) {
+    if (first < 0) throw new Error('first must be >= 0');
+    if (first > last) throw new Error('first must be <= last');
+    if (last > this.length) throw new Error('last must be < wavelet matrix length');
+    // todo: more checks, more errors (eg disallow upper > lower)
+    if (upper >= lower) return 0;
+    // if (symbol <= 0) return 0;
+    // if (symbol >= this.alphabetSize) return this.length;
+    let count = 0;
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const first1 = level.rank1(first - 1);
+      const last1 = level.rank1(last - 1);
+      const levelBitMask = 1 << (this.maxLevel - l);
+      if ((symbol & levelBitMask) === 0) {
+        // go left
+        first = first - first1; // = first0
+        last = last - last1; // = last0
+      } else {
+        // update count before going right
+        count += last - last1 - (first - first1); // = last0 - first0
+        // go right
+        const nz = this.numZeros[l];
+        first = nz + first1;
+        last = nz + last1;
+      }
+    }
+    return count;
+  }
+
+  distinct(first, last, lower, upper) {
+    // distinct symbols and their counts (ranksRange)
+    const { P: F, I: L, C, S } = this; // first, last, count, symbol
+    F.fill(123);
+    L.fill(123);
+    C.fill(0);
+    S.fill(0);
+
+    F[0] = first;
+    L[0] = last;
+    // C[0] = 0; // count of elements in the interval (first, last]
+    // S[0] = 0;
+    let len = 1;
+
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const levelBitMask = 1 << (this.maxLevel - l);
+      let nextIndex = F.length - 1;
+      console.log('len', len);
+      for (let i = len; i > 0; ) {
+        i -= 1;
+        const first = F[i];
+        const last = L[i];
+
+        const first1 = level.rank1(first - 1);
+        const last1 = level.rank1(last - 1);
+
+        const first0 = first - first1;
+        const last0 = last - last1;
+
+        const num0 = last0 - first0; // count of left children
+        const num1 = last1 - first1; // count of right children
+        const num = num0 + num1; // = last - first
+
+        console.log('num0', num0, 'num1', num1, 'num', num, last - first);
+        if (num0 > 0) {
+          console.log('go left');
+          // go left
+          F[nextIndex] = first0;
+          L[nextIndex] = last0;
+          nextIndex -= 1;
+        }
+
+        if (num1 > 0) {
+          // go right
+          console.log('go right');
+          const nz = this.numZeros[l];
+          F[nextIndex] = nz + first1;
+          L[nextIndex] = nz + last1;
+          C[nextIndex] = C[i] + num0;
+          S[nextIndex] = S[i] | levelBitMask;
+          nextIndex -= 1;
+        }
+      }
+      len = F.length - (nextIndex + 1);
+      console.log(F.length, nextIndex - 1, 'len:', len);
+      F.set(F.subarray(nextIndex + 1));
+      L.set(L.subarray(nextIndex + 1));
+      C.set(C.subarray(nextIndex + 1));
+      S.set(S.subarray(nextIndex + 1));
+    }
+    // F.subarray(0, len).map((f, i) => L[i] - f)
+    for (let i = 0; i < len; i++) L[i] -= F[i];
+    return { symbols: S.subarray(0, len), counts: L.subarray(0, len) };
+  }
 
   // todo: include symbolset functionality to aid constructing ranks queries:
   // https://observablehq.com/d/05a4c693328c3c34
