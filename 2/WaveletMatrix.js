@@ -278,29 +278,28 @@ export class WaveletMatrix {
   // Note: this  may be noticeably slower (needs rigorous testing) than the previous
   // version that looped over all levels rather than bisecting a symbol interval
   // when the tree is balanced. Might be worth keeping both implementations around.
-  quantile(i, j, k) {
-    if (i > j) throw new Error('i must be <= j');
-    if (j > this.length) throw new Error('j must be < wavelet matrix length');
-    if (k < 0 || k >= j - i) throw new Error('k cannot be less than zero or exceed length of range [i, j)');
-    const msbMask = 1 << this.maxLevel;
+  quantile(first, last, k) {
+    if (first > last) throw new Error('first must be <= last');
+    if (last > this.length) throw new Error('last must be < wavelet matrix length');
+    if (k < 0 || k >= last - first) throw new Error('k cannot be less than zero or exceed length of range [first, last)');
     let symbol = 0;
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
-      const i0 = level.rank0(i - 1);
-      const j0 = level.rank0(j - 1);
-      const count = j0 - i0;
+      const first0 = level.rank0(first - 1);
+      const last0 = level.rank0(last - 1);
+      const count = last0 - first0;
       if (k < count) {
-        i = i0;
-        j = j0;
+        first = first0;
+        last = last0;
       } else {
-        symbol |= msbMask >>> l; // (this.maxLevel - l)
+        symbol |= 1 << (this.maxLevel - l)
         k -= count;
         const nz = this.numZeros[l];
-        i = nz + (i - i0); // === nz + level.rank1(i - 1);
-        j = nz + (j - j0); // === nz + level.rank1(j - 1);
+        first = nz + (first - first0); // === nz + level.rank1(first - 1);
+        last = nz + (last - last0); // === nz + level.rank1(last - 1);
       }
     }
-    return { symbol, frequency: j - i };
+    return { symbol, frequency: last - first };
   }
 
   __quantile(i, j, k) {
