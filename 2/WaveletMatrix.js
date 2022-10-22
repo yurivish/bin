@@ -146,47 +146,27 @@ export class WaveletMatrix {
     return a;
   }
 
-  // todo: consistency w/ count of whether the symbol specifier comes first or last
-
-  // q: what happens if we do rank but only track last? Does this give us the count
-  // of all symbols less than the chosen symbol?
-
-  // Adapted from Compact Data Structures: A Practical Approach (Algorithm 6.6)
-  // Searches [first, last).
-  // This implements the 'strict' version, using only this.levels and this.numZeros.
-  // I noticed that by setting the initial value of P, we can do rank range queries rather than requiring two calls to rank.
-  // todo: make a non-range rank version equivalent to rank(symbol, 0, j) that does the 'count' trick
-  // to count up the number of nz on all the levels where we went right (the purpose of 'first' when it is initialized to zero
-  // is the track the lower bound of the node with our target symbol, which is only ever bumped by nz when we go right.)
-  rank(symbol, first, last) {
-    if (this.numLevels === 0) return 0;
+  rank(first, last, symbol) {
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
     if (first > last) throw new Error('last must be <= first');
     if (first === last) return 0;
     if (first > this.length) throw new Error('first must be < wavelet matrix length');
-    let l = 0; // level index
-    let a = 0; // left symbol index
-    let b = (1 << this.numLevels) - 1; // right symbol index
-    let levelBitMask = 1 << this.maxLevel;
-    while (a !== b) {
+    if (this.numLevels === 0) return 0;
+    for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
-      const m = (a + b) >>> 1;
-      const last0 = level.rank0(last - 1);
-      const first0 = level.rank0(first - 1);
+      const nz = this.numZeros[l];
+      const first1 = level.rank1(first - 1);
+      const last1 = level.rank1(last - 1);
+      const levelBitMask = 1 << (this.maxLevel - l);
       if ((symbol & levelBitMask) === 0) {
         // go left
-        last = last0;
-        first = first0;
-        b = m;
+        first = first - first1; // = level.rank0(first - 1)
+        last = last - last1; // = level.rank0(last - 1)
       } else {
         // go right
-        const nz = this.numZeros[l];
-        last = nz + (last - last0); // === nz + level.rank1(last - 1);
-        first = nz + (first - first0); // === nz + level.rank1(first - 1);
-        a = m + 1;
+        first = nz + first1;
+        last = nz + last1;
       }
-      l += 1;
-      levelBitMask >>>= 1;
     }
     return last - first;
   }
@@ -272,69 +252,32 @@ export class WaveletMatrix {
 
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
   // Range quantile query returning the kth largest symbol in A[i, j).
-  // I wonder if there's a way to early-out in this implementation; as
-  // written, it always looks through all levels. Does this have implications
-  // for e.g. a Huffman-shaped wavelet matrix?
-  // Note: this  may be noticeably slower (needs rigorous testing) than the previous
-  // version that looped over all levels rather than bisecting a symbol interval
-  // when the tree is balanced. Might be worth keeping both implementations around.
   quantile(first, last, k) {
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
-    if (k < 0 || k >= last - first) throw new Error('k cannot be less than zero or exceed length of range [first, last)');
+    if (k < 0 || k >= last - first)
+      throw new Error('k cannot be less than zero or exceed length of range [first, last)');
     let symbol = 0;
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
+      const nz = this.numZeros[l];
       const first0 = level.rank0(first - 1);
       const last0 = level.rank0(last - 1);
       const count = last0 - first0;
       if (k < count) {
+        // go left
         first = first0;
         last = last0;
       } else {
-        symbol |= 1 << (this.maxLevel - l)
-        k -= count;
-        const nz = this.numZeros[l];
-        first = nz + (first - first0); // === nz + level.rank1(first - 1);
-        last = nz + (last - last0); // === nz + level.rank1(last - 1);
-      }
-    }
-    return { symbol, frequency: last - first };
-  }
-
-  __quantile(i, j, k) {
-    if (i > j) throw new Error('i must be <= j');
-    if (j > this.length) throw new Error('j must be < wavelet matrix length');
-    if (k < 0 || k >= j - i) throw new Error('k cannot be less than zero or exceed length of range [i, j)');
-    let symbol = 0;
-    let l = 0;
-    let a = 0; // left symbol index
-    let b = (1 << this.numLevels) - 1; // right symbol index
-    let levelBitMask = 1 << this.maxLevel;
-    // question: do we ever go less than numLevels iterations?
-    while (a !== b) {
-      const level = this.levels[l];
-      const m = (a + b) >>> 1;
-      const i0 = level.rank0(i - 1);
-      const j0 = level.rank0(j - 1);
-      const count = j0 - i0;
-      if (k < count) {
-        // go left
-        i = i0;
-        j = j0;
-        b = m;
-      } else {
+        // go right
+        const levelBitMask = 1 << (this.maxLevel - l);
         symbol |= levelBitMask;
         k -= count;
-        const nz = this.numZeros[l];
-        i = nz + (i - i0); // === nz + level.rank1(i - 1);
-        j = nz + (j - j0); // === nz + level.rank1(j - 1);
-        a = m + 1;
+        first = nz + first - first0; // = nz + level.rank1(first - 1);
+        last = nz + last - last0; // = nz + level.rank1(last - 1);
       }
-      l += 1;
-      levelBitMask >>>= 1;
     }
-    return { symbol, frequency: j - i };
+    return { symbol, count: last - first };
   }
 
   // Returns the number of values with symbol strictly less than the given symbol.
