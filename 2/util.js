@@ -21,3 +21,47 @@ export function trailing0(v) {
   if (v & 0x55555555) c -= 1;
   return c;
 }
+
+// Reverse the lowest `numBits` bits of `v`.
+// E.g. reverseBits(0b0000100100, 6) === 0b0000001001
+//                       ^^^^^^               ^^^^^^
+export function reverseBits(v, numBits) {
+  return reverseBits32(v) >>> (32 - numBits);
+}
+
+// Adapted from https://graphics.stanford.edu/~seander/bithacks.html#ReverseParallel
+export function reverseBits32(v) {
+  // unsigned int v; // 32-bit word to reverse bit order
+  // swap odd and even bits
+  v = ((v >>> 1) & 0x55555555) | ((v & 0x55555555) << 1);
+  // swap consecutive pairs
+  v = ((v >>> 2) & 0x33333333) | ((v & 0x33333333) << 2);
+  // swap nibbles ...
+  v = ((v >>> 4) & 0x0f0f0f0f) | ((v & 0x0f0f0f0f) << 4);
+  // swap bytes
+  v = ((v >>> 8) & 0x00ff00ff) | ((v & 0x00ff00ff) << 8);
+  // swap 2-byte long pairs
+  v = (v >>> 16) | (v << 16);
+  return v;
+}
+
+export function clamp(x, lo, hi) {
+  return x < lo ? lo : x > hi ? hi : x;
+}
+
+// unused in this library right now, but convenient
+export function enumerateOnes(block, callback) {
+  block = block >>> 0
+  while (block != 0) {
+    callback(trailing0(block));
+    const t = block & -block;
+    block = block ^ t;
+  }
+}
+
+// unused in this library right now, but convenient
+export function onesArray(block, ret = []) {
+  ret.length = 0;
+  enumerateOnes(block, ret.push.bind(ret));
+  return ret;
+}

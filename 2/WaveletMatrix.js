@@ -1,5 +1,10 @@
 import { RankBitVector } from './RankBitVector';
 import { ZeroCompressedBitVector } from './ZeroCompressedBitVector';
+import { reverseBits, reverseBits32, clamp } from './util';
+// todo: range next value, range prev value (though these can be done using quantile), quantiles, majority,
+// intersection and more from "New algorithms on wavelet trees and applications to information retrieval"
+
+// wavelet tree is from 2003, wavelet matrix is from oct. 2012
 
 // bit selectors
 export const LEFT = 0; // select left bit
@@ -13,6 +18,7 @@ export class WaveletMatrix {
   // This implements Algorithm 1 (seq.pc) from the paper "Practical Wavelet Tree Construction".
   // The return value is the array of wavelet tree levels. Adapting the algorithm to construct
   // a wavelet matrix instead requires changing the borders computation (see section 5.3).
+  // todo: check that all symbols are < alphabetSize
   constructor(data, alphabetSize) {
     // console.clear();
     // data is an array of integer values in [0, alphabetSize)
@@ -68,8 +74,8 @@ export class WaveletMatrix {
       borders[0] = 0;
       for (let i = 1; i < m; i++) {
         // Update the positions in-place (wavelet matrix)
-        const prevIndex = bitReverse(i - 1, l);
-        borders[bitReverse(i, l)] = borders[prevIndex] + hist[prevIndex];
+        const prevIndex = reverseBits(i - 1, l);
+        borders[reverseBits(i, l)] = borders[prevIndex] + hist[prevIndex];
         // To compute a wavelet tree, do this instead:
         // borders[i] = borders[i - 1] + hist[i - 1];
       }
@@ -138,6 +144,9 @@ export class WaveletMatrix {
   }
 
   // todo: consistency w/ count of whether the symbol specifier comes first or last
+
+  // q: what happens if we do rank but only track last? Does this give us the count
+  // of all symbols less than the chosen symbol?
 
   // Adapted from Compact Data Structures: A Practical Approach (Algorithm 6.6)
   // Searches [first, last).
@@ -248,14 +257,12 @@ export class WaveletMatrix {
     for (let i = 0; i < len; i++) I[i] -= P[i];
     return I.subarray(0, len).slice();
   }
-  
+
   // i think this is the bigger performance analysis for the rank of all individual symbols:
   // σ        = numLevels
   // k <= 2^σ = alphabetSize
   // k - 1    = numNodes = number of rank queries for all symbols rank via ranks()
   // 2σ * k   = number of rank queries for all symbols rank via rank();
-  
-
 
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
   // Range quantile query returning the kth largest symbol in A[i, j).
@@ -344,21 +351,21 @@ export class WaveletMatrix {
   // could we have a class of bit selectors that allow you to choose
   // successive prefixes of the code space, so that when we STOP we've
   // got all the LESS values that we want? do we already have this implemented,
-  // in fact? if we calculate contiguous symbol range sums, then just do a 
+  // in fact? if we calculate contiguous symbol range sums, then just do a
   // cumulative sum on that... voila?
   // in short:
   // - `ranks` allows us to compute sums of contiguous power of 2 symbol ranges
-  // - if we cumsum those sums, we get the less-than values for 
+  // - if we cumsum those sums, we get the less-than values for
   //   evenly-spaced power of 2 symbols, eg. sum for symbols < 4,
   //   symbols < 8, symbols < 12, symbols < 16.
   // todo: does the halfRange stuff still work with STOP sum ranges?
   // seems to.
-  // so it's not possible to get the kind of power of two code ranges 
+  // so it's not possible to get the kind of power of two code ranges
   // from `ranks`that we use BEFORE range splitting. But I totally wonder
   // if the set of bitselector-based contiguous sequences isn't exactly
   // the same as what you get out of range-splitting...
   // Plus will need one less query to get all the symbols below the lowest
-  // symbol covered by the `ranks` range 
+  // symbol covered by the `ranks` range
 
   // todo: include symbolset functionality to aid constructing ranks queries:
   // https://observablehq.com/d/05a4c693328c3c34
@@ -429,31 +436,29 @@ export class WaveletMatrix {
     }
     return size;
   }
-}
 
-// Reverse the lowest `numBits` bits of `v`.
-// E.g. bitReverse(0b0000100100, 6) === 0b0000001001
-//                       ^^^^^^               ^^^^^^
-function bitReverse(v, numBits) {
-  return bitReverse32(v) >>> (32 - numBits);
-}
-
-// Adapted from https://graphics.stanford.edu/~seander/bithacks.html#ReverseParallel
-function bitReverse32(v) {
-  // unsigned int v; // 32-bit word to reverse bit order
-  // swap odd and even bits
-  v = ((v >>> 1) & 0x55555555) | ((v & 0x55555555) << 1);
-  // swap consecutive pairs
-  v = ((v >>> 2) & 0x33333333) | ((v & 0x33333333) << 2);
-  // swap nibbles ...
-  v = ((v >>> 4) & 0x0f0f0f0f) | ((v & 0x0f0f0f0f) << 4);
-  // swap bytes
-  v = ((v >>> 8) & 0x00ff00ff) | ((v & 0x00ff00ff) << 8);
-  // swap 2-byte long pairs
-  v = (v >>> 16) | (v << 16);
-  return v;
-}
-
-function clamp(x, lo, hi) {
-  return x < lo ? lo : x > hi ? hi : x;
+  // For visualization
+  accessPath(i) {
+    if (i < 0 || i > this.length) throw new Error('access: out of bounds');
+    let l = 0; // level index
+    let a = 0; // left symbol index
+    let b = (1 << this.numLevels) - 1; // right symbol index
+    const path = [];
+    while (a !== b) {
+      const level = this.levels[l];
+      path.push({ index: i, bit: level.access(i) });
+      if (level.access(i) === 0) {
+        // go left
+        i = level.rank0(i - 1);
+        b = (a + b) >>> 1;
+      } else {
+        // go right
+        const nz = this.numZeros[l];
+        i = nz + level.rank1(i - 1);
+        a = ((a + b) >>> 1) + 1;
+      }
+      l += 1;
+    }
+    return { symbol: a, path, virtualLeafIndex: i };
+  }
 }
