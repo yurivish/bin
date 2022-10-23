@@ -259,12 +259,12 @@ export class WaveletMatrix {
 
   // Returns all of the distinct symbols in the range [first, last) together with their counts.
   ranksRange(first, last, lower, upper, symbolBlockBits = 0) {
-    const numLevels = this.numLevels - symbolBlockBits
     const symbolBlockSize = (1 << symbolBlockBits)
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
     if (lower % symbolBlockSize !== 0) throw new Error('lower must evenly divide the symbol block size implied by symbolBlockBits') 
     if (upper  % symbolBlockSize !== 0) throw new Error('upper must evenly divide the symbol block size implied by symbolBlockBits') 
+    const numLevels = this.numLevels - symbolBlockBits
     // if (upper - lower < ) throw new Error('step size implied by symbolBlockBits is greater than the specified symbol range (results would be misleading)')
     const { F, L, S } = this; // firsts, lasts, symbols
     // F.fill(123); // for debugging
