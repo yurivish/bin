@@ -5,6 +5,7 @@ import { reverseBits, reverseBits32, clamp } from './util';
 // intersection and more from "New algorithms on wavelet trees and applications to information retrieval"
 
 // wavelet tree is from 2003, wavelet matrix is from oct. 2012
+// to do: hoist error objects to the top?
 
 // bit selectors
 export const LEFT = 0; // select left bit
@@ -202,6 +203,13 @@ export class WaveletMatrix {
     return { symbol, count: last - first };
   }
 
+  // note: there is an extended version of the quantile algorithm in the paper
+  // "New algorithms on wavelet trees and applications to information retrieval"
+  // It calls the alg above rqq (Algorithm 3) and the extended version mrqq (Algorithm 5).
+  // it's structurally the same, except there are now potentially multiple return values
+  // so we would need to use the same reverse-the-list trick as in ranksRange to manage
+  // an unpredictable number of nodes.
+
   // note: less and rank look *very* similar - can we compute the less values 'for (almost) free' here,
   // by also adding to each element's count when we go right? probably, but is it useful...
   // and i think when we STOP, we want to add to each symbol the count
@@ -329,9 +337,16 @@ export class WaveletMatrix {
   }
 
   // Returns all of the distinct symbols in the range [first, last) together with their counts.
-  ranksRange(first, last, lower, upper) {
+  ranksRange(first, last, lower, upper, symbolBlockBits = 0) {
+    const numLevels = this.numLevels - symbolBlockBits
+    const symbolBlockSize = (1 << symbolBlockBits)
+    // these error messages could be improved, explaining that ignore bits tells us the power of two
+    // that lower and upper need to be multiples of.
+    if (lower % symbolBlockSize !== 0) throw new Error('lower must evenly divide the symbol block size implied by symbolBlockBits') 
+    if (upper  % symbolBlockSize !== 0) throw new Error('upper must evenly divide the symbol block size implied by symbolBlockBits') 
+    // if (upper - lower < ) throw new Error('step size implied by symbolBlockBits is greater than the specified symbol range (results would be misleading)')
     const { F, L, S } = this; // firsts, lasts, symbols
-    // F.fill(123);
+    // F.fill(123); // for debugging
     // L.fill(123);
     // S.fill(123);
     F[0] = first;
@@ -340,11 +355,11 @@ export class WaveletMatrix {
     let len = 1;
 
     // In each iteration, we traverse F/L/S back to front and place the processed results at the end of the array,
-    // stealing it it in from right to left. This allows us to turn an individual element into more than one
+    // filling it it in from right to left. This allows us to turn an individual element into more than one
     // processed element, for example if we want to recurse into both children of a node.
-    // due to the mechanics of this processing, the order of elements gets reversed each time, so we have
-    // a check at the end to reverse the elements one last time in case the total number of reversals was odd.
-    for (let l = 0; l < this.numLevels; l++) {
+    // since we process from back to front, we also "go right" before we "go left" so that symbols retain their
+    // left-to-right ordering when iterated in left-to-right order.
+    for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const levelBitMask = 1 << (this.maxLevel - l);
       let nextIndex = F.length - 1;
@@ -357,25 +372,11 @@ export class WaveletMatrix {
         const last = L[i];
         const last1 = level.rank1(last - 1);
         const last0 = last - last1;
-
-        const num0 = last0 - first0; // count of left children
-        if (num0 > 0) {
-          // go left if the left node range (a, b) overlaps [lower, upper)
-          const a = S[i];
-          const b = a | (levelBitMask - 1);
-          const intervalsOverlap = lower <= b && a < upper;
-          if (intervalsOverlap) {
-            F[nextIndex] = first0;
-            L[nextIndex] = last0;
-            S[nextIndex] = S[i];
-            nextIndex -= 1;
-          }
-        }
-
+        const symbol = S[i];
         const num1 = last1 - first1; // count of right children
         if (num1 > 0) {
           // go right if the right node range (a, b) overlaps [lower, upper)
-          const a = S[i] | levelBitMask;
+          const a = symbol | levelBitMask;
           const b = a | (levelBitMask - 1);
           const intervalsOverlap = lower <= b && a < upper;
           if (intervalsOverlap) {
@@ -383,6 +384,20 @@ export class WaveletMatrix {
             F[nextIndex] = nz + first1;
             L[nextIndex] = nz + last1;
             S[nextIndex] = a;
+            nextIndex -= 1;
+          }
+        }
+
+        const num0 = last0 - first0; // count of left children
+        if (num0 > 0) {
+          // go left if the left node range (a, b) overlaps [lower, upper)
+          const a = symbol;
+          const b = a | (levelBitMask - 1);
+          const intervalsOverlap = lower <= b && a < upper;
+          if (intervalsOverlap) {
+            F[nextIndex] = first0;
+            L[nextIndex] = last0;
+            S[nextIndex] = symbol;
             nextIndex -= 1;
           }
         }
@@ -395,16 +410,9 @@ export class WaveletMatrix {
       S.set(S.subarray(nextIndex + 1));
     }
     for (let i = 0; i < len; i++) L[i] -= F[i];
-    // if we traversed an odd number of levels, the ranges ended up reversed
-    // due to the way we move elements from the front to the end of the array while
-    // processing it back-to-front to avoid overwriting yet-to-be processed elements.
-    const counts = L.subarray(0, len);
-    const symbols = S.subarray(0, len);
-    if (this.numLevels & 1) {
-      counts.reverse();
-      symbols.reverse();
-    }
-    return { symbols: symbols.slice(), counts: counts.slice() };
+    const counts = L.subarray(0, len).slice();
+    const symbols = S.subarray(0, len).slice();
+    return { symbols, counts };
   }
 
   // todo: include symbolset functionality to aid constructing ranks queries:
