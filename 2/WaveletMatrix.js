@@ -289,12 +289,22 @@ export class WaveletMatrix {
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     if (symbol <= 0) return 0;
-    if (symbol >= this.alphabetSize) return this.length;
+    if (symbol >= this.alphabetSize) return last - first;
+
+    // note: it's really tricky to get this function to work correctly 
+    // with respect to the final symbol – ie., including it in a range.
+
+
+    if (symbol <= 0) symbol = 0; // always go left
+    if (symbol >= this.alphabetSize) symbol = this.alphabetSize//(1 << this.numLevels) - 1; // always go right // todo: this can overflow
+    // symbol-- // make inclusive symbol range
+
+
     let count = 0;
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
       const first1 = level.rank1(first - 1);
-      const last1 = level.rank1(last - 1);
+      const last1 = level.rank1(last - 1); // inclusive
       const levelBitMask = 1 << (this.maxLevel - l);
       if ((symbol & levelBitMask) === 0) {
         // go left
@@ -309,9 +319,69 @@ export class WaveletMatrix {
         last = nz + last1;
       }
     }
-    return count;
+    return count// + (last - first)
   }
 
+  rankRange2(first, last, lower, upper) {
+    if (first < 0) throw new Error('first must be >= 0');
+    if (first > last) throw new Error('first must be <= last');
+    if (last > this.length) throw new Error('last must be < wavelet matrix length');
+
+    if (lower <= 0) lower = 0; // always go left
+    if (lower >= this.alphabetSize) lower = (1 << this.numLevels) - 1; // always go right // todo: this can overflow
+
+    if (upper <= 0) upper = 0; // always go left
+    if (upper >= this.alphabetSize) upper = (1 << this.numLevels) - 1; // always go right
+
+    console.log('lower, upper', lower, upper);
+    let _first = first;
+    let _last = last;
+
+    let lowerCount = 0;
+    let upperCount = 0;
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const levelBitMask = 1 << (this.maxLevel - l);
+      const first1 = level.rank1(first - 1);
+      const last1 = level.rank1(last - 1);
+
+      if ((lower & levelBitMask) === 0) {
+        // go left
+        first = first - first1; // = first0
+        last = last - last1; // = last0
+      } else {
+        // update count before going right
+        lowerCount += last - last1 - (first - first1); // = last0 - first0
+        // go right
+        const nz = this.numZeros[l];
+        first = nz + first1;
+        last = nz + last1;
+      }
+
+      const _first1 = first === _first ? first1 : level.rank1(_first - 1); //
+      const _last1 = last === _last ? last1 : level.rank1(_last - 1); //
+
+      if ((upper & levelBitMask) === 0) {
+        // go left
+        _first = _first - _first1; // = _first0
+        _last = _last - _last1; // = _last0
+      } else {
+        // update count before going right
+        upperCount += _last - _last1 - (_first - _first1); // = _last0 - _first0
+        // go right
+        const nz = this.numZeros[l];
+        _first = nz + _first1;
+        _last = nz + _last1;
+      }
+    }
+    console.log(upperCount,'-',lowerCount);
+    return upperCount - lowerCount;
+  }
+
+  // Returns the number of occurrences of symbols [lower, upper)
+  // in the index range [first, last). Equivalent to
+  //     this.less(first, last, upper) - this.less(first, last, lower);
+  // but performs at most 2 * numLevels
   rankRange(first, last, lower, upper) {
     const { F, L, S } = this; // firsts, lasts, symbols
     F[0] = first;
@@ -476,13 +546,6 @@ export class WaveletMatrix {
   // => rank0(i-1) = i-1 - rank1(i-1) + 1
   // => rank0(i-1) = i - rank1(i-1)
   // and vice versa, so i0 = i - i1; (see impl. of rank0)
-
-  // Returns the number of occurrences of symbols [lower, upper)
-  // in the index range [i, j).
-  count(i, j, lower, upper) {
-    if (lower > upper) throw new Error('lower must be <= upper');
-    return this.less(i, j, upper) - this.less(i, j, lower);
-  }
 
   allSelector() {
     return new Uint8Array(this.numLevels).fill(BOTH);
