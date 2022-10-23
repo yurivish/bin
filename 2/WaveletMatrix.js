@@ -141,7 +141,7 @@ export class WaveletMatrix {
     return symbol;
   }
 
-  rank(first, last, symbol) {
+  count(first, last, symbol) {
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
     if (first > last) throw new Error('last must be <= first');
     if (first === last) return 0;
@@ -166,54 +166,10 @@ export class WaveletMatrix {
     return last - first;
   }
 
-  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
-  // Range quantile query returning the kth largest symbol in A[i, j).
-  quantile(first, last, sortedIndex) {
-    if (first > last) throw new Error('first must be <= last');
-    if (last > this.length) throw new Error('last must be < wavelet matrix length');
-    if (sortedIndex < 0 || sortedIndex >= last - first)
-      throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
-    let symbol = 0;
-    for (let l = 0; l < this.numLevels; l++) {
-      const level = this.levels[l];
-      const first0 = level.rank0(first - 1);
-      const last0 = level.rank0(last - 1);
-      const count = last0 - first0;
-      if (sortedIndex < count) {
-        // go left
-        first = first0;
-        last = last0;
-      } else {
-        // go right
-        const nz = this.numZeros[l];
-        first = nz + (first - first0); // = nz + first1
-        last = nz + (last - last0); // = nz + last1
-        // update symbol and new target sorted index in the child node
-        const levelBitMask = 1 << (this.maxLevel - l);
-        symbol |= levelBitMask;
-        sortedIndex -= count;
-      }
-    }
-    return { symbol, count: last - first };
-  }
-
-  // note: there is an extended version of the quantile algorithm in the paper
-  // "New algorithms on wavelet trees and applications to information retrieval"
-  // It calls the alg above rqq (Algorithm 3) and the extended version mrqq (Algorithm 5).
-  // it's structurally the same, except there are now potentially multiple return values
-  // so we would need to use the same reverse-the-list trick as in ranksRange to manage
-  // an unpredictable number of nodes.
-
-  // i think this is the bigger performance analysis for the rank of all individual symbols:
-  // σ        = numLevels
-  // k <= 2^σ = alphabetSize
-  // k - 1    = numNodes = number of rank queries for all symbols rank via ranks()
-  // 2σ * k   = number of rank queries for all symbols rank via rank();
-
   // Returns the number of values with symbol strictly less than the given symbol.
   // This is kind of like a ranged rank operation over a symbol range.
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
-  rankLess(first, last, symbol) {
+  countLess(first, last, symbol) {
     if (first < 0) throw new Error('first must be >= 0');
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
@@ -253,12 +209,16 @@ export class WaveletMatrix {
   // implementation of rankLess to perform two interleaved calls. The 
   // subtlety there is that, as written, the algorithm does not work when
   // symbol >= alphabetSize (the one-symbol impl. can return early in this case).
-  rankRange(first, last, lower, upper) {
+  countRange(first, last, lower, upper) {
     return this.rankLess(first, last, upper) - this.rankLess(first, last, lower);
   }
 
-  // Returns all of the distinct symbols in the range [first, last) together with their counts.
-  ranksRange(first, last, lower, upper, symbolBlockBits = 0) {
+  // Returns all of the distinct symbols [lower, upper) in the range [first, last)
+  // together with their number of occurrences. If symbol block bits is specified,
+  // then symbols are grouped together when they differ only in their `symbolBlockBits`
+  // lowest bits. Each distinct group is labeled by its lowest element, which represents
+  // the group containing symbols in the range [symbol, symbol + 2^symbolBlockBits).
+  counts(first, last, lower, upper, symbolBlockBits = 0) {
     const symbolBlockSize = (1 << symbolBlockBits)
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
@@ -335,6 +295,51 @@ export class WaveletMatrix {
     const symbols = S.subarray(0, len).slice();
     return { symbols, counts };
   }
+
+  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
+  // Range quantile query returning the kth largest symbol in A[i, j).
+  quantile(first, last, sortedIndex) {
+    if (first > last) throw new Error('first must be <= last');
+    if (last > this.length) throw new Error('last must be < wavelet matrix length');
+    if (sortedIndex < 0 || sortedIndex >= last - first)
+      throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
+    let symbol = 0;
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const first0 = level.rank0(first - 1);
+      const last0 = level.rank0(last - 1);
+      const count = last0 - first0;
+      if (sortedIndex < count) {
+        // go left
+        first = first0;
+        last = last0;
+      } else {
+        // go right
+        const nz = this.numZeros[l];
+        first = nz + (first - first0); // = nz + first1
+        last = nz + (last - last0); // = nz + last1
+        // update symbol and new target sorted index in the child node
+        const levelBitMask = 1 << (this.maxLevel - l);
+        symbol |= levelBitMask;
+        sortedIndex -= count;
+      }
+    }
+    return { symbol, count: last - first };
+  }
+
+  // note: there is an extended version of the quantile algorithm in the paper
+  // "New algorithms on wavelet trees and applications to information retrieval"
+  // It calls the alg above rqq (Algorithm 3) and the extended version mrqq (Algorithm 5).
+  // it's structurally the same, except there are now potentially multiple return values
+  // so we would need to use the same reverse-the-list trick as in ranksRange to manage
+  // an unpredictable number of nodes.
+
+  // i think this is the bigger performance analysis for the rank of all individual symbols with bit selectors:
+  // σ        = numLevels
+  // k <= 2^σ = alphabetSize
+  // k - 1    = numNodes = number of rank queries for all symbols rank via ranks()
+  // 2σ * k   = number of rank queries for all symbols rank via rank();
+
 
   // todo: include symbolset functionality to aid constructing ranks queries:
   // https://observablehq.com/d/05a4c693328c3c34
