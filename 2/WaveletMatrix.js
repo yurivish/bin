@@ -7,12 +7,6 @@ import { reverseBits, reverseBits32, clamp } from './util';
 // wavelet tree is from 2003, wavelet matrix is from oct. 2012
 // to do: hoist error objects to the top?
 
-// bit selectors
-export const LEFT = 0; // select left bit
-export const RIGHT = 1; // select right bit
-export const BOTH = 2; // select both bits (eg. rank: return ranks for both subtrees)
-export const STOP = 3; // stop at this level (eg. rank: return sums so far)
-
 // note: implements a binary wavelet matrix that always splits on power-of-two
 // alphabet boundaries, rather than splitting based on the true alphabet midpoint.
 export class WaveletMatrix {
@@ -210,79 +204,6 @@ export class WaveletMatrix {
   // so we would need to use the same reverse-the-list trick as in ranksRange to manage
   // an unpredictable number of nodes.
 
-  // note: less and rank look *very* similar - can we compute the less values 'for (almost) free' here,
-  // by also adding to each element's count when we go right? probably, but is it useful...
-  // and i think when we STOP, we want to add to each symbol the count
-  // as if we went right for all subsequent levels.
-  // is this related to numZeros at those lower levels? need to be careful...
-  // could make a lesses function, and another that does both, if we ever need both...
-  // is there a way to do range less in one pass? maybe just track 2 counts or something
-  ranks(selectors, first, last) {
-    if (first === undefined || last === undefined) throw 'wat';
-    if (first > last) throw new Error('last must be <= first');
-    // if (first === last) return 0; // todo: return a 0 array of the number of returned symbols
-    if (first > this.length) throw new Error('first must be < wavelet matrix length');
-    // note: bit selectors could be a u64 for up to 32 levels (2 bits per selector)
-    if (selectors.length != this.numLevels) throw new Error('selectors.length must be equal to numLevels');
-    let len = 1; // number of symbols we're currently tracking / updating
-    // important: round up. This means that for odd alphabet sizes,
-    // we will computer an extra element if we went 'both' directions,
-    // which will be omitted from the return value with `subarray`.
-    const numSymbols = this.alphabetSize;
-    const halfLimit = Math.ceil(numSymbols / 2);
-
-    const { F, L } = this;
-    // F.fill(123);
-    // L.fill(123); // clear for easier debugging
-
-    L[0] = last; // clamp(last + 1, 1, this.length);
-    F[0] = first; // todo: would starting this off at nonzero allow us to do a 'range count'? or do L need to do 2 'ranks' calls after all
-
-    let levelBitMask = 1 << this.maxLevel;
-    loop: for (let l = 0; l < this.numLevels; l++) {
-      const level = this.levels[l];
-      const nz = this.numZeros[l];
-      const selector = selectors[l];
-      switch (selector) {
-        case BOTH:
-          for (let n = Math.min(len, halfLimit); n > 0; ) {
-            n -= 1;
-            const last = L[n];
-            const p = F[n];
-
-            const last1 = level.rank1(last - 1);
-            L[2 * n + 1] = nz + last1; // go right
-            L[2 * n] = last - last1; // go left (=== level.rank0(last - 1))
-
-            const p1 = level.rank1(p - 1);
-            F[2 * n + 1] = nz + p1; // go right
-            F[2 * n] = p - p1; // go left (=== level.rank0(p - 1))
-          }
-          len = Math.min(2 * len, numSymbols);
-          break;
-        case LEFT:
-          for (let n = 0; n < len; n++) {
-            // go left
-            L[n] = level.rank0(L[n] - 1);
-            F[n] = level.rank0(F[n] - 1);
-          }
-          break;
-        case RIGHT:
-          for (let n = 0; n < len; n++) {
-            // go right
-            L[n] = nz + level.rank1(L[n] - 1);
-            F[n] = nz + level.rank1(F[n] - 1);
-          }
-          break;
-        case STOP:
-          break loop;
-      }
-      levelBitMask >>>= 1;
-    }
-    for (let i = 0; i < len; i++) L[i] -= F[i];
-    return L.subarray(0, len).slice();
-  }
-
   // i think this is the bigger performance analysis for the rank of all individual symbols:
   // σ        = numLevels
   // k <= 2^σ = alphabetSize
@@ -425,16 +346,6 @@ export class WaveletMatrix {
   // => rank0(i-1) = i-1 - rank1(i-1) + 1
   // => rank0(i-1) = i - rank1(i-1)
   // and vice versa, so i0 = i - i1; (see impl. of rank0)
-
-  allSelector() {
-    return new Uint8Array(this.numLevels).fill(BOTH);
-  }
-
-  selector(prefix) {
-    const ret = new Uint8Array(this.numLevels).fill(STOP);
-    ret.set(prefix);
-    return ret;
-  }
 
   approxSizeInBits() {
     // ignores fixed-size fields
