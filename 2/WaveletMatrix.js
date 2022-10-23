@@ -206,11 +206,11 @@ export class WaveletMatrix {
   // of rank calls, but this comes at a cost of implementation complexity.
   // See the paper "New algorithms on wavelet trees and applications to
   // information retrieval" for details. Another approach is to modify the
-  // implementation of rankLess to perform two interleaved calls. The 
+  // implementation of countLess to perform two interleaved calls. The 
   // subtlety there is that, as written, the algorithm does not work when
   // symbol >= alphabetSize (the one-symbol impl. can return early in this case).
   countRange(first, last, lower, upper) {
-    return this.rankLess(first, last, upper) - this.rankLess(first, last, lower);
+    return this.countLess(first, last, upper) - this.countLess(first, last, lower);
   }
 
   // Returns all of the distinct symbols [lower, upper) in the range [first, last)
