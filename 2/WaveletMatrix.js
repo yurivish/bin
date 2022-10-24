@@ -424,7 +424,10 @@ export class WaveletMatrix {
     for (let i = 0; i < walk.len; i++) L[i] -= F[i];
     const counts = L.subarray(0, walk.len).slice();
     const symbols = S.subarray(0, walk.len).slice();
-    const assignments = I.subarray(0, walk.len).slice(); // how many quantiles are assigned to each symbol
+    // assignments indicates how many quantiles are assigned to each symbol.
+    // this is a more concise representation than a dense array with one entry
+    // per sortedIndex in those cases where the same symbol is at multiple input indices.
+    const assignments = I.subarray(0, walk.len).slice();
     return { symbols, counts, assignments, nRankCalls };
   }
 
