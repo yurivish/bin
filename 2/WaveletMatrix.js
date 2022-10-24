@@ -112,12 +112,15 @@ export class WaveletMatrix {
 
     this.symbols = new Uint32Array(this.alphabetSize);
     for (let s = 0; s < this.symbols.length; s++) this.symbols[s] = s;
+
     // todo: do not materialize these until needed - alphabet might be big.
-    // we add one because bit-selector based ranks might compute an extra symbol
-    const sz = Math.min(2 ** this.numLevels, this.alphabetSize + 1);
+    // accept scratch space as an input parameter so we can reuse the same
+    // space across wavelet trees
+    const sz = Math.min(2 ** this.numLevels, this.alphabetSize);
     this.F = new Uint32Array(sz); // firsts
     this.L = new Uint32Array(sz); // lasts
     this.S = new Uint32Array(sz); // symbols
+    this.I = new Uint32Array(sz); // indices
   }
 
   access(index) {
@@ -176,12 +179,10 @@ export class WaveletMatrix {
     if (symbol <= 0) return 0;
     if (symbol >= this.alphabetSize) return last - first;
     let count = 0;
-    let n = 0
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
       const first1 = level.rank1(first - 1);
       const last1 = level.rank1(last - 1); // inclusive
-      n += 2;
       const levelBitMask = 1 << (this.maxLevel - l);
       if ((symbol & levelBitMask) === 0) {
         // go left
@@ -196,17 +197,16 @@ export class WaveletMatrix {
         last = nz + last1;
       }
     }
-    console.log('less:', n,'calls to rank')
-    return count
+    return count;
   }
 
   // Returns the number of occurrences of symbols [lower, upper)
   // in the index range [first, last). It is possible to implement
-  // this function roughly twice as efficiently in terms of number 
+  // this function roughly twice as efficiently in terms of number
   // of rank calls, but this comes at a cost of implementation complexity.
   // See the paper "New algorithms on wavelet trees and applications to
   // information retrieval" for details. Another approach is to modify the
-  // implementation of countLess to perform two interleaved calls. The 
+  // implementation of countLess to perform two interleaved calls. The
   // subtlety there is that, as written, the algorithm does not work when
   // symbol >= alphabetSize (the one-symbol impl. can return early in this case).
   count(first, last, lower, upper) {
@@ -219,12 +219,14 @@ export class WaveletMatrix {
   // lowest bits. Each distinct group is labeled by its lowest element, which represents
   // the group containing symbols in the range [symbol, symbol + 2^groupByLowBits).
   counts(first, last, lower, upper, groupByLowBits = 0) {
-    const symbolBlockSize = (1 << groupByLowBits)
+    const symbolBlockSize = 1 << groupByLowBits;
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
-    if (lower % symbolBlockSize !== 0) throw new Error('lower must evenly divide the symbol block size implied by groupByLowBits') 
-    if (upper  % symbolBlockSize !== 0) throw new Error('upper must evenly divide the symbol block size implied by groupByLowBits') 
-    const numLevels = this.numLevels - groupByLowBits
+    if (lower % symbolBlockSize !== 0)
+      throw new Error('lower must evenly divide the symbol block size implied by groupByLowBits');
+    if (upper % symbolBlockSize !== 0)
+      throw new Error('upper must evenly divide the symbol block size implied by groupByLowBits');
+    const numLevels = this.numLevels - groupByLowBits;
     // if (upper - lower < ) throw new Error('step size implied by groupByLowBits is greater than the specified symbol range (results would be misleading)')
     const { F, L, S } = this; // firsts, lasts, symbols
     // F.fill(123); // for debugging
@@ -233,9 +235,9 @@ export class WaveletMatrix {
     F[0] = first;
     L[0] = last;
     S[0] = 0;
-    let len = 1;
+    const walk = new ReverseArrayWalker(1, F.length);
     let nRankCalls = 0;
-    
+
     // In each iteration, we traverse F/L/S back to front and place the processed results at the end of the array,
     // filling it it in from right to left. This allows us to turn an individual element into more than one
     // processed element, for example if we want to recurse into both children of a node.
@@ -244,8 +246,7 @@ export class WaveletMatrix {
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const levelBitMask = 1 << (this.maxLevel - l);
-      let nextIndex = F.length - 1;
-      for (let i = len; i > 0; ) {
+      for (let i = walk.len; i > 0; ) {
         i -= 1;
 
         const first = F[i];
@@ -259,7 +260,6 @@ export class WaveletMatrix {
         const symbol = S[i];
         nRankCalls += 2;
 
-
         const num1 = last1 - first1; // count of right children
         if (num1 > 0) {
           // go right if the right node range [a, b] overlaps [lower, upper)
@@ -268,10 +268,10 @@ export class WaveletMatrix {
           const intervalsOverlap = lower <= b && a < upper;
           if (intervalsOverlap) {
             const nz = this.numZeros[l];
+            const nextIndex = walk.next();
             F[nextIndex] = nz + first1;
             L[nextIndex] = nz + last1;
             S[nextIndex] = a;
-            nextIndex -= 1;
           }
         }
 
@@ -282,25 +282,24 @@ export class WaveletMatrix {
           const b = a | (levelBitMask - 1);
           const intervalsOverlap = lower <= b && a < upper;
           if (intervalsOverlap) {
+            const nextIndex = walk.next();
             F[nextIndex] = first0;
             L[nextIndex] = last0;
             S[nextIndex] = symbol;
-            nextIndex -= 1;
           }
         }
       }
 
       // update the length and move processed elements back to the front of the list.
-      len = F.length - (nextIndex + 1);
-      F.set(F.subarray(nextIndex + 1));
-      L.set(L.subarray(nextIndex + 1));
-      S.set(S.subarray(nextIndex + 1));
+      const index = walk.moveToFront();
+      F.set(F.subarray(index, walk.cap));
+      L.set(L.subarray(index, walk.cap));
+      S.set(S.subarray(index, walk.cap));
     }
-    console.log('nRankCalls:', nRankCalls)
-    for (let i = 0; i < len; i++) L[i] -= F[i];
-    const counts = L.subarray(0, len).slice();
-    const symbols = S.subarray(0, len).slice();
-    return { symbols, counts };
+    for (let i = 0; i < walk.len; i++) L[i] -= F[i];
+    const counts = L.subarray(0, walk.len).slice();
+    const symbols = S.subarray(0, walk.len).slice();
+    return { symbols, counts, nRankCalls };
   }
 
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
@@ -311,11 +310,13 @@ export class WaveletMatrix {
     if (sortedIndex < 0 || sortedIndex >= last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
     let symbol = 0;
+    let nRankCalls = 0;
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
       const first0 = level.rank0(first - 1);
       const last0 = level.rank0(last - 1);
       const count = last0 - first0;
+      nRankCalls += 2;
       if (sortedIndex < count) {
         // go left
         first = first0;
@@ -331,25 +332,101 @@ export class WaveletMatrix {
         sortedIndex -= count;
       }
     }
-    return { symbol, count: last - first };
+    return { symbol, count: last - first, nRankCalls };
   }
 
-  // note: there is an extended version of the quantile algorithm in the paper
-  // "New algorithms on wavelet trees and applications to information retrieval"
-  // It calls the alg above rqq (Algorithm 3) and the extended version mrqq (Algorithm 5).
-  // it's structurally the same, except there are now potentially multiple return values
-  // so we would need to use the same reverse-the-list trick as in ranksRange to manage
-  // an unpredictable number of nodes.
+  quantiles(first, last, sortedIndices) {
+    if (first > last) throw new Error('first must be <= last');
+    if (last > this.length) throw new Error('last must be < wavelet matrix length');
+    for (let i = 1; i < sortedIndices.length; i++) {
+      if (!(sortedIndices[i - 1] <= sortedIndices[i])) throw new Error('sorted indices must be sorted');
+    }
+    if (sortedIndices[0] < 0 || sortedIndices[sortedIndices.length - 1] >= last - first)
+      throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
 
-  // i think this is the bigger performance analysis for the rank of all individual symbols with bit selectors:
-  // σ        = numLevels
-  // k <= 2^σ = alphabetSize
-  // k - 1    = numNodes = number of rank queries for all symbols rank via ranks()
-  // 2σ * k   = number of rank queries for all symbols rank via rank();
+    const { F, L, S, I } = this; // firsts, lasts, symbols, counts
+    F[0] = first;
+    L[0] = last;
+    S[0] = 0;
+    I[0] = sortedIndices.length;
+    let nRankCalls = 0;
 
+    const walk = new ReverseArrayWalker(1, F.length);
+    let symbol = 0;
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const levelBitMask = 1 << (this.maxLevel - l);
+      let k = sortedIndices.length;
+      for (let i = walk.len; i > 0; ) {
+        i -= 1;
 
-  // todo: include symbolset functionality to aid constructing ranks queries:
-  // https://observablehq.com/d/05a4c693328c3c34
+        const first = F[i];
+        const first1 = level.rank1(first - 1);
+        const first0 = first - first1;
+
+        const last = L[i];
+        const last1 = level.rank1(last - 1);
+        const last0 = last - last1;
+
+        let symbol = S[i];
+        const count = last0 - first0;
+        nRankCalls += 2;
+
+        let numGoLeft = 0;
+        let numGoRight = 0;
+
+        // assign target quantiles to the left or right child of this node
+        k -= I[i];
+        for (let n = I[i]; n > 0; ) {
+          n -= 1; // iterates in reverse over the range [0, I[i]-1]
+          const index = k + n;
+          // sortedIndices[index] belongs to this tree node
+          if (sortedIndices[index] < count) {
+            numGoLeft++;
+          } else {
+            sortedIndices[index] -= count;
+            numGoRight++;
+          }
+        }
+
+        if (numGoRight > 0) {
+          // go right
+          const nz = this.numZeros[l];
+          const nextIndex = walk.next();
+          F[nextIndex] = nz + (first - first0); // = nz + first1
+          L[nextIndex] = nz + (last - last0); // = nz + last1
+          S[nextIndex] = symbol | levelBitMask;
+          I[nextIndex] = numGoRight;
+        }
+
+        if (numGoLeft > 0) {
+          // go left
+          const nextIndex = walk.next();
+          F[nextIndex] = first0;
+          L[nextIndex] = last0;
+          S[nextIndex] = symbol;
+          I[nextIndex] = numGoLeft;
+        }
+      }
+
+      // update the length and move processed elements back to the front of the list.
+      const index = walk.moveToFront();
+      F.set(F.subarray(index, walk.cap));
+      L.set(L.subarray(index, walk.cap));
+      S.set(S.subarray(index, walk.cap));
+      I.set(I.subarray(index, walk.cap));
+      // note: terminating this loop early computes approximate quantiles,
+      // recursively dividing the alphabet in two each iteration.
+      // the count of symbols assigned to each range is given by I,
+      // and I think the ranges are [symbol, symbol+2^(maxLevel-l)).
+    }
+
+    for (let i = 0; i < walk.len; i++) L[i] -= F[i];
+    const counts = L.subarray(0, walk.len).slice();
+    const symbols = S.subarray(0, walk.len).slice();
+    const assignments = I.subarray(0, walk.len).slice(); // how many quantiles are assigned to each symbol
+    return { symbols, counts, assignments, nRankCalls };
+  }
 
   // note:
   // we can express rank1 in terms of rank0
@@ -391,5 +468,35 @@ export class WaveletMatrix {
       l += 1;
     }
     return { symbol: a, path, virtualLeafIndex: i };
+  }
+}
+
+// helper for turning recursion into iteration, encapsulating the logic
+// of walking an array in reverse and generating zero or more outputs
+// for each input.
+// new elements are filled in from the end of the array, using the space
+// beyond then last element as scratch space.
+// in our case we never generate more than two outputs per input, which
+// upper-bounds the size of the scratch space required to 2x the number
+// of input elements.
+class ReverseArrayWalker {
+  constructor(len, cap) {
+    this.len = len; // length
+    this.cap = cap; // capacity
+    this.index = cap; // nextIndex + 1
+  }
+  next() {
+    return (this.index -= 1);
+  }
+  moveToFront() {
+    // logic for moving the filled-in elements from the end
+    // to the front of the array, returning the start index
+    // that can be used to copy elements from the back to front:
+    // > const index = walk.moveToFront()
+    // > typedArray.set(typedArray.subarray(index), walk.cap);
+    const index = this.index;
+    this.len = this.cap - this.index;
+    this.index = this.cap;
+    return index;
   }
 }
