@@ -348,7 +348,7 @@ export class WaveletMatrix {
     F[0] = first;
     L[0] = last;
     S[0] = 0;
-    I[0] = sortedIndices.length;
+    I[0] = sortedIndices.length; // number of sortedIndices represented by node 0
     let nRankCalls = 0;
 
     const walk = new ReverseArrayWalker(1, F.length);
@@ -356,7 +356,7 @@ export class WaveletMatrix {
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
       const levelBitMask = 1 << (this.maxLevel - l);
-      let k = sortedIndices.length;
+      let k = sortedIndices.length; // at every level, we sweep through the sorted indices in reverse
       for (let i = walk.len; i > 0; ) {
         i -= 1;
 
@@ -369,25 +369,26 @@ export class WaveletMatrix {
         const last0 = last - last1;
 
         let symbol = S[i];
-        const count = last0 - first0;
+        const leftChildCount = last0 - first0; // left child count
+        const childCount = I[i];
         nRankCalls += 2;
 
-        let numGoLeft = 0;
-        let numGoRight = 0;
+        // Determine the number of nodes that wants to be mapped to the right child of this node,
+        // and subtract the count of left children from all of the nodes matched to the right child.
 
-        // assign target quantiles to the left or right child of this node
-        k -= I[i];
-        for (let n = I[i]; n > 0; ) {
-          n -= 1; // iterates in reverse over the range [0, I[i]-1]
-          const index = k + n;
-          // sortedIndices[index] belongs to this tree node
-          if (sortedIndices[index] < count) {
-            numGoLeft++;
-          } else {
-            sortedIndices[index] -= count;
-            numGoRight++;
-          }
-        }
+        // [hi, lo) is the range of sorted indices covered by this node
+        const lo = k - childCount;
+        const hi = k;
+
+        // index of the first right child
+        const split = binarySearchBefore(sortedIndices, leftChildCount, lo, hi);
+        const numGoLeft = split - lo;
+        const numGoRight = childCount - numGoLeft;
+
+        // adjust count for quantiles mapped to the right child, taking into account the left count
+        for (let n = split; n < hi; n++) sortedIndices[n] -= leftChildCount;
+
+        k -= childCount;
 
         if (numGoRight > 0) {
           // go right
@@ -502,4 +503,32 @@ class ReverseArrayWalker {
     this.index = this.cap;
     return index;
   }
+}
+
+// Find the rightmost insertion index in A for T
+// in order to maintain A's sorted order.
+// Searches the index range [L, R).
+function binarySearchAfter(A, T, L, R) {
+  while (L < R) {
+    // This midpoint calculation will return incorrect results for large arrays (>2^30)
+    // By that point we should switch to Zig. Correct alternative: Math.floor(L + (R - L) / 2);
+    const m = (L + R) >>> 1;
+    if (A[m] > T) R = m;
+    else L = m + 1;
+  }
+  return R;
+}
+
+// Find the leftmost insertion index in A for T
+// in order to maintain A's sorted order.
+// Searches the index range [L, R).
+function binarySearchBefore(A, T, L, R) {
+  while (L < R) {
+    // This midpoint calculation will return incorrect results for large arrays (>2^30)
+    // By that point we should switch to Zig. Correct alternative: Math.floor(L + (R - L) / 2);
+    const m = (L + R) >>> 1;
+    if (A[m] < T) L = m + 1;
+    else R = m;
+  }
+  return L;
 }
