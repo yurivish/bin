@@ -141,7 +141,7 @@ export class WaveletMatrix {
     return symbol;
   }
 
-  count(first, last, symbol) {
+  countSymbol(first, last, symbol) {
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
     if (first > last) throw new Error('last must be <= first');
     if (first === last) return 0;
@@ -209,23 +209,23 @@ export class WaveletMatrix {
   // implementation of countLess to perform two interleaved calls. The 
   // subtlety there is that, as written, the algorithm does not work when
   // symbol >= alphabetSize (the one-symbol impl. can return early in this case).
-  countRange(first, last, lower, upper) {
+  count(first, last, lower, upper) {
     return this.countLess(first, last, upper) - this.countLess(first, last, lower);
   }
 
   // Returns all of the distinct symbols [lower, upper) in the range [first, last)
   // together with their number of occurrences. If symbol block bits is specified,
-  // then symbols are grouped together when they differ only in their `symbolBlockBits`
+  // then symbols are grouped together when they differ only in their `groupByLowBits`
   // lowest bits. Each distinct group is labeled by its lowest element, which represents
-  // the group containing symbols in the range [symbol, symbol + 2^symbolBlockBits).
-  counts(first, last, lower, upper, symbolBlockBits = 0) {
-    const symbolBlockSize = (1 << symbolBlockBits)
+  // the group containing symbols in the range [symbol, symbol + 2^groupByLowBits).
+  counts(first, last, lower, upper, groupByLowBits = 0) {
+    const symbolBlockSize = (1 << groupByLowBits)
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
-    if (lower % symbolBlockSize !== 0) throw new Error('lower must evenly divide the symbol block size implied by symbolBlockBits') 
-    if (upper  % symbolBlockSize !== 0) throw new Error('upper must evenly divide the symbol block size implied by symbolBlockBits') 
-    const numLevels = this.numLevels - symbolBlockBits
-    // if (upper - lower < ) throw new Error('step size implied by symbolBlockBits is greater than the specified symbol range (results would be misleading)')
+    if (lower % symbolBlockSize !== 0) throw new Error('lower must evenly divide the symbol block size implied by groupByLowBits') 
+    if (upper  % symbolBlockSize !== 0) throw new Error('upper must evenly divide the symbol block size implied by groupByLowBits') 
+    const numLevels = this.numLevels - groupByLowBits
+    // if (upper - lower < ) throw new Error('step size implied by groupByLowBits is greater than the specified symbol range (results would be misleading)')
     const { F, L, S } = this; // firsts, lasts, symbols
     // F.fill(123); // for debugging
     // L.fill(123);
@@ -234,7 +234,8 @@ export class WaveletMatrix {
     L[0] = last;
     S[0] = 0;
     let len = 1;
-
+    let nRankCalls = 0;
+    
     // In each iteration, we traverse F/L/S back to front and place the processed results at the end of the array,
     // filling it it in from right to left. This allows us to turn an individual element into more than one
     // processed element, for example if we want to recurse into both children of a node.
@@ -250,13 +251,18 @@ export class WaveletMatrix {
         const first = F[i];
         const first1 = level.rank1(first - 1);
         const first0 = first - first1;
+
         const last = L[i];
         const last1 = level.rank1(last - 1);
         const last0 = last - last1;
+
         const symbol = S[i];
+        nRankCalls += 2;
+
+
         const num1 = last1 - first1; // count of right children
         if (num1 > 0) {
-          // go right if the right node range (a, b) overlaps [lower, upper)
+          // go right if the right node range [a, b] overlaps [lower, upper)
           const a = symbol | levelBitMask;
           const b = a | (levelBitMask - 1);
           const intervalsOverlap = lower <= b && a < upper;
@@ -271,7 +277,7 @@ export class WaveletMatrix {
 
         const num0 = last0 - first0; // count of left children
         if (num0 > 0) {
-          // go left if the left node range (a, b) overlaps [lower, upper)
+          // go left if the left node range [a, b] overlaps [lower, upper)
           const a = symbol;
           const b = a | (levelBitMask - 1);
           const intervalsOverlap = lower <= b && a < upper;
@@ -290,6 +296,7 @@ export class WaveletMatrix {
       L.set(L.subarray(nextIndex + 1));
       S.set(S.subarray(nextIndex + 1));
     }
+    console.log('nRankCalls:', nRankCalls)
     for (let i = 0; i < len; i++) L[i] -= F[i];
     const counts = L.subarray(0, len).slice();
     const symbols = S.subarray(0, len).slice();
