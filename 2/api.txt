@@ -1,0 +1,66 @@
+rank // (should we call this count?)
+	rank(first, last, symbol)
+	rankRange(first, last, lower, upper) // = count
+
+	ranks(first, last, symbols) // can we do without this one?
+	ranksRange(first, last, lower, upper, symbolBlockBits) // = report
+	ranksSelector(first, last, selector)  // can we do without this one?
+
+	
+quantile
+	quantile(first, last, sortedIndex)
+	quantiles(first, last, sortedIndices) // useful for majority
+
+count
+	// note: these are kinda like generalizations of rank...
+	// Or rather, rank is a special case of count? 
+	// Or they're just the same function in variations?
+	count(first, last, lower, upper) // is semantically ranged `rank`
+	report(first, last, lower, upper) // is semantically ranged `ranks`; outputs all pairs (y, f ), where ys ≤ y ≤ ye and y appears f > 0 times in P[xs, ys
+	less(first, last, upper)
+
+access
+	access(i)
+	access(indices)
+	accessAll(first, last)
+
+majority
+	majority(first, last, k)
+
+convenience
+	rankLess(first, last, upper) = rankRange(first, last, 0, upper)
+	greater(first, last, lower) = length - less
+
+later
+
+	// like count, but reports the symbols and their counts
+	// oh, huh, is this actually a general ranged ranks function?
+	// from New algorithms on wavelet trees and applications to information retrieval
+	// this is also `distinct`, plus frequencies!
+	report(first, last, lower, upper) // outputs all pairs (y, f ), where ys ≤ y ≤ ye and y appears f > 0 times in P[xs, ys
+
+
+	// symbols and their frequencies in ascending order by symbol
+	// from New algorithms on wavelet trees and applications to information retrieval
+	quantiles(first, last, k1, k2) // called mrqq in the paper
+	quantilesAll(first, last) = quantiles(first, last, i, j) // convenience
+
+---
+
+Ranks given a list of indices
+Quantiles given a list of indices
+
+Less
+
+Count distinct (in symbol range of possible)
+More efficient range count
+Range report all nonzero symbols
+
+allRanks
+allQuantiles
+allAccess
+
+Majority
+Majority in symbol range (if possible)
+
+Range intersect eventually.
