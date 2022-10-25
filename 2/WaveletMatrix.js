@@ -126,13 +126,18 @@ export class WaveletMatrix {
     return symbol;
   }
 
-  countSymbol(first, last, symbol) {
+  countSymbol(first, last, symbol, symbolBlockBits = 0) {
+    const symbolBlockSize = 1 << symbolBlockBits;
+    if (symbol % symbolBlockSize !== 0) // note: could be done with bit math (check that low bits are zero)
+      throw new Error('symbol must evenly divide the block size implied by symbolBlockBits');
+
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
     if (first > last) throw new Error('last must be <= first');
     if (first === last) return 0;
     if (first > this.length) throw new Error('first must be < wavelet matrix length');
     if (this.numLevels === 0) return 0;
-    for (let l = 0; l < this.numLevels; l++) {
+    const numLevels = this.numLevels - symbolBlockBits;
+    for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const first1 = level.rank1(first - 1);
       const last1 = level.rank1(last - 1);
