@@ -491,7 +491,7 @@ class ReverseArrayWalker {
   }
   next() {
     // return the next index at which we can append an element
-    // (as we fill te array in backwards from arr[cap - 1])
+    // (as we fill the array in backwards from arr[cap - 1])
     return (this.index -= 1);
   }
   moveToFront() {
