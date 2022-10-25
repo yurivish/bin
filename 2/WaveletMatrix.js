@@ -15,26 +15,9 @@ export class WaveletMatrix {
   // a wavelet matrix instead requires changing the borders computation (see section 5.3).
   // todo: check that all symbols are < alphabetSize
   constructor(data, alphabetSize) {
-    // console.clear();
     // data is an array of integer values in [0, alphabetSize)
-    const n = data.length;
     const numLevels = Math.ceil(Math.log2(alphabetSize));
     const maxLevel = numLevels - 1;
-
-    // for each level, store the number of nodes at that level..
-    // for a balanced binary tree, there are twice as many nodes
-    // at each child level as its parent level, other than the
-    // final level, which is limited by the alphabet size.
-    // (the previous levels are also limited by the alphabet size,
-    // but the way that we determine the number of levels means
-    // at the only power of 2 that may be greater than alphabetSize
-    // is the last one.
-    // This will look different with Huffman-shaped matrices!
-    // const numLeafNodes = Math.ceil(this.alphabetSize / 2); // ! there are alphabetSize 'virtual' leaves
-    // const numNodes = new Uint32Array(numLevels);
-    // numNodes[0] = 1;
-    // for (let i=1;i<maxLevel;i++) numNodes[i] = 2 * numNodes[i-1];
-    // numNodes[maxLevel] = numLeafNodes;
 
     // todo: can we get away with non-pow2, storing just one entry per symbol?
     const hist = new Uint32Array(2 ** numLevels);
@@ -46,25 +29,26 @@ export class WaveletMatrix {
       // try this once bits can be added to it out-of-order
       // levels[i] = new ZeroCompressedBitVector(data.length, { rank: true });
     }
-    const level0 = levels[0];
-    const highBitMask = 1 << maxLevel;
-    for (let i = 0; i < n; i++) {
+
+    // Compute the histogram of the data
+    const level = levels[0];
+    const levelBitMask = 1 << maxLevel;
+    for (let i = 0; i < data.length; i++) {
       const d = data[i];
-      // Compute the histogram of the data
       hist[d] += 1;
-      // Fill the first level's bit vector (MSBs in data order)
-      if (d & highBitMask) level0.one(i);
+      // Fill the first bitvector (MSBs in data order)
+      if (d & levelBitMask) level.one(i);
     }
+
     // Construct the other levels bottom-up
     for (let l = maxLevel; l > 0; l--) {
-      // console.log('');
-      // console.log('level', l);
       const m = 2 ** l;
       // Compute the histogram based on the previous level's one
       for (let i = 0; i < m; i++) {
         // Update the histogram in-place
         hist[i] = hist[2 * i] + hist[2 * i + 1];
       }
+
       // Get starting positions of intervals from the new histogram
       borders[0] = 0;
       for (let i = 1; i < m; i++) {
@@ -81,46 +65,41 @@ export class WaveletMatrix {
       const levelBitMask = 1 << levelBit;
       const bitPrefixMask = 0xfffffffe << levelBit;
       const bitPrefixShift = levelBit + 1;
-      // console.log("levelBit:", levelBit);
-      // console.log("levelBitMask:", (levelBitMask >>> 0).toString(2));
-      // console.log("bitPrefixMask:", (bitPrefixMask >>> 0).toString(2));
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < data.length; i++) {
         const d = data[i];
         // Get and update position for bit by computing its bit prefix,
         // which encodes the path from the root to the node at level l
         // containing this bit
         const nodeIndex = (d & bitPrefixMask) >>> bitPrefixShift;
-        // console.assert(nodeIndex < m);
         const p = borders[nodeIndex];
         borders[nodeIndex] += 1;
         // Set the bit in the bitvector
         if (d & levelBitMask) level.one(p);
       }
     }
+
     const numZeros = new Uint32Array(numLevels);
     for (let i = 0; i < numLevels; i++) {
       levels[i].finish();
       numZeros[i] = levels[i].rank0(levels[i].length);
     }
+
     this.levels = levels;
     this.alphabetSize = alphabetSize;
     this.numZeros = numZeros;
     this.numLevels = numLevels;
-    // this.numNodes = numNodes;
     this.maxLevel = maxLevel;
     this.length = data.length;
 
-    this.symbols = new Uint32Array(this.alphabetSize);
-    for (let s = 0; s < this.symbols.length; s++) this.symbols[s] = s;
-
-    // todo: do not materialize these until needed - alphabet might be big.
-    // accept scratch space as an input parameter so we can reuse the same
-    // space across wavelet trees
+    // scratch spaces for intermediate processing.
+    // todo: don't materialize these until needed - the alphabet might be big
+    // and we can accept scratch space as an input parameter so we can reuse 
+    // the same space across wavelet trees
     const sz = Math.min(2 ** this.numLevels, this.alphabetSize);
     this.F = new Uint32Array(sz); // firsts
     this.L = new Uint32Array(sz); // lasts
     this.S = new Uint32Array(sz); // symbols
-    this.I = new Uint32Array(sz); // indices
+    this.C = new Uint32Array(sz); // indices
   }
 
   access(index) {
@@ -347,11 +326,11 @@ export class WaveletMatrix {
     if (sortedIndices[0] < 0 || sortedIndices[sortedIndices.length - 1] >= last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
 
-    const { F, L, S, I } = this; // firsts, lasts, symbols, counts
+    const { F, L, S, C } = this; // firsts, lasts, symbols, counts
     F[0] = first;
     L[0] = last;
     S[0] = 0;
-    I[0] = sortedIndices.length; // number of sortedIndices represented by node 0
+    C[0] = sortedIndices.length; // number of sortedIndices represented by node 0
     let nRankCalls = 0;
 
     const walk = new ReverseArrayWalker(1, F.length);
@@ -378,7 +357,7 @@ export class WaveletMatrix {
         // then subtract the count of left children from all of the nodes matched to the right child,
         // to account for the elements counted in the left counted.
 
-        const sortedIndexCount = I[i]; // number of sorted indices inside this node
+        const sortedIndexCount = C[i]; // number of sorted indices inside this node
         // [hi, lo) is the range of sorted indices covered by this node
         const lo = k - sortedIndexCount;
         const hi = k;
@@ -402,7 +381,7 @@ export class WaveletMatrix {
           F[nextIndex] = nz + (first - first0); // = nz + first1
           L[nextIndex] = nz + (last - last0); // = nz + last1
           S[nextIndex] = symbol | levelBitMask;
-          I[nextIndex] = numGoRight;
+          C[nextIndex] = numGoRight;
         }
 
         if (numGoLeft > 0) {
@@ -411,7 +390,7 @@ export class WaveletMatrix {
           F[nextIndex] = first0;
           L[nextIndex] = last0;
           S[nextIndex] = symbol;
-          I[nextIndex] = numGoLeft;
+          C[nextIndex] = numGoLeft;
         }
       }
 
@@ -420,7 +399,7 @@ export class WaveletMatrix {
       F.set(F.subarray(index, walk.cap));
       L.set(L.subarray(index, walk.cap));
       S.set(S.subarray(index, walk.cap));
-      I.set(I.subarray(index, walk.cap));
+      C.set(C.subarray(index, walk.cap));
       // note: terminating this loop early computes approximate quantiles,
       // recursively dividing the alphabet in two each iteration.
       // the count of symbols assigned to each range is given by I,
@@ -430,10 +409,10 @@ export class WaveletMatrix {
     for (let i = 0; i < walk.len; i++) L[i] -= F[i];
     const counts = L.subarray(0, walk.len).slice();
     const symbols = S.subarray(0, walk.len).slice();
-    // assignments indicates how many quantiles (entries in sortedIndices) are assigned
+    // assignments indicates how many entries in sortedIndices are assigned
     // to each symbol. this is a more economical representation than a dense array of 
     // length sortedIndices when multiple sortedIndices point to the same symbol.
-    const assignments = I.subarray(0, walk.len).slice();
+    const assignments = C.subarray(0, walk.len).slice();
     return { symbols, counts, assignments, nRankCalls };
   }
 
@@ -483,11 +462,12 @@ export class WaveletMatrix {
 // helper for turning recursion into iteration, encapsulating the logic
 // of walking an array in reverse and generating zero or more outputs
 // for each input.
+// This is most useful when every element expands into at most k elements
+// because then we can pre-allocate an array of size K times max elements
+// and be sure that we will never end up overriding existing elements as
+// we expand.
 // new elements are filled in from the end of the array, using the space
-// beyond the last element as scratch space
-// in our case we never generate more than two outputs per input, which
-// upper-bounds the size of the scratch space required to 2x the number
-// of input elements.
+// beyond the last element as scratch space.
 class ReverseArrayWalker {
   constructor(len, cap) {
     this.len = len; // length taken by elements
