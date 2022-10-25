@@ -214,20 +214,21 @@ export class WaveletMatrix {
   }
 
   // Returns all of the distinct symbols [lower, upper) in the range [first, last)
-  // together with their number of occurrences. If symbol block bits is specified,
-  // then symbols are grouped together when they differ only in their `groupByLowBits`
-  // lowest bits. Each distinct group is labeled by its lowest element, which represents
-  // the group containing symbols in the range [symbol, symbol + 2^groupByLowBits).
-  counts(first, last, lower, upper, groupByLowBits = 0) {
-    const symbolBlockSize = 1 << groupByLowBits;
+  // together with their number of occurrences. Symbols are grouped and processed
+  // in groups of size 2^symbolBlockBits (symbols are grouped together when they 
+  // differ only in their lowest `symbolBlockBits` bits)
+  // Each distinct group is labeled by its lowest element, which represents
+  // the group containing symbols in the range [symbol, symbol + 2^symbolBlockBits).
+  counts(first, last, lower, upper, symbolBlockBits = 0) {
+    const symbolBlockSize = 1 << symbolBlockBits;
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
     if (lower % symbolBlockSize !== 0)
-      throw new Error('lower must evenly divide the symbol block size implied by groupByLowBits');
+      throw new Error('lower must evenly divide the symbol block size implied by symbolBlockBits');
     if (upper % symbolBlockSize !== 0)
-      throw new Error('upper must evenly divide the symbol block size implied by groupByLowBits');
-    const numLevels = this.numLevels - groupByLowBits;
-    // if (upper - lower < ) throw new Error('step size implied by groupByLowBits is greater than the specified symbol range (results would be misleading)')
+      throw new Error('upper must evenly divide the symbol block size implied by symbolBlockBits');
+    const numLevels = this.numLevels - symbolBlockBits;
+    // if (upper - lower < ) throw new Error('step size implied by symbolBlockBits is greater than the specified symbol range (results would be misleading)')
     const { F, L, S } = this; // firsts, lasts, symbols
     // F.fill(123); // for debugging
     // L.fill(123);
@@ -336,6 +337,8 @@ export class WaveletMatrix {
   }
 
   quantiles(first, last, sortedIndices) {
+    // note: currently mutates sortedIndices as it goes...
+    // note: should be possible to implement mrqq on top of the structure of this function
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     for (let i = 1; i < sortedIndices.length; i++) {
@@ -369,26 +372,28 @@ export class WaveletMatrix {
         const last0 = last - last1;
 
         let symbol = S[i];
-        const leftChildCount = last0 - first0; // left child count
-        const childCount = I[i];
         nRankCalls += 2;
 
         // Determine the number of nodes that wants to be mapped to the right child of this node,
-        // and subtract the count of left children from all of the nodes matched to the right child.
+        // then subtract the count of left children from all of the nodes matched to the right child,
+        // to account for the elements counted in the left counted.
 
+        const sortedIndexCount = I[i]; // number of sorted indices inside this node
         // [hi, lo) is the range of sorted indices covered by this node
-        const lo = k - childCount;
+        const lo = k - sortedIndexCount;
         const hi = k;
 
+        const leftChildCount = last0 - first0; // left child count
         // index of the first right child
-        const split = binarySearchBefore(sortedIndices, leftChildCount, lo, hi);
-        const numGoLeft = split - lo;
-        const numGoRight = childCount - numGoLeft;
+        const splitIndex = binarySearchBefore(sortedIndices, leftChildCount, lo, hi);
+        const numGoLeft = splitIndex - lo;
+        const numGoRight = sortedIndexCount - numGoLeft;
 
-        // adjust count for quantiles mapped to the right child, taking into account the left count
-        for (let n = split; n < hi; n++) sortedIndices[n] -= leftChildCount;
+        // adjust count for quantiles mapped to the right child, taking into account the left count,
+        // so that we look only for the remaining count of elements in the child node.
+        for (let n = splitIndex; n < hi; n++) sortedIndices[n] -= leftChildCount;
 
-        k -= childCount;
+        k -= sortedIndexCount;
 
         if (numGoRight > 0) {
           // go right
