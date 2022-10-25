@@ -479,17 +479,18 @@ export class WaveletMatrix {
 // of walking an array in reverse and generating zero or more outputs
 // for each input.
 // new elements are filled in from the end of the array, using the space
-// beyond then last element as scratch space.
+// beyond the last element as scratch space
 // in our case we never generate more than two outputs per input, which
 // upper-bounds the size of the scratch space required to 2x the number
 // of input elements.
 class ReverseArrayWalker {
   constructor(len, cap) {
-    this.len = len; // length
-    this.cap = cap; // capacity
+    this.len = len; // length taken by elements
+    this.cap = cap; // capacity for additional elements
     this.index = cap; // nextIndex + 1
   }
   next() {
+    // return the next index at which we can append an element
     return (this.index -= 1);
   }
   moveToFront() {
