@@ -96,10 +96,13 @@ export class WaveletMatrix {
     // and we can accept scratch space as an input parameter so we can reuse 
     // the same space across wavelet trees
     const sz = Math.min(2 ** this.numLevels, this.alphabetSize);
+    // todo: buffer pool of scratch spaces
+    // todo: these names are also getting quite silly (and inaccurate)
     this.F = new Uint32Array(sz); // firsts
     this.L = new Uint32Array(sz); // lasts
     this.S = new Uint32Array(sz); // symbols
-    this.C = new Uint32Array(sz); // indices
+    this.C = new Uint32Array(sz); 
+    this.C2 = new Uint32Array(sz); 
   }
 
   access(index) {
@@ -315,7 +318,7 @@ export class WaveletMatrix {
     return { symbol, count: last - first, nRankCalls };
   }
 
-  quantiles(first, last, sortedIndices) {
+  quantileBatch(first, last, sortedIndices) {
     // note: currently mutates sortedIndices as it goes...
     // note: should be possible to implement mrqq on top of the structure of this function
     if (first > last) throw new Error('first must be <= last');
@@ -356,7 +359,6 @@ export class WaveletMatrix {
         // Determine the number of nodes that wants to be mapped to the right child of this node,
         // then subtract the count of left children from all of the nodes matched to the right child,
         // to account for the elements counted in the left counted.
-
         const sortedIndexCount = C[i]; // number of sorted indices inside this node
         // [hi, lo) is the range of sorted indices covered by this node
         const lo = k - sortedIndexCount;
@@ -414,6 +416,78 @@ export class WaveletMatrix {
     // length sortedIndices when multiple sortedIndices point to the same symbol.
     const assignments = C.subarray(0, walk.len).slice();
     return { symbols, counts, assignments, nRankCalls };
+  }
+
+  quantiles(first, last, sortedIndexLo, sortedIndexHi) {
+    if (first > last) throw new Error('first must be <= last');
+    if (last > this.length) throw new Error('last must be < wavelet matrix length');
+    if (sortedIndexLo > sortedIndexHi) throw new Error('sortedIndexLo must be <= sortedIndexHi');
+    if (sortedIndexLo < 0 || sortedIndexHi > last - first)
+      throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
+
+    const { F, L, S, C, C2 } = this; // firsts, lasts, symbols, counts
+    F[0] = first;
+    L[0] = last;
+    S[0] = 0;
+    C[0] = sortedIndexLo
+    C2[0] = sortedIndexHi
+    let nRankCalls = 0;
+
+    const walk = new ReverseArrayWalker(1, F.length);
+    let symbol = 0;
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const levelBitMask = 1 << (this.maxLevel - l);
+      for (let i = walk.len; i > 0; ) {
+        i -= 1;
+
+        const first = F[i];
+        const first1 = level.rank1(first - 1);
+        const first0 = first - first1;
+
+        const last = L[i];
+        const last1 = level.rank1(last - 1);
+        const last0 = last - last1;
+
+        let symbol = S[i];
+        nRankCalls += 2;
+
+        const leftChildCount = last0 - first0;
+        if (C2[i] > leftChildCount) {
+          // go right
+          const nz = this.numZeros[l];
+          const nextIndex = walk.next();
+          F[nextIndex] = nz + (first - first0); // = nz + first1
+          L[nextIndex] = nz + (last - last0); // = nz + last1
+          S[nextIndex] = symbol | levelBitMask;
+          C[nextIndex] = Math.max(C[i] - leftChildCount, 0)
+          C2[nextIndex] = C2[i] - leftChildCount
+        }
+
+        if (C[i] < leftChildCount) {
+          // go left
+          const nextIndex = walk.next();
+          F[nextIndex] = first0;
+          L[nextIndex] = last0;
+          S[nextIndex] = symbol;
+          C[nextIndex] = C[i]
+          C2[nextIndex] = Math.min(leftChildCount, C2[i])
+        }
+      }
+
+      // update the length and move processed elements back to the front of the list.
+      const index = walk.moveToFront();
+      F.set(F.subarray(index, walk.cap));
+      L.set(L.subarray(index, walk.cap));
+      S.set(S.subarray(index, walk.cap));
+      C.set(C.subarray(index, walk.cap));
+      C2.set(C2.subarray(index, walk.cap));
+    }
+
+    for (let i = 0; i < walk.len; i++) L[i] -= F[i];
+    const counts = L.subarray(0, walk.len).slice();
+    const symbols = S.subarray(0, walk.len).slice();
+    return { symbols, counts, nRankCalls };
   }
 
   // note:
