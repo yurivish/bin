@@ -1,3 +1,42 @@
+// initial work towards a WM select implementation.
+// i wonder if there is a way to do it with binary searches and rank instad of select1/select0.
+find(first, last, symbol, count) {
+  // same as `count` to track the symbol down to the bottom level
+  if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
+  if (first > last) throw new Error('last must be <= first');
+  if (first === last) return 0;
+  if (first > this.length) throw new Error('first must be < wavelet matrix length');
+  if (this.numLevels === 0) return 0;
+  for (let l = 0; l < this.numLevels; l++) {
+    const level = this.levels[l];
+    const first1 = level.rank1(first - 1);
+    const last1 = level.rank1(last - 1);
+    const levelBitMask = 1 << (this.maxLevel - l);
+    if ((symbol & levelBitMask) === 0) {
+      // go left
+      first = first - first1; // = first0
+      last = last - last1; // = last0
+    } else {
+      // go right
+      const nz = this.numZeros[l];
+      first = nz + first1;
+      last = nz + last1;
+    }
+  }
+  // track the symbol upwards. requires both select0 and select1!
+  let i = first + count - 1
+  for (let l = this.maxLevel; l > 0;) {
+    l -= 1;
+    const level = this.levels[l];
+    const nz = this.numZeros[l];
+    if (i < nz) {
+      i = level.select0(i)
+    } else {
+    }
+  }
+}
+
+
 // note: incomplete
 class __draft__WaveletTree {
   // This implements a specialized version of 'constructWaveletRepresentation' for wavelet trees that does less work per level.

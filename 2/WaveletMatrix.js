@@ -129,10 +129,10 @@ export class WaveletMatrix {
 
   count(first, last, symbol, symbolBlockBits = 0) {
     const symbolBlockSize = 1 << symbolBlockBits;
-    if (symbol % symbolBlockSize !== 0)
+    if (symbol % symbolBlockSize !== 0) {
       // note: could be done with bit math (check that low bits are zero)
       throw new Error('symbol must evenly divide the block size implied by symbolBlockBits');
-
+    }
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
     if (first > last) throw new Error('last must be <= first');
     if (first === last) return 0;

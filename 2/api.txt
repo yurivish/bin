@@ -15,5 +15,8 @@ symbol
 	symbolBatch(sortedIndices)
 	symbols(first, last)
 
+find
+	find(first, last, symbol, count)
+	
 majority
 	majority(first, last, k)
