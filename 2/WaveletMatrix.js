@@ -158,7 +158,52 @@ export class WaveletMatrix {
     return last - first;
   }
 
+  // Returns the number of values with symbol strictly less than the given symbol.
+  // This is kind of like a ranged rank operation over a symbol range.
+  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
+  countLessThan(first, last, symbol) {
+    if (first < 0) throw new Error('first must be >= 0');
+    if (first > last) throw new Error('first must be <= last');
+    if (last > this.length) throw new Error('last must be < wavelet matrix length');
+    if (symbol <= 0) return 0;
+    if (symbol >= this.alphabetSize) return last - first;
+    let count = 0;
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      const first1 = level.rank1(first - 1);
+      const last1 = level.rank1(last - 1); // inclusive
+      const levelBitMask = 1 << (this.maxLevel - l);
+      if ((symbol & levelBitMask) === 0) {
+        // go left
+        first = first - first1; // = first0
+        last = last - last1; // = last0
+      } else {
+        // update count before going right
+        count += last - last1 - (first - first1); // = last0 - first0
+        // go right
+        const nz = this.numZeros[l];
+        first = nz + first1;
+        last = nz + last1;
+      }
+    }
+    return count;
+  }
+
+  // Returns the number of occurrences of symbols [lower, upper)
+  // in the index range [first, last). It is possible to implement
+  // this function roughly twice as efficiently in terms of number
+  // of rank calls, but this comes at a cost of implementation complexity.
+  // See the paper "New algorithms on wavelet trees and applications to
+  // information retrieval" for details. Another approach is to modify the
+  // implementation of countLessThan to perform two interleaved calls. The
+  // subtlety there is that, as written, the algorithm does not work when
+  // symbol >= alphabetSize (the one-symbol impl. can return early in this case).
+  countRange(first, last, lower, upper) {
+    return this.countLessThan(first, last, upper) - this.countLessThan(first, last, lower);
+  }
+
   // todo: think about the behavior wrt. repeated input syms; only returns it once, but unclear what symbol it refers to.
+  // I think we should just note that the return value is one symbol per *unique* symbol in the input
   countBatch(first, last, sortedSymbols, symbolBlockBits = 0) {
     const symbolBlockSize = 1 << symbolBlockBits;
     for (const symbol of sortedSymbols) {
@@ -238,50 +283,6 @@ export class WaveletMatrix {
     return counts;
   }
 
-  // Returns the number of values with symbol strictly less than the given symbol.
-  // This is kind of like a ranged rank operation over a symbol range.
-  // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
-  countLessThan(first, last, symbol) {
-    if (first < 0) throw new Error('first must be >= 0');
-    if (first > last) throw new Error('first must be <= last');
-    if (last > this.length) throw new Error('last must be < wavelet matrix length');
-    if (symbol <= 0) return 0;
-    if (symbol >= this.alphabetSize) return last - first;
-    let count = 0;
-    for (let l = 0; l < this.numLevels; l++) {
-      const level = this.levels[l];
-      const first1 = level.rank1(first - 1);
-      const last1 = level.rank1(last - 1); // inclusive
-      const levelBitMask = 1 << (this.maxLevel - l);
-      if ((symbol & levelBitMask) === 0) {
-        // go left
-        first = first - first1; // = first0
-        last = last - last1; // = last0
-      } else {
-        // update count before going right
-        count += last - last1 - (first - first1); // = last0 - first0
-        // go right
-        const nz = this.numZeros[l];
-        first = nz + first1;
-        last = nz + last1;
-      }
-    }
-    return count;
-  }
-
-  // Returns the number of occurrences of symbols [lower, upper)
-  // in the index range [first, last). It is possible to implement
-  // this function roughly twice as efficiently in terms of number
-  // of rank calls, but this comes at a cost of implementation complexity.
-  // See the paper "New algorithms on wavelet trees and applications to
-  // information retrieval" for details. Another approach is to modify the
-  // implementation of countLessThan to perform two interleaved calls. The
-  // subtlety there is that, as written, the algorithm does not work when
-  // symbol >= alphabetSize (the one-symbol impl. can return early in this case).
-  countRange(first, last, lower, upper) {
-    return this.countLessThan(first, last, upper) - this.countLessThan(first, last, lower);
-  }
-
   // Returns all of the distinct symbols [lower, upper) in the range [first, last)
   // together with their number of occurrences. Symbols are grouped and processed
   // in groups of size 2^symbolBlockBits (symbols are grouped together when they
@@ -297,11 +298,7 @@ export class WaveletMatrix {
     if (upper % symbolBlockSize !== 0)
       throw new Error('upper must evenly divide the symbol block size implied by symbolBlockBits');
     const numLevels = this.numLevels - symbolBlockBits;
-    // if (upper - lower < ) throw new Error('step size implied by symbolBlockBits is greater than the specified symbol range (results would be misleading)')
     const { F, L, S } = this; // firsts, lasts, symbols
-    // F.fill(123); // for debugging
-    // L.fill(123);
-    // S.fill(123);
     F[0] = first;
     L[0] = last;
     S[0] = 0;
