@@ -202,8 +202,7 @@ export class WaveletMatrix {
         const m = (a + b) >>> 1;
 
         // todo: avoid the binary search when all nodes are mapped into the same child
-        // const loBit = sortedSymbols[lo] & levelBitMask
-        // const hiBit = sortedSymbols[hi] & levelBitMask
+        // by checking sortedSymbols[lo] & levelBitMask and sortedSymbols[hi] & levelBitMask
         const splitIndex = binarySearchAfter(sortedSymbols, m, lo, hi);
         const numGoLeft = splitIndex - lo;
         const numGoRight = symbolCount - numGoLeft;
@@ -623,6 +622,10 @@ export class WaveletMatrix {
 // we expand.
 // new elements are filled in from the end of the array, using the space
 // beyond the last element as scratch space.
+// todo: next() could be nextWrite(), and we can add a nextRead(), and allow
+// flipping the elements from back to front incrementally, rather than
+// memcpying to the front after every iteration (with a final pass to 
+// copy to the front if needed).
 class ReverseArrayWalker {
   constructor(len, cap) {
     this.len = len; // length taken by elements
