@@ -8,7 +8,7 @@ count
 quantile
 	quantile(first, last, index)
 	quantileBatch(first, last, sortedIndices)
-	quantiles(first, last, firstSortedIndex, lastSortedIndex)
+	quantiles(first, last, firstIndex, lastIndex)
 
 symbol
 	symbol(index)
@@ -17,6 +17,6 @@ symbol
 
 find
 	find(first, last, symbol, count)
-	
+
 majority
 	majority(first, last, k)

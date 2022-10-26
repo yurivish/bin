@@ -1,5 +1,8 @@
 // initial work towards a WM select implementation.
 // i wonder if there is a way to do it with binary searches and rank instad of select1/select0.
+// or we can just have a low sampling rate for select blocks, and pretend
+// our rank blocks are widely spaced, ie. do a multilevel traversal or 
+// use exponential / binary search (todo: read timsort).
 find(first, last, symbol, count) {
   // same as `count` to track the symbol down to the bottom level
   if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');

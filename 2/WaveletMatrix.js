@@ -172,7 +172,7 @@ export class WaveletMatrix {
     F[0] = first;
     L[0] = last;
     C[0] = sortedSymbols.length;
-    const walk = new ReverseArrayWalker(1, F.length);
+    const walk = new ReverseArrayWalker(sortedSymbols.length === 0 ? 0 : 1, F.length);
     const numLevels = this.numLevels - symbolBlockBits;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
@@ -305,7 +305,7 @@ export class WaveletMatrix {
     F[0] = first;
     L[0] = last;
     S[0] = 0;
-    const walk = new ReverseArrayWalker(1, F.length);
+    const walk = new ReverseArrayWalker(lower === upper ? 0 : 1, F.length);
     let nRankCalls = 0;
 
     // In each iteration, we traverse F/L/S back to front and place the processed results at the end of the array,
@@ -406,12 +406,12 @@ export class WaveletMatrix {
   }
 
   quantileBatch(first, last, sortedIndices) {
-    // note: currently mutates sortedIndices as it goes...
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     for (let i = 1; i < sortedIndices.length; i++) {
       if (!(sortedIndices[i - 1] <= sortedIndices[i])) throw new Error('sorted indices must be sorted');
     }
+    // todo: error if there are more sortedindices than last-first, since we copy them into a scratch space (or ensure the space can hold the size we need)
     if (sortedIndices[0] < 0 || sortedIndices[sortedIndices.length - 1] >= last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
 
@@ -420,15 +420,17 @@ export class WaveletMatrix {
     L[0] = last;
     S[0] = 0;
     C[0] = sortedIndices.length; // number of sortedIndices represented by node 0
+    // copy sorted indices into a scratch space since they are mutated as we go
+    const I = this.C2.subarray(0, sortedIndices.length)
+    I.set(sortedIndices)
     let nRankCalls = 0;
 
-    const walk = new ReverseArrayWalker(1, F.length);
-    let symbol = 0;
+    const walk = new ReverseArrayWalker(sortedIndices.length === 0 ? 0 : 1, F.length);
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l);
-      let k = sortedIndices.length; // at every level, we sweep through the sorted indices in reverse
+      let k = I.length; // at every level, we sweep through the sorted indices in reverse
       for (let i = walk.len; i > 0; ) {
         i -= 1;
 
@@ -454,13 +456,13 @@ export class WaveletMatrix {
         const leftChildCount = last0 - first0; // left child count
         // index of the first right child
         // todo: avoid the binary search when all elems are mapped into the same child
-        const splitIndex = binarySearchBefore(sortedIndices, leftChildCount, lo, hi);
+        const splitIndex = binarySearchBefore(I, leftChildCount, lo, hi);
         const numGoLeft = splitIndex - lo;
         const numGoRight = sortedIndexCount - numGoLeft;
 
         // adjust count for quantiles mapped to the right child, taking into account the left count,
         // so that we look only for the remaining count of elements in the child node.
-        for (let n = splitIndex; n < hi; n++) sortedIndices[n] -= leftChildCount;
+        for (let n = splitIndex; n < hi; n++) I[n] -= leftChildCount;
 
         k -= sortedIndexCount;
 
@@ -506,13 +508,12 @@ export class WaveletMatrix {
   }
 
   quantiles(first, last, firstIndex, lastIndex) {
-    // firstSortedIndex, lastSortedIndex?
+    // todo: for some reason  quantiles(first, last, 0, 0) returns a single value rather than nothing.
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     if (firstIndex > lastIndex) throw new Error('firstIndex must be <= lastIndex');
     if (firstIndex < 0 || lastIndex > last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
-
     const { F, L, S, C, C2 } = this; // firsts, lasts, symbols, counts
     F[0] = first;
     L[0] = last;
@@ -521,8 +522,7 @@ export class WaveletMatrix {
     C2[0] = lastIndex;
     let nRankCalls = 0;
 
-    const walk = new ReverseArrayWalker(1, F.length);
-    let symbol = 0;
+    const walk = new ReverseArrayWalker(firstIndex === lastIndex ? 0 : 1, F.length);
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
