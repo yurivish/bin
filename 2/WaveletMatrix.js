@@ -7,8 +7,8 @@ import { reverseBits, reverseBits32, clamp } from './util';
 // wavelet tree is from 2003, wavelet matrix is from oct. 2012
 // to do: hoist error objects to the top?
 
-// note: implements a binary wavelet matrix that always splits on power-of-two
-// alphabet boundaries, rather than splitting based on the true alphabet midpoint.
+// note: implements a binary wavelet matrix that splits on power-of-two alphabet
+// boundaries, rather than splitting based on the true alphabet midpoint.
 export class WaveletMatrix {
   // This implements Algorithm 1 (seq.pc) from the paper "Practical Wavelet Tree Construction".
   // The return value is the array of wavelet tree levels. Adapting the algorithm to construct
@@ -575,6 +575,16 @@ export class WaveletMatrix {
     const counts = L.subarray(0, walk.len).slice();
     const symbols = S.subarray(0, walk.len).slice();
     return { symbols, counts, nRankCalls };
+  }
+
+  // simple majority. todo: make configurable.
+  majority(first, last) {
+    const index = (last + first) >>> 1
+    const q = this.quantile(first, last, index) 
+    const count = last - first
+    const half = count >>> 1
+    if (q.count > half) return q.symbol
+    return null
   }
 
   approxSizeInBits() {
