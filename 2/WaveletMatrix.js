@@ -14,6 +14,7 @@ export class WaveletMatrix {
   // The return value is the array of wavelet tree levels. Adapting the algorithm to construct
   // a wavelet matrix instead requires changing the borders computation (see section 5.3).
   // todo: check that all symbols are < alphabetSize
+  // todo: pass in maxSymbol, with alphabetSize = maxSymbol + 1?
   constructor(data, alphabetSize) {
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));
@@ -105,13 +106,13 @@ export class WaveletMatrix {
     this.C2 = new Uint32Array(sz);
   }
 
-  access(index) {
-    if (index < 0 || index > this.length) throw new Error('access: out of bounds');
+  symbol(index) {
+    if (index < 0 || index > this.length) throw new Error('symbol: out of bounds');
     let symbol = 0;
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
-      const index1 = level.rank1(index - 1); // todo: combine rank and access queries since they access the same block
-      if (level.access(index) === 0) {
+      const index1 = level.rank1(index - 1); // todo: combine rank and symbol queries since they symbol the same block
+      if (level.symbol(index) === 0) {
         // go left
         index = index - index1; // = index0
       } else {
@@ -126,7 +127,7 @@ export class WaveletMatrix {
     return symbol;
   }
 
-  countSymbol(first, last, symbol, symbolBlockBits = 0) {
+  count(first, last, symbol, symbolBlockBits = 0) {
     const symbolBlockSize = 1 << symbolBlockBits;
     if (symbol % symbolBlockSize !== 0)
       // note: could be done with bit math (check that low bits are zero)
@@ -157,8 +158,8 @@ export class WaveletMatrix {
     return last - first;
   }
 
-  // todo: think about the behavior w repeated input syms
-  countSymbolBatch(first, last, sortedSymbols, symbolBlockBits = 0) {
+  // todo: think about the behavior wrt. repeated input syms; only returns it once, but unclear what symbol it refers to.
+  countBatch(first, last, sortedSymbols, symbolBlockBits = 0) {
     const symbolBlockSize = 1 << symbolBlockBits;
     for (const symbol of sortedSymbols) {
       if (symbol % symbolBlockSize !== 0)
@@ -175,6 +176,7 @@ export class WaveletMatrix {
     const numLevels = this.numLevels - symbolBlockBits;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
+      const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l); // determines whether a symbol goes to the left or right
       const symbolsPerNode = (levelBitMask << 1) - 1;
       const symbolBitMask = 0xffffffff << (this.maxLevel - l); // clears the low bits from a symbol, giving the left edge of its node
@@ -209,7 +211,6 @@ export class WaveletMatrix {
 
         if (numGoRight > 0) {
           // go right
-          const nz = this.numZeros[l];
           const nextIndex = walk.next();
           F[nextIndex] = nz + first1;
           L[nextIndex] = nz + last1;
@@ -240,7 +241,7 @@ export class WaveletMatrix {
   // Returns the number of values with symbol strictly less than the given symbol.
   // This is kind of like a ranged rank operation over a symbol range.
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
-  countLess(first, last, symbol) {
+  countLessThan(first, last, symbol) {
     if (first < 0) throw new Error('first must be >= 0');
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
@@ -274,11 +275,11 @@ export class WaveletMatrix {
   // of rank calls, but this comes at a cost of implementation complexity.
   // See the paper "New algorithms on wavelet trees and applications to
   // information retrieval" for details. Another approach is to modify the
-  // implementation of countLess to perform two interleaved calls. The
+  // implementation of countLessThan to perform two interleaved calls. The
   // subtlety there is that, as written, the algorithm does not work when
   // symbol >= alphabetSize (the one-symbol impl. can return early in this case).
-  count(first, last, lower, upper) {
-    return this.countLess(first, last, upper) - this.countLess(first, last, lower);
+  countRange(first, last, lower, upper) {
+    return this.countLessThan(first, last, upper) - this.countLessThan(first, last, lower);
   }
 
   // Returns all of the distinct symbols [lower, upper) in the range [first, last)
@@ -314,6 +315,7 @@ export class WaveletMatrix {
     // left-to-right ordering when iterated in left-to-right order.
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
+      const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l);
       for (let i = walk.len; i > 0; ) {
         i -= 1;
@@ -336,8 +338,7 @@ export class WaveletMatrix {
           const b = a | (levelBitMask - 1);
           const intervalsOverlap = lower <= b && a < upper;
           if (intervalsOverlap) {
-            const nz = this.numZeros[l];
-            const nextIndex = walk.next();
+              const nextIndex = walk.next();
             F[nextIndex] = nz + first1;
             L[nextIndex] = nz + last1;
             S[nextIndex] = a;
@@ -373,11 +374,11 @@ export class WaveletMatrix {
 
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
   // Range quantile query returning the kth largest symbol in A[i, j).
-  quantile(first, last, sortedIndex) {
+  quantile(first, last, index) {
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
-    if (sortedIndex < 0 || sortedIndex >= last - first)
-      throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
+    if (index < 0 || index >= last - first)
+      throw new Error('index cannot be less than zero or exceed length of range [first, last)');
     let symbol = 0;
     let nRankCalls = 0;
     for (let l = 0; l < this.numLevels; l++) {
@@ -386,7 +387,7 @@ export class WaveletMatrix {
       const last0 = level.rank0(last - 1);
       const count = last0 - first0;
       nRankCalls += 2;
-      if (sortedIndex < count) {
+      if (index < count) {
         // go left
         first = first0;
         last = last0;
@@ -398,7 +399,7 @@ export class WaveletMatrix {
         // update symbol and new target sorted index in the child node
         const levelBitMask = 1 << (this.maxLevel - l);
         symbol |= levelBitMask;
-        sortedIndex -= count;
+        index -= count;
       }
     }
     return { symbol, count: last - first, nRankCalls };
@@ -425,6 +426,7 @@ export class WaveletMatrix {
     let symbol = 0;
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
+      const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l);
       let k = sortedIndices.length; // at every level, we sweep through the sorted indices in reverse
       for (let i = walk.len; i > 0; ) {
@@ -464,7 +466,6 @@ export class WaveletMatrix {
 
         if (numGoRight > 0) {
           // go right
-          const nz = this.numZeros[l];
           const nextIndex = walk.next();
           F[nextIndex] = nz + (first - first0); // = nz + first1
           L[nextIndex] = nz + (last - last0); // = nz + last1
@@ -504,26 +505,27 @@ export class WaveletMatrix {
     return { symbols, counts, assignments, nRankCalls };
   }
 
-  quantiles(first, last, sortedIndexLo, sortedIndexHi) {
+  quantiles(first, last, firstIndex, lastIndex) {
     // firstSortedIndex, lastSortedIndex?
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
-    if (sortedIndexLo > sortedIndexHi) throw new Error('sortedIndexLo must be <= sortedIndexHi');
-    if (sortedIndexLo < 0 || sortedIndexHi > last - first)
+    if (firstIndex > lastIndex) throw new Error('firstIndex must be <= lastIndex');
+    if (firstIndex < 0 || lastIndex > last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
 
     const { F, L, S, C, C2 } = this; // firsts, lasts, symbols, counts
     F[0] = first;
     L[0] = last;
     S[0] = 0;
-    C[0] = sortedIndexLo;
-    C2[0] = sortedIndexHi;
+    C[0] = firstIndex;
+    C2[0] = lastIndex;
     let nRankCalls = 0;
 
     const walk = new ReverseArrayWalker(1, F.length);
     let symbol = 0;
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
+      const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l);
       for (let i = walk.len; i > 0; ) {
         i -= 1;
@@ -542,7 +544,6 @@ export class WaveletMatrix {
         const leftChildCount = last0 - first0;
         if (C2[i] > leftChildCount) {
           // go right
-          const nz = this.numZeros[l];
           const nextIndex = walk.next();
           F[nextIndex] = nz + (first - first0); // = nz + first1
           L[nextIndex] = nz + (last - last0); // = nz + last1
@@ -597,8 +598,8 @@ export class WaveletMatrix {
   }
 
   // For visualization
-  accessPath(i) {
-    if (i < 0 || i > this.length) throw new Error('access: out of bounds');
+  symbolPath(i) {
+    if (i < 0 || i > this.length) throw new Error('symbol: out of bounds');
     let l = 0; // level index
     let a = 0; // left symbol index
     let b = (1 << this.numLevels) - 1; // right symbol index
@@ -606,8 +607,8 @@ export class WaveletMatrix {
     while (a !== b) {
       const level = this.levels[l];
       const m = (a + b) >>> 1;
-      path.push({ index: i, bit: level.access(i) });
-      if (level.access(i) === 0) {
+      path.push({ index: i, bit: level.symbol(i) });
+      if (level.symbol(i) === 0) {
         // go left
         i = level.rank0(i - 1);
         b = m;

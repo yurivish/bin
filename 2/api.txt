@@ -1,19 +1,19 @@
 count
-	countSymbol(first, last, symbol, symbolBlockBits)
-	countSymbols(first, last, symbols, symbolBlockBits)
+	count(first, last, symbol, symbolBlockBits)
+	countBatch(first, last, sortedSymbols, symbolBlockBits)
 	countLessThan(first, last, upper)
 	countRange(first, last, lower, upper)
-	allCounts(first, last, lower, upper, symbolBlockBits) // = report
+	counts(first, last, lower, upper, symbolBlockBits)
 
 quantile
-	quantile(first, last, sortedIndex)
-	quantiles(first, last, sortedIndices) // useful for majority
-	allQuantiles(first, last, firstSortedIndex, lastSortedIndex)
+	quantile(first, last, index)
+	quantileBatch(first, last, sortedIndices)
+	quantiles(first, last, firstSortedIndex, lastSortedIndex)
 
-access
-	accessSymbol(i)
-	accessSymbols(indices)
-	accessAllSymbols(first, last)
+symbol
+	symbol(index)
+	symbolBatch(sortedIndices)
+	symbols(first, last)
 
 majority
 	majority(first, last, k)
