@@ -335,7 +335,7 @@ export class WaveletMatrix {
           const b = a | (levelBitMask - 1);
           const intervalsOverlap = lower <= b && a < upper;
           if (intervalsOverlap) {
-              const nextIndex = walk.next();
+            const nextIndex = walk.next();
             F[nextIndex] = nz + first1;
             L[nextIndex] = nz + last1;
             S[nextIndex] = a;
@@ -418,8 +418,8 @@ export class WaveletMatrix {
     S[0] = 0;
     C[0] = sortedIndices.length; // number of sortedIndices represented by node 0
     // copy sorted indices into a scratch space since they are mutated as we go
-    const I = this.C2.subarray(0, sortedIndices.length)
-    I.set(sortedIndices)
+    const I = this.C2.subarray(0, sortedIndices.length);
+    I.set(sortedIndices);
     let nRankCalls = 0;
 
     const walk = new ReverseArrayWalker(sortedIndices.length === 0 ? 0 : 1, F.length);
@@ -545,7 +545,7 @@ export class WaveletMatrix {
           F[nextIndex] = nz + (first - first0); // = nz + first1
           L[nextIndex] = nz + (last - last0); // = nz + last1
           S[nextIndex] = symbol | levelBitMask;
-          C[nextIndex] = Math.max(C[i] - leftChildCount, 0);
+          C[nextIndex] = leftChildCount < C[i] ? C[i] - leftChildCount : 0; // = max(C[i] - leftChildCount, 0);
           C2[nextIndex] = C2[i] - leftChildCount;
         }
 
@@ -556,7 +556,7 @@ export class WaveletMatrix {
           L[nextIndex] = last0;
           S[nextIndex] = symbol;
           C[nextIndex] = C[i];
-          C2[nextIndex] = Math.min(leftChildCount, C2[i]);
+          C2[nextIndex] = leftChildCount < C2[i] ? leftChildCount : C2[i]; // = min(leftChildCount, C2[i]);
         }
       }
 
@@ -577,12 +577,12 @@ export class WaveletMatrix {
 
   // simple majority. todo: make configurable.
   majority(first, last) {
-    const index = (last + first) >>> 1
-    const q = this.quantile(first, last, index) 
-    const count = last - first
-    const half = count >>> 1
-    if (q.count > half) return q.symbol
-    return null
+    const index = (last + first) >>> 1;
+    const q = this.quantile(first, last, index);
+    const count = last - first;
+    const half = count >>> 1;
+    if (q.count > half) return q.symbol;
+    return null;
   }
 
   approxSizeInBits() {
@@ -632,7 +632,7 @@ export class WaveletMatrix {
 // beyond the last element as scratch space.
 // todo: next() could be nextWrite(), and we can add a nextRead(), and allow
 // flipping the elements from back to front incrementally, rather than
-// memcpying to the front after every iteration (with a final pass to 
+// memcpying to the front after every iteration (with a final pass to
 // copy to the front if needed).
 class ReverseArrayWalker {
   constructor(len, cap) {
