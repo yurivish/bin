@@ -712,3 +712,9 @@ class ArrayWalker {
 }
 
 // todo: assert that splitLsb + groupMsb <= numLevels
+// [] try implementing select in the RankBitVector using binary search over ranks.
+//    then we don't need any more space for select1 and select0, and we'll likely 
+//    be doing few rank queries anyway since they correspond to wanting to connect
+//    back to the original data, ie. show the user something. the other use case 
+//    is to get a range of document indices back, but we can speed that up if/when
+//    we get there.
