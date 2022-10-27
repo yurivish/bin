@@ -216,13 +216,16 @@ export class WaveletMatrix {
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     const { F, L, C, S } = this;
-    F[0] = first;
-    L[0] = last;
-    C[0] = sortedSymbols.length;
-    S[0] = 0;
+    const walk = new ArrayWalker(sortedSymbols.length === 0 ? 0 : 1, F.length);
+    const nextIndex = walk.nextLeft();
+    F[nextIndex] = first;
+    L[nextIndex] = last;
+    C[nextIndex] = sortedSymbols.length;
+    S[nextIndex] = 0;
+    walk.reset(F, L, C, S);
+
     let nRankCalls = 0;
 
-    const walk = new ArrayWalker(sortedSymbols.length === 0 ? 0 : 1, F.length);
     const numLevels = this.numLevels - groupByLsb;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
@@ -232,9 +235,7 @@ export class WaveletMatrix {
       const symbolBitMask = 0xffffffff << (this.maxLevel - l); // clears the low bits from a symbol, giving the left edge of its node
 
       let k = sortedSymbols.length; // at every level, we sweep through the sorted indices in reverse
-      for (let i = walk.len; i > 0; ) {
-        i -= 1;
-
+      for (let i = 0; i < walk.len; i++) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
         const first0 = first - first1;
@@ -262,22 +263,22 @@ export class WaveletMatrix {
         const numGoLeft = splitIndex - lo;
         const numGoRight = symbolCount - numGoLeft;
 
-        if (numGoRight > 0) {
-          // go right
-          const nextIndex = walk.next();
-          F[nextIndex] = nz + first1;
-          L[nextIndex] = nz + last1;
-          C[nextIndex] = numGoRight;
-          S[nextIndex] = symbol | levelBitMask;
-        }
-
         if (numGoLeft > 0) {
           // go left
-          const nextIndex = walk.next();
+          const nextIndex = walk.nextRight();
           F[nextIndex] = F[i] - first1; // = first0
           L[nextIndex] = L[i] - last1; // = last0
           C[nextIndex] = numGoLeft;
           S[nextIndex] = symbol;
+        }
+
+        if (numGoRight > 0) {
+          // go right
+          const nextIndex = walk.nextRight();
+          F[nextIndex] = nz + first1;
+          L[nextIndex] = nz + last1;
+          C[nextIndex] = numGoRight;
+          S[nextIndex] = symbol | levelBitMask;
         }
       }
 
@@ -296,7 +297,7 @@ export class WaveletMatrix {
   // differ only in their lowest `groupByLsb` bits)
   // Each distinct group is labeled by its lowest element, which represents
   // the group containing symbols in the range [symbol, symbol + 2^groupByLsb).
-  counts(first, last, lower, upper, groupByLsb = 0) {
+  counts(first, last, lower, upper, groupByLsb = 0, sorted = true) {
     const symbolBlockSize = 1 << groupByLsb;
     // todo: handle lower === upper
     // these error messages could be improved, explaining that ignore bits tells us the power of two
@@ -308,12 +309,8 @@ export class WaveletMatrix {
     const numLevels = this.numLevels - groupByLsb;
     const { F, L, S } = this; // firsts, lasts, symbols
 
-  // what if we iterate left to right, lefts fill in from left, rights fill in from the back?
-  // then we copy the rights to the back
-  // and for the final level, we interleave maybe  
-
     const walk = new ArrayWalker(1, F.length);
-    const nextIndex = walk.nextRight()
+    const nextIndex = walk.nextLeft();
     F[nextIndex] = first;
     L[nextIndex] = last;
     S[nextIndex] = 0;
@@ -325,9 +322,8 @@ export class WaveletMatrix {
       const level = this.levels[l];
       const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l);
-      for (let i = walk.len; i > 0; ) {
-        i -= 1;
 
+      for (let i = 0; i < walk.len; i++) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
         const first0 = first - first1;
@@ -338,6 +334,20 @@ export class WaveletMatrix {
 
         const symbol = S[i];
         nRankCalls += 2;
+
+        const num0 = last0 - first0; // count of left children
+        if (num0 > 0) {
+          // go left if the left node range [a, b] overlaps [lower, upper)
+          const a = symbol;
+          const b = a | (levelBitMask - 1);
+          const intervalsOverlap = lower <= b && a < upper;
+          if (intervalsOverlap) {
+            const nextIndex = sorted ? walk.nextRight() : walk.nextLeft();
+            F[nextIndex] = first0;
+            L[nextIndex] = last0;
+            S[nextIndex] = symbol;
+          }
+        }
 
         const num1 = last1 - first1; // count of right children
         if (num1 > 0) {
@@ -352,24 +362,10 @@ export class WaveletMatrix {
             S[nextIndex] = a;
           }
         }
-
-        const num0 = last0 - first0; // count of left children
-        if (num0 > 0) {
-          // go left if the left node range [a, b] overlaps [lower, upper)
-          const a = symbol;
-          const b = a | (levelBitMask - 1);
-          const intervalsOverlap = lower <= b && a < upper;
-          if (intervalsOverlap) {
-            const nextIndex = walk.nextRight();
-            F[nextIndex] = first0;
-            L[nextIndex] = last0;
-            S[nextIndex] = symbol;
-          }
-        }
       }
-
       walk.reset(F, L, S);
     }
+
     for (let i = 0; i < walk.len; i++) L[i] -= F[i];
     const counts = L.subarray(0, walk.len).slice();
     const symbols = S.subarray(0, walk.len).slice();
@@ -424,25 +420,25 @@ export class WaveletMatrix {
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
 
     const { F, L, S, C } = this; // firsts, lasts, symbols, counts
-    F[0] = first;
-    L[0] = last;
-    S[0] = 0;
-    C[0] = sortedIndices.length; // number of sortedIndices represented by node 0
+    const walk = new ArrayWalker(sortedIndices.length === 0 ? 0 : 1, F.length);
+    const nextIndex = walk.nextLeft();
+    F[nextIndex] = first;
+    L[nextIndex] = last;
+    S[nextIndex] = 0;
+    C[nextIndex] = sortedIndices.length; // number of sortedIndices represented by node 0
+    walk.reset(F, L, S, C);
     // copy sorted indices into a scratch space since they are mutated as we go
     const I = this.C2.subarray(0, sortedIndices.length);
     I.set(sortedIndices);
     let nRankCalls = 0;
 
-    const walk = new ArrayWalker(sortedIndices.length === 0 ? 0 : 1, F.length);
     const numLevels = this.numLevels - groupByLsb;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l);
       let k = I.length; // at every level, we sweep through the sorted indices in reverse
-      for (let i = walk.len; i > 0; ) {
-        i -= 1;
-
+      for (let i = 0; i < walk.len; i++) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
         const first0 = first - first1;
@@ -475,22 +471,22 @@ export class WaveletMatrix {
 
         k -= sortedIndexCount;
 
-        if (numGoRight > 0) {
-          // go right
-          const nextIndex = walk.next();
-          F[nextIndex] = nz + (first - first0); // = nz + first1
-          L[nextIndex] = nz + (last - last0); // = nz + last1
-          S[nextIndex] = symbol | levelBitMask;
-          C[nextIndex] = numGoRight;
-        }
-
         if (numGoLeft > 0) {
           // go left
-          const nextIndex = walk.next();
+          const nextIndex = walk.nextRight();
           F[nextIndex] = first0;
           L[nextIndex] = last0;
           S[nextIndex] = symbol;
           C[nextIndex] = numGoLeft;
+        }
+
+        if (numGoRight > 0) {
+          // go right
+          const nextIndex = walk.nextRight();
+          F[nextIndex] = nz + (first - first0); // = nz + first1
+          L[nextIndex] = nz + (last - last0); // = nz + last1
+          S[nextIndex] = symbol | levelBitMask;
+          C[nextIndex] = numGoRight;
         }
       }
 
@@ -520,22 +516,22 @@ export class WaveletMatrix {
     if (firstIndex < 0 || lastIndex > last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
     const { F, L, S, C, C2 } = this; // firsts, lasts, symbols, counts
-    F[0] = first;
-    L[0] = last;
-    S[0] = 0;
-    C[0] = firstIndex;
-    C2[0] = lastIndex;
+    const walk = new ArrayWalker(firstIndex === lastIndex ? 0 : 1, F.length);
+    const nextIndex = walk.nextLeft();
+    F[nextIndex] = first;
+    L[nextIndex] = last;
+    S[nextIndex] = 0;
+    C[nextIndex] = firstIndex;
+    C2[nextIndex] = lastIndex;
+    walk.reset(F, L, S, C, C2);
     let nRankCalls = 0;
 
-    const walk = new ArrayWalker(firstIndex === lastIndex ? 0 : 1, F.length);
     const numLevels = this.numLevels - groupByLsb;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l);
-      for (let i = walk.len; i > 0; ) {
-        i -= 1;
-
+      for (let i = 0; i < walk.len; i++) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
         const first0 = first - first1;
@@ -548,27 +544,27 @@ export class WaveletMatrix {
         nRankCalls += 2;
 
         const leftChildCount = last0 - first0;
-        if (C2[i] > leftChildCount) {
-          // go right
-          const nextIndex = walk.next();
-          F[nextIndex] = nz + (first - first0); // = nz + first1
-          L[nextIndex] = nz + (last - last0); // = nz + last1
-          S[nextIndex] = symbol | levelBitMask;
-          C[nextIndex] = leftChildCount < C[i] ? C[i] - leftChildCount : 0; // = max(C[i] - leftChildCount, 0);
-          C2[nextIndex] = C2[i] - leftChildCount;
-        }
 
         if (C[i] < leftChildCount) {
           // go left
-          const nextIndex = walk.next();
+          const nextIndex = walk.nextRight();
           F[nextIndex] = first0;
           L[nextIndex] = last0;
           S[nextIndex] = symbol;
           C[nextIndex] = C[i];
           C2[nextIndex] = leftChildCount < C2[i] ? leftChildCount : C2[i]; // = min(leftChildCount, C2[i]);
         }
-      }
 
+        if (C2[i] > leftChildCount) {
+          // go right
+          const nextIndex = walk.nextRight();
+          F[nextIndex] = nz + (first - first0); // = nz + first1
+          L[nextIndex] = nz + (last - last0); // = nz + last1
+          S[nextIndex] = symbol | levelBitMask;
+          C[nextIndex] = leftChildCount < C[i] ? C[i] - leftChildCount : 0; // = max(C[i] - leftChildCount, 0);
+          C2[nextIndex] = C2[i] - leftChildCount;
+        }
+      }
       walk.reset(F, L, S, C, C2);
     }
 
@@ -693,13 +689,20 @@ class ArrayWalker {
     // (as we fill the array in backwards from arr[cap - 1])
     return (this.last -= 1);
   }
-  // todo:
   reset(...arrays) {
     // move the filled-in elements from the end
     // to the front of the array
     for (let i = 0; i < arrays.length; i++) {
       const arr = arrays[i];
-      arr.set(arr.subarray(this.last, this.cap), this.first);
+      arr.set(arr.subarray(this.last, this.cap).reverse(), this.first);
+      // reverse and move right elements following the first element.
+      // explicit loop (in js this is slower):
+      // let n = this.first;
+      // for (let i = this.cap; i > this.last; ) {
+      //   i--
+      //   arr[n] = arr[i];
+      //   n++;
+      // }
     }
     // apply the same logical change to the last and len markers
     this.len = this.first + (this.cap - this.last);
@@ -708,10 +711,9 @@ class ArrayWalker {
   }
 }
 
-  // move all left children to the left, followed by all right children
+// move all left children to the left, followed by all right children
 
-  // todo: do a mergesort-style reset for moving the last level?
-
+// todo: do a mergesort-style reset for moving the last level?
 
 // todo: assert that splitLsb + groupMsb <= numLevels
 // todo: generate symbols from all funcs
