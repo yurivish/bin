@@ -234,7 +234,7 @@ export class WaveletMatrix {
       const symbolsPerNode = (levelBitMask << 1) - 1;
       const symbolBitMask = 0xffffffff << (this.maxLevel - l); // clears the low bits from a symbol, giving the left edge of its node
 
-      let k = 0;
+      let k = 0; // march k over the sorted symbols array
       for (let i = 0; i < walk.len; i++) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
@@ -440,7 +440,7 @@ export class WaveletMatrix {
       const level = this.levels[l];
       const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l);
-      let k = 0;
+      let k = 0; // march k over the sorted indices array
       for (let i = 0; i < walk.len; i++) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
@@ -500,11 +500,11 @@ export class WaveletMatrix {
     for (let i = 0; i < walk.len; i++) L[i] -= F[i];
     const counts = L.subarray(0, walk.len).slice();
     const symbols = S.subarray(0, walk.len).slice();
-    // assignments indicates how many entries in sortedIndices are assigned
+    // numSortedIndices indicates how many entries in sortedIndices are assigned
     // to each symbol. this is a more economical representation than a dense array of
     // length sortedIndices when multiple sortedIndices point to the same symbol.
-    const assignments = C.subarray(0, walk.len).slice();
-    return { symbols, counts, assignments, nRankCalls };
+    const numSortedIndices = C.subarray(0, walk.len).slice();
+    return { symbols, counts, numSortedIndices, nRankCalls };
   }
 
   quantiles(first, last, firstIndex, lastIndex, groupByLsb = 0) {
