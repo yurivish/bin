@@ -207,7 +207,7 @@ export class WaveletMatrix {
   countBatch(first, last, sortedSymbols, groupByLsb = 0) {
     // splitByMsb requires the same sortedSymbol to be searched for in each of the split paths.
     // for now, we'll go with the relatively inefficient route of asking that this be done by
-    // supplying a larger set of sortedSymbols, each with .
+    // supplying a larger set of sortedSymbols, enumerating all MSB variations in the high bits.
     const symbolBlockSize = 1 << groupByLsb;
     for (const symbol of sortedSymbols) {
       if (symbol % symbolBlockSize !== 0)
@@ -719,9 +719,4 @@ class ArrayWalker {
   }
 }
 
-// move all left children to the left, followed by all right children
-
-// todo: do a mergesort-style reset for moving the last level?
-
 // todo: assert that splitLsb + groupMsb <= numLevels
-// todo: generate symbols from all funcs
