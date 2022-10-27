@@ -205,6 +205,8 @@ export class WaveletMatrix {
   // todo: think about the behavior wrt. repeated input syms; only returns it once, but unclear what symbol it refers to.
   // I think we should just note that the return value is one symbol per *unique* symbol in the input
   countBatch(first, last, sortedSymbols, groupByLsb = 0) {
+    // splitByMsb requires the same sortedSymbol to be searched for in each of the split paths.
+
     const symbolBlockSize = 1 << groupByLsb;
     for (const symbol of sortedSymbols) {
       if (symbol % symbolBlockSize !== 0)
@@ -260,7 +262,6 @@ export class WaveletMatrix {
         const numGoLeft = splitIndex - lo;
         const numGoRight = symbolCount - numGoLeft;
 
-        // const num1 = last1 - first1; // count of right children
         if (numGoRight > 0) {
           // go right
           const nextIndex = walk.next();
@@ -270,7 +271,6 @@ export class WaveletMatrix {
           S[nextIndex] = symbol | levelBitMask;
         }
 
-        // const num0 = last0 - first0; // count of left children
         if (numGoLeft > 0) {
           // go left
           const nextIndex = walk.next();
@@ -312,11 +312,6 @@ export class WaveletMatrix {
     const walk = new ReverseArrayWalker(lower === upper ? 0 : 1, F.length);
     let nRankCalls = 0;
 
-    // In each iteration, we traverse F/L/S back to front and place the processed results at the end of the array,
-    // filling it it in from right to left. This allows us to turn an individual element into more than one
-    // processed element, for example if we want to recurse into both children of a node.
-    // since we process from back to front, we also "go right" before we "go left" so that symbols retain their
-    // left-to-right ordering when iterated in left-to-right order.
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
