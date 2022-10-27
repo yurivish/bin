@@ -447,7 +447,7 @@ export class WaveletMatrix {
         const last1 = level.rank1(last - 1);
         const last0 = last - last1;
 
-        let symbol = S[i];
+        const symbol = S[i];
         nRankCalls += 2;
 
         // Determine the number of nodes that wants to be mapped to the right child of this node,
@@ -540,29 +540,32 @@ export class WaveletMatrix {
         const last1 = level.rank1(last - 1);
         const last0 = last - last1;
 
-        let symbol = S[i];
+        const symbol = S[i];
+        const c = C[i];
+        const c2 = C2[i];
+
         nRankCalls += 2;
 
         const leftChildCount = last0 - first0;
 
-        if (C[i] < leftChildCount) {
+        if (c < leftChildCount) {
           // go left
           const nextIndex = walk.nextRight();
           F[nextIndex] = first0;
           L[nextIndex] = last0;
           S[nextIndex] = symbol;
-          C[nextIndex] = C[i];
-          C2[nextIndex] = leftChildCount < C2[i] ? leftChildCount : C2[i]; // = min(leftChildCount, C2[i]);
+          C[nextIndex] = c;
+          C2[nextIndex] = leftChildCount < c2 ? leftChildCount : c2; // = min(leftChildCount, c2);
         }
 
-        if (C2[i] > leftChildCount) {
+        if (c2 > leftChildCount) {
           // go right
           const nextIndex = walk.nextRight();
           F[nextIndex] = nz + (first - first0); // = nz + first1
           L[nextIndex] = nz + (last - last0); // = nz + last1
           S[nextIndex] = symbol | levelBitMask;
-          C[nextIndex] = leftChildCount < C[i] ? C[i] - leftChildCount : 0; // = max(C[i] - leftChildCount, 0);
-          C2[nextIndex] = C2[i] - leftChildCount;
+          C[nextIndex] = leftChildCount < c ? c - leftChildCount : 0; // = max(c - leftChildCount, 0);
+          C2[nextIndex] = c2 - leftChildCount;
         }
       }
       walk.reset(F, L, S, C, C2);
@@ -679,6 +682,8 @@ class ArrayWalker {
     this.first = 0;
     this.last = cap; // nextIndex + 1
   }
+  // note: ensure that the current value has been retrieved before
+  // writing to the left, since it will overwrite the current value.
   nextLeft() {
     const index = this.first;
     this.first += 1;
