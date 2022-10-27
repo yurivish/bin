@@ -435,6 +435,9 @@ export class WaveletMatrix {
     I.set(sortedIndices);
     let nRankCalls = 0;
 
+    // note: grouping by LSB computes approximate quantiles where
+    // the count of symbols assigned to each range is given by I,
+    // and I think the ranges are [symbol, symbol+2^groupByLsb).
     const numLevels = this.numLevels - groupByLsb;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
@@ -491,10 +494,6 @@ export class WaveletMatrix {
       }
 
       walk.reset(F, L, S, C);
-      // note: terminating this loop early computes approximate quantiles,
-      // recursively dividing the alphabet in two each iteration.
-      // the count of symbols assigned to each range is given by I,
-      // and I think the ranges are [symbol, symbol+2^(maxLevel-l)).
     }
 
     for (let i = 0; i < walk.len; i++) L[i] -= F[i];
@@ -660,21 +659,14 @@ function binarySearchBefore(A, T, L, R) {
 // and vice versa, so i0 = i - i1; (see impl. of rank0)
 
 // helper for turning recursion into iteration, encapsulating the logic
-// of walking an array in reverse and generating zero or more outputs
-// for each input.
-// This is most useful when every element expands into at most k elements
-// because then we can pre-allocate an array of size K times max elements
-// and be sure that we will never end up overriding existing elements as
-// we expand.
-// new elements are filled in from the end of the array, using the space
-// beyond the last element as scratch space.
-// todo: next() could be nextWrite(), and we can add a nextRead(), and allow
-// flipping the elements from back to front incrementally, rather than
-// memcpying to the front after every iteration (with a final pass to
-// copy to the front if needed).
-// update: design now relies on the array never being more than half full
-// at the start of a new walk over the array. in exchange, we can keep all
-// left children on the left.
+// of walking an array zero to two outputs for each input.
+// left elements are filled in from the front, while right elements are filled
+// in from the back, and reset() will preserve all left children in order at
+// the front of the array, and move the right children in order immediately
+// after them. to interleave left and right in the order they are generated,
+// use nextRight() for both the left and right outputs (we cannot use nextLeft()
+// for both, since that would overwrite elements as they are being processed
+// in left-to-right order).
 class ArrayWalker {
   constructor(len, cap) {
     this.len = len; // length taken by elements
