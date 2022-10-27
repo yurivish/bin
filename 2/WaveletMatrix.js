@@ -222,7 +222,7 @@ export class WaveletMatrix {
     S[0] = 0;
     let nRankCalls = 0;
 
-    const walk = new ReverseArrayWalker(sortedSymbols.length === 0 ? 0 : 1, F.length);
+    const walk = new ArrayWalker(sortedSymbols.length === 0 ? 0 : 1, F.length);
     const numLevels = this.numLevels - groupByLsb;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
@@ -298,6 +298,7 @@ export class WaveletMatrix {
   // the group containing symbols in the range [symbol, symbol + 2^groupByLsb).
   counts(first, last, lower, upper, groupByLsb = 0) {
     const symbolBlockSize = 1 << groupByLsb;
+    // todo: handle lower === upper
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
     if (lower % symbolBlockSize !== 0)
@@ -306,10 +307,18 @@ export class WaveletMatrix {
       throw new Error('upper must evenly divide the symbol block size implied by groupByLsb');
     const numLevels = this.numLevels - groupByLsb;
     const { F, L, S } = this; // firsts, lasts, symbols
-    F[0] = first;
-    L[0] = last;
-    S[0] = 0;
-    const walk = new ReverseArrayWalker(lower === upper ? 0 : 1, F.length);
+
+  // what if we iterate left to right, lefts fill in from left, rights fill in from the back?
+  // then we copy the rights to the back
+  // and for the final level, we interleave maybe  
+
+    const walk = new ArrayWalker(1, F.length);
+    const nextIndex = walk.nextRight()
+    F[nextIndex] = first;
+    L[nextIndex] = last;
+    S[nextIndex] = 0;
+    walk.reset(F, L, S);
+
     let nRankCalls = 0;
 
     for (let l = 0; l < numLevels; l++) {
@@ -337,7 +346,7 @@ export class WaveletMatrix {
           const b = a | (levelBitMask - 1);
           const intervalsOverlap = lower <= b && a < upper;
           if (intervalsOverlap) {
-            const nextIndex = walk.next();
+            const nextIndex = walk.nextRight();
             F[nextIndex] = nz + first1;
             L[nextIndex] = nz + last1;
             S[nextIndex] = a;
@@ -351,7 +360,7 @@ export class WaveletMatrix {
           const b = a | (levelBitMask - 1);
           const intervalsOverlap = lower <= b && a < upper;
           if (intervalsOverlap) {
-            const nextIndex = walk.next();
+            const nextIndex = walk.nextRight();
             F[nextIndex] = first0;
             L[nextIndex] = last0;
             S[nextIndex] = symbol;
@@ -424,7 +433,7 @@ export class WaveletMatrix {
     I.set(sortedIndices);
     let nRankCalls = 0;
 
-    const walk = new ReverseArrayWalker(sortedIndices.length === 0 ? 0 : 1, F.length);
+    const walk = new ArrayWalker(sortedIndices.length === 0 ? 0 : 1, F.length);
     const numLevels = this.numLevels - groupByLsb;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
@@ -518,7 +527,7 @@ export class WaveletMatrix {
     C2[0] = lastIndex;
     let nRankCalls = 0;
 
-    const walk = new ReverseArrayWalker(firstIndex === lastIndex ? 0 : 1, F.length);
+    const walk = new ArrayWalker(firstIndex === lastIndex ? 0 : 1, F.length);
     const numLevels = this.numLevels - groupByLsb;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
@@ -664,16 +673,25 @@ function binarySearchBefore(A, T, L, R) {
 // flipping the elements from back to front incrementally, rather than
 // memcpying to the front after every iteration (with a final pass to
 // copy to the front if needed).
-class ReverseArrayWalker {
+// update: design now relies on the array never being more than half full
+// at the start of a new walk over the array. in exchange, we can keep all
+// left children on the left.
+class ArrayWalker {
   constructor(len, cap) {
     this.len = len; // length taken by elements
     this.cap = cap; // capacity for additional elements
-    this.index = cap; // nextIndex + 1
+    this.first = 0;
+    this.last = cap; // nextIndex + 1
   }
-  next() {
+  nextLeft() {
+    const index = this.first;
+    this.first += 1;
+    return index;
+  }
+  nextRight() {
     // return the next index at which we can append an element
     // (as we fill the array in backwards from arr[cap - 1])
-    return (this.index -= 1);
+    return (this.last -= 1);
   }
   // todo:
   reset(...arrays) {
@@ -681,13 +699,19 @@ class ReverseArrayWalker {
     // to the front of the array
     for (let i = 0; i < arrays.length; i++) {
       const arr = arrays[i];
-      arr.set(arr.subarray(this.index, this.cap));
+      arr.set(arr.subarray(this.last, this.cap), this.first);
     }
-    // apply the same logical change to the index and len markers
-    this.len = this.cap - this.index;
-    this.index = this.cap;
+    // apply the same logical change to the last and len markers
+    this.len = this.first + (this.cap - this.last);
+    this.first = 0;
+    this.last = this.cap;
   }
 }
+
+  // move all left children to the left, followed by all right children
+
+  // todo: do a mergesort-style reset for moving the last level?
+
 
 // todo: assert that splitLsb + groupMsb <= numLevels
 // todo: generate symbols from all funcs
