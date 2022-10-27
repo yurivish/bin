@@ -206,7 +206,8 @@ export class WaveletMatrix {
   // I think we should just note that the return value is one symbol per *unique* symbol in the input
   countBatch(first, last, sortedSymbols, groupByLsb = 0) {
     // splitByMsb requires the same sortedSymbol to be searched for in each of the split paths.
-
+    // for now, we'll go with the relatively inefficient route of asking that this be done by
+    // supplying a larger set of sortedSymbols, each with .
     const symbolBlockSize = 1 << groupByLsb;
     for (const symbol of sortedSymbols) {
       if (symbol % symbolBlockSize !== 0)
@@ -223,7 +224,6 @@ export class WaveletMatrix {
     C[nextIndex] = sortedSymbols.length;
     S[nextIndex] = 0;
     walk.reset(F, L, C, S);
-
     let nRankCalls = 0;
 
     const numLevels = this.numLevels - groupByLsb;
@@ -234,7 +234,7 @@ export class WaveletMatrix {
       const symbolsPerNode = (levelBitMask << 1) - 1;
       const symbolBitMask = 0xffffffff << (this.maxLevel - l); // clears the low bits from a symbol, giving the left edge of its node
 
-      let k = sortedSymbols.length; // at every level, we sweep through the sorted indices in reverse
+      let k = 0;
       for (let i = 0; i < walk.len; i++) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
@@ -245,23 +245,27 @@ export class WaveletMatrix {
         const last0 = last - last1;
         nRankCalls += 2;
 
-        // [hi, lo) is the index range of the sortedSymbols covered by this node
         const symbolCount = C[i];
-        const lo = k - symbolCount;
-        const hi = k;
-        k -= symbolCount;
-
-        const symbol = S[i]; // l < splitByMsb ? S[i] : sortedSymbols[lo];
+        const symbol = S[i];
         const a = symbol & symbolBitMask; // leftmost symbol in this node
         const b = a + symbolsPerNode; // rightmost symbol in this node
         const m = (a + b) >>> 1;
 
-        // todo: avoid the binary search when all nodes are mapped into the same child
-        // todo: sometimes they all go nowhere
-        // by checking sortedSymbols[lo] & levelBitMask and sortedSymbols[hi] & levelBitMask
+        // perform two binary searches over the sorted symbols for this node to deterine
+        // the number in the left child node. We do a single linear pass across sortedSymbols
+        // over the course of the walk.
+        // Note that this relies on the fact that the symbols in `S` are in sorted order,
+        // since we're marching `k` across the sorted symbols array to reduce the search
+        // space for the binary search calls to those symbols corresponding to this node.
+        // This means that we have to use `walk.nextRight()` for both left and right children,
+        // since that's what gives rise to the sorted order of `S` its sorted order.
+        // [lo, hi) is the range of sorted indices covered by this node
+        const lo = k;
+        const hi = k + symbolCount;
         const splitIndex = binarySearchAfter(sortedSymbols, m, lo, hi);
         const numGoLeft = splitIndex - lo;
         const numGoRight = symbolCount - numGoLeft;
+        k += symbolCount;
 
         if (numGoLeft > 0) {
           // go left
@@ -281,7 +285,6 @@ export class WaveletMatrix {
           S[nextIndex] = symbol | levelBitMask;
         }
       }
-
       walk.reset(F, L, C, S);
     }
 
@@ -437,7 +440,7 @@ export class WaveletMatrix {
       const level = this.levels[l];
       const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l);
-      let k = I.length; // at every level, we sweep through the sorted indices in reverse
+      let k = 0;
       for (let i = 0; i < walk.len; i++) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
@@ -446,30 +449,27 @@ export class WaveletMatrix {
         const last = L[i];
         const last1 = level.rank1(last - 1);
         const last0 = last - last1;
+        const leftChildCount = last0 - first0; // left child count
 
         const symbol = S[i];
+        const sortedIndexCount = C[i]; // number of sorted indices inside this node
         nRankCalls += 2;
 
         // Determine the number of nodes that wants to be mapped to the right child of this node,
         // then subtract the count of left children from all of the nodes matched to the right child,
         // to account for the elements counted in the left counted.
-        const sortedIndexCount = C[i]; // number of sorted indices inside this node
-        // [hi, lo) is the range of sorted indices covered by this node
-        const lo = k - sortedIndexCount;
-        const hi = k;
+        // [lo, hi) is the range of sorted symbols covered by this node
+        const lo = k;
+        const hi = k + sortedIndexCount;
 
-        const leftChildCount = last0 - first0; // left child count
-        // index of the first right child
-        // todo: avoid the binary search when all elems are mapped into the same child
         const splitIndex = binarySearchBefore(I, leftChildCount, lo, hi);
         const numGoLeft = splitIndex - lo;
         const numGoRight = sortedIndexCount - numGoLeft;
+        k += sortedIndexCount;
 
-        // adjust count for quantiles mapped to the right child, taking into account the left count,
+        // adjust count for quantiles mapped to the right child based on the left count,
         // so that we look only for the remaining count of elements in the child node.
         for (let n = splitIndex; n < hi; n++) I[n] -= leftChildCount;
-
-        k -= sortedIndexCount;
 
         if (numGoLeft > 0) {
           // go left
@@ -682,6 +682,8 @@ class ArrayWalker {
     this.first = 0;
     this.last = cap; // nextIndex + 1
   }
+
+  // Return the next index from the front (left side) of the array
   // note: ensure that the current value has been retrieved before
   // writing to the left, since it will overwrite the current value.
   nextLeft() {
@@ -689,6 +691,7 @@ class ArrayWalker {
     this.first += 1;
     return index;
   }
+  // Return the next index from the back (right side) of the array
   nextRight() {
     // return the next index at which we can append an element
     // (as we fill the array in backwards from arr[cap - 1])
