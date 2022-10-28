@@ -67,6 +67,9 @@ export class BitVector {
   // Sampled select blocks could similarly cut down the search range but are not
   // implemented here (and would cost additional space, which would be configurable
   // through sample rate tuning).
+  // Other optimization opportunities: Binary search over the 32 blocks when performing
+  // zero-compressed select. Perform exponential rather than binary search (determine
+  // when and why this might be more efficient).
   select1(i, L = 0, R = this.length) {
     if (i < 1) throw new Error('out of bounds: i < 1');
     if (i > this.numOnes) {
