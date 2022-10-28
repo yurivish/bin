@@ -1,4 +1,4 @@
-import { RankBitVector } from './RankBitVector';
+import { BitVector } from './BitVector';
 import { popcount, trailing0 } from './util';
 
 // todo: do the zero compression after all ones exist in a subsequent filter pass
@@ -35,7 +35,7 @@ export class ZeroCompressedBitVector {
     }
     if (rank) {
       // for each original block, whether it is a zero block
-      this.isZeroBlock = new RankBitVector(initialNumBlocks);
+      this.isZeroBlock = new BitVector(initialNumBlocks);
     }
     this.numOnes = 0;
     this.numZeroBlocks = 0;

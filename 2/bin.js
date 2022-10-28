@@ -1,4 +1,4 @@
-export { RankBitVector } from './RankBitVector';
+export { BitVector } from './BitVector';
 export { ZeroCompressedBitVector } from './ZeroCompressedBitVector';
 export { RankMultiSet, AccessMultiSet } from './MultiSet';
 export { NaiveBitVector } from './NaiveBitVector';

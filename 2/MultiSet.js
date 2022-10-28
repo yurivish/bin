@@ -1,4 +1,4 @@
-import { RankBitVector } from './RankBitVector';
+import { BitVector } from './BitVector';
 import { ZeroCompressedBitVector } from './ZeroCompressedBitVector';
 
 // represents a sorted list of integer elements (must be constructed from a sorted list)
@@ -6,7 +6,7 @@ import { ZeroCompressedBitVector } from './ZeroCompressedBitVector';
 export class RankMultiSet {
   constructor(data) {
     // stores a 1 for every unique value in the universe [0, maximum(data)]
-    this.occupancy = new RankBitVector(data.length === 0 ? 0 : data[data.length - 1] + 1);
+    this.occupancy = new BitVector(data.length === 0 ? 0 : data[data.length - 1] + 1);
     // stores a trailing 1 for every unique value in the universe [0, length(data) - 1]
     // e.g. 5555 88 999 becomes 0001 01 001
     this.multiplicity = new ZeroCompressedBitVector(data.length, { select: true });
@@ -48,7 +48,7 @@ export class AccessMultiSet {
     this.occupancy = new ZeroCompressedBitVector(data.length === 0 ? 0 : data[data.length - 1] + 1, { select: true });
     // stores a leading 1 for every unique value in the universe [0, length(data) - 1]
     // e.g. 5555 88 999 becomes 1000 10 100
-    this.multiplicity = new RankBitVector(data.length);
+    this.multiplicity = new BitVector(data.length);
     this.maxValue = 0;
     if (data.length > 0) {
       let cur = data[0];

@@ -3,7 +3,7 @@ import { popcount } from './util';
 // todo: consider the space required during construction; can we reduce it?
 // todo: use the same { rank: true, select: true } constructor to support both ops;
 // though here, select implies rank. and we may want larger rank blocks for select.
-export class RankBitVector {
+export class BitVector {
   constructor(length) {
     // todo: interleave rank and bits blocks for improved rank performance (access slows down)
     // todo: make a RankSelectBitVector for noninterleaved noncompressed rank/select
@@ -57,6 +57,43 @@ export class RankBitVector {
     // within the final block. So we do the bounds checks here too.
     // Can optimize via copy-pasting the rank1 impl in here.
     return i - this.rank1(i) + 1;
+  }
+
+  // These select1 and select0 implementations use binary search over the array
+  // without a select-based acceleration index, and are thus O(log(length)).
+  // Both support hinted binary search: the search range can be specified through
+  // input arguments for those cases where the sought-after bit is known to be
+  // confined to a particular index range.
+  // Sampled select blocks could similarly cut down the search range but are not
+  // implemented here (and would cost additional space, which would be configurable
+  // through sample rate tuning).
+  select1(i, L = 0, R = this.length) {
+    if (i < 1) throw new Error('out of bounds: i < 1');
+    if (i > this.numOnes) {
+      throw new Error(`out of bounds: i (${i}) > numOnes (${this.numOnes})`);
+    }
+    // Search based on the structure of binarySearchBefore
+    while (L < R) {
+      const m = (L + R) >>> 1;
+      if (this.rank1(m) < i) L = m + 1;
+      else R = m;
+    }
+    return L;
+  }
+
+  select0(i, L = 0, R = this.length) {
+    if (i < 1) throw new Error('out of bounds: i < 1');
+    const numZeros = this.length - this.numOnes;
+    if (i > numZeros) {
+      throw new Error(`out of bounds: i (${i}) > numZeros (${numZeros})`);
+    }
+    // Search based on the structure of binarySearchBefore
+    while (L < R) {
+      const m = (L + R) >>> 1;
+      if (this.rank0(m) < i) L = m + 1;
+      else R = m;
+    }
+    return L;
   }
 
   access(i) {

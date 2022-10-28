@@ -59,7 +59,7 @@ class __draft__WaveletTree {
     const levels = new Array(numLevels);
     // Initialize the level bit vectors
     for (let i = 0; i < numLevels; i++) {
-      levels[i] = new RankBitVector(data.length);
+      levels[i] = new BitVector(data.length);
     }
     const level0 = levels[0];
     const highBitMask = 1 << maxLevel;
