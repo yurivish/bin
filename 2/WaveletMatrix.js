@@ -238,94 +238,7 @@ export class WaveletMatrix {
   countRange(first, last, lower, upper) {
     return this.countLessThan(first, last, upper) - this.countLessThan(first, last, lower);
   }
-
-  floop(first, last, lower, upper, bitSelector) {
-    if (first > last) throw new Error('first must be <= last');
-    if (last > this.length) throw new Error('last must be < wavelet matrix length');
-    // if selector is zero return last - first since it means we're grouping by all values?
-    const { F, L, S } = this;
-    const walk = new ArrayWalker(1, F.length);
-    const nextIndex = walk.nextStartIndex();
-    F[nextIndex] = first;
-    L[nextIndex] = last;
-    S[nextIndex] = 0;
-    walk.reset(F, L, S);
-    let nRankCalls = 0;
-
-    let rangeMask = 0;
-    const numLevels = this.numLevels - trailing0(bitSelector);
-    for (let l = 0; l < numLevels; l++) {
-      const level = this.levels[l];
-      const nz = this.numZeros[l];
-      const levelBitMask = 1 << (this.maxLevel - l);
-
-      if ((bitSelector & levelBitMask) === 0) rangeMask = 0;
-      else rangeMask |= levelBitMask;
-      console.log('bitSelector', bitSelector.toString(2).padStart(32, '0'));
-      console.log('and', (bitSelector & levelBitMask) === 0);
-      console.log('rangeMask', rangeMask.toString(2).padStart(32, '0'));
-
-      for (let i = 0; i < walk.len; i++) {
-        const first = F[i];
-        const first1 = level.rank1(first - 1);
-        const first0 = first - first1;
-
-        const last = L[i];
-        const last1 = level.rank1(last - 1);
-        const last0 = last - last1;
-        nRankCalls += 2;
-
-        const symbol = S[i];
-
-        const leftCount = last0 - first0;
-        if (leftCount > 0) {
-          // go left if the left node range [a, b] (inclusive) overlaps [lower, upper] (inclusive)
-          // or if there is no range mask. We use an inclusive symbol range since we allow permit all
-          // bit patterns as codes, including the maximum value.
-          const a = symbol;
-          const b = a | (levelBitMask - 1);
-          const rm = rangeMask;
-
-          const intervalsOverlap = (lower & rm) <= (b & rm) && (a & rm) <= (upper & rm);
-          if (rm === 0 || intervalsOverlap) {
-            // go left
-            const nextIndex = walk.nextEndIndex();
-            F[nextIndex] = first0;
-            L[nextIndex] = last0;
-            S[nextIndex] = symbol;
-          }
-        }
-
-        const rightCount = last1 - first1;
-        if (rightCount > 0) {
-          // go right if the right node range [a, b] (inclusive) overlaps [lower, upper] (inclusive)
-          // or if there is no range mask. We use an inclusive symbol range since we allow permit all
-          // bit patterns as codes, including the maximum value.
-          const a = symbol | levelBitMask;
-          const b = a | (levelBitMask - 1);
-          const rm = rangeMask;
-          const intervalsOverlap = (lower & rm) <= (b & rm) && (a & rm) <= (upper & rm);
-          if (rm === 0 || intervalsOverlap) {
-            // go right
-            const nextIndex = walk.nextEndIndex();
-            F[nextIndex] = nz + first1;
-            L[nextIndex] = nz + last1;
-            S[nextIndex] = symbol | levelBitMask;
-          }
-        }
-      }
-      walk.reset(F, L, S);
-    }
-
-    for (let i = 0; i < walk.len; i++) L[i] -= F[i];
-    const counts = L.subarray(0, walk.len).slice();
-    const symbols = S.subarray(0, walk.len).slice();
-
-    return { symbols, counts, nRankCalls };
-  }
-
-  // todo: think about the behavior wrt. repeated input syms; only returns it once, but unclear what symbol it refers to.
-  // I think we should just note that the return value is one symbol per *unique* symbol in the input
+  
   countBatch(first, last, sortedSymbols, groupByLsb = 0) {
     // splitByMsb requires the same sortedSymbol to be searched for in each of the split paths.
     // for now, we'll go with the relatively inefficient route of asking that this be done by
@@ -416,13 +329,14 @@ export class WaveletMatrix {
     return { symbols, counts, nRankCalls };
   }
 
-  // Returns all of the distinct symbols [lower, upper) in the range [first, last)
+  // Returns all of the distinct symbols [lower, upper] (inclusive) in the range [first, last)
   // together with their number of occurrences. Symbols are grouped and processed
   // in groups of size 2^groupByLsb (symbols are grouped together when they
   // differ only in their lowest `groupByLsb` bits)
   // Each distinct group is labeled by its lowest element, which represents
   // the group containing symbols in the range [symbol, symbol + 2^groupByLsb).
-  counts(first, last, lower, upper, groupByLsb = 0, sorted = true) {
+  // 
+  counts(first, last, lower, upper, { groupByLsb = 0, sorted = true, subcodeSelector = 0 } = {}) {
     const symbolBlockSize = 1 << groupByLsb;
     // todo: handle lower === upper
     // these error messages could be improved, explaining that ignore bits tells us the power of two
@@ -442,11 +356,26 @@ export class WaveletMatrix {
     walk.reset(F, L, S);
 
     let nRankCalls = 0;
+    let subcodeMask = 0;
 
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l);
+
+      // Usually, the entire code is treated as a single integer, and the [lower, upper] range
+      // limits the range of returned codes.
+      // It can be useful to instead treat the code as representing a concatenation of subcodes,
+      // and the [lower, upper] values as representing a concatenation of the ranges of those
+      // subcodes. This behavior can be specified by the subcodeSelector, which is a bitmask
+      // in which a 1 bit indicates the onset of a new subcode and a 0 implies the continuation
+      // of the current subcode. All range comparisons are done within a subcode, and the default
+      // subcodeSelector of 0 gives us the default behavior in which the full code is treated as
+      // a single subcode.
+      if ((subcodeSelector & levelBitMask) === 0) subcodeMask |= levelBitMask;
+      else subcodeMask = levelBitMask;
+      const rangeLower = lower & subcodeMask;
+      const rangeUpper = upper & subcodeMask;
 
       for (let i = 0; i < walk.len; i++) {
         const first = F[i];
@@ -460,13 +389,14 @@ export class WaveletMatrix {
         const symbol = S[i];
         nRankCalls += 2;
 
-        const num0 = last0 - first0; // count of left children
-        if (num0 > 0) {
-          // go left if the left node range [a, b] (inclusive) overlaps [lower, upper) (exclusive)
-          const a = symbol;
-          const b = a | (levelBitMask - 1);
-          const intervalsOverlap = lower <= b && a < upper;
-          if (intervalsOverlap) {
+        const leftCount = last0 - first0;
+        if (leftCount > 0) {
+          // go left if the left node range [a, b] (inclusive) overlaps [lower, upper] (inclusive)
+          // or if there is no range mask. We use an inclusive symbol range since we allow permit all
+          // bit patterns as codes, including the maximum value.
+          const a = symbol & subcodeMask;
+          const b = (a | (levelBitMask - 1)) & subcodeMask;
+          if (intervalsOverlapInclusive(a, b, rangeLower, rangeUpper)) {
             const nextIndex = sorted ? walk.nextEndIndex() : walk.nextStartIndex();
             F[nextIndex] = first0;
             L[nextIndex] = last0;
@@ -474,17 +404,16 @@ export class WaveletMatrix {
           }
         }
 
-        const num1 = last1 - first1; // count of right children
-        if (num1 > 0) {
+        const rightCount = last1 - first1;
+        if (rightCount > 0) {
           // go right if the right node range [a, b] (inclusive) overlaps [lower, upper) (exclusive)
-          const a = symbol | levelBitMask;
-          const b = a | (levelBitMask - 1);
-          const intervalsOverlap = lower <= b && a < upper;
-          if (intervalsOverlap) {
+          const a = (symbol | levelBitMask) & subcodeMask;
+          const b = (a | (levelBitMask - 1)) & subcodeMask;
+          if (intervalsOverlapInclusive(a, b, rangeLower, rangeUpper)) {
             const nextIndex = walk.nextEndIndex();
             F[nextIndex] = nz + first1;
             L[nextIndex] = nz + last1;
-            S[nextIndex] = a;
+            S[nextIndex] = symbol | levelBitMask;
           }
         }
       }
@@ -833,6 +762,11 @@ class ArrayWalker {
   }
 }
 
+// Test two intervals for inclusive overlap.
+function intervalsOverlapInclusive(aLo, aHi, bLo, bHi) {
+  return aLo <= bHi && bLo <= aHi
+}
+
 // todo: assert that splitLsb + groupMsb <= numLevels
 // [] try implementing select in the BitVector using binary search over ranks.
 //    then we don't need any more space for select1 and select0, and we'll likely
@@ -849,3 +783,8 @@ class ArrayWalker {
 // 🌶 i thought that .count was the 2d range version
 // todo: audit all conditional node expansion for whether we can prevent searching left/right
 // subtrees early when they have zero count (eg. floop)
+// todo: make lessThan into lessThanOrEqualTo, and same for other functions that filter on a symbol range
+// so that it is possible for symbols to cover the full space of the underlying datatype, eg. u32 and being
+// able to query for that last symbol.
+
+// todo: make first, last also inclusive? maybe not; only issue would be arrays of size exactly 2^32/2^64.
