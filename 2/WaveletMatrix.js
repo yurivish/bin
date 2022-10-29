@@ -238,7 +238,7 @@ export class WaveletMatrix {
   countRange(first, last, lower, upper) {
     return this.countLessThan(first, last, upper) - this.countLessThan(first, last, lower);
   }
-  
+
   countBatch(first, last, sortedSymbols, groupByLsb = 0) {
     // splitByMsb requires the same sortedSymbol to be searched for in each of the split paths.
     // for now, we'll go with the relatively inefficient route of asking that this be done by
@@ -374,8 +374,8 @@ export class WaveletMatrix {
       // a single subcode.
       if ((subcodeSelector & levelBitMask) === 0) subcodeMask |= levelBitMask;
       else subcodeMask = levelBitMask;
-      const rangeLower = lower & subcodeMask;
-      const rangeUpper = upper & subcodeMask;
+      const subcodeLower = lower & subcodeMask;
+      const subcodeUpper = upper & subcodeMask;
 
       for (let i = 0; i < walk.len; i++) {
         const first = F[i];
@@ -396,7 +396,7 @@ export class WaveletMatrix {
           // bit patterns as codes, including the maximum value.
           const a = symbol & subcodeMask;
           const b = (a | (levelBitMask - 1)) & subcodeMask;
-          if (intervalsOverlapInclusive(a, b, rangeLower, rangeUpper)) {
+          if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
             const nextIndex = sorted ? walk.nextEndIndex() : walk.nextStartIndex();
             F[nextIndex] = first0;
             L[nextIndex] = last0;
@@ -409,7 +409,7 @@ export class WaveletMatrix {
           // go right if the right node range [a, b] (inclusive) overlaps [lower, upper) (exclusive)
           const a = (symbol | levelBitMask) & subcodeMask;
           const b = (a | (levelBitMask - 1)) & subcodeMask;
-          if (intervalsOverlapInclusive(a, b, rangeLower, rangeUpper)) {
+          if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
             const nextIndex = walk.nextEndIndex();
             F[nextIndex] = nz + first1;
             L[nextIndex] = nz + last1;
