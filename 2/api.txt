@@ -12,11 +12,21 @@ quantile
 
 symbol
 	symbol(index)
-	symbolBatch(sortedIndices)
+	symbolBatch(sortedIndices) // todo
 	symbols(first, last)
 
 find
 	find(first, last, symbol, count)
 
 majority
-	majority(first, last, k)
+	majority(first, last, k) // todo: k
+
+===
+
+revision proposal
+
+	countRange => count
+	count => countSymbol
+	countBatch => countSymbols
+
+	// not sure how to preserve symmetry with quantile/symbol, but i confused countRange with count today.

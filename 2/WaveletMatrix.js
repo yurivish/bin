@@ -1,6 +1,6 @@
 import { BitVector } from './BitVector';
 import { ZeroCompressedBitVector } from './ZeroCompressedBitVector';
-import { reverseBits, reverseBits32, clamp } from './util';
+import { reverseBits, reverseBits32, clamp, trailing0 } from './util';
 // todo: range next value, range prev value (though these can be done using quantile), quantiles, majority,
 // intersection and more from "New algorithms on wavelet trees and applications to information retrieval"
 
@@ -19,10 +19,12 @@ export class WaveletMatrix {
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));
     const maxLevel = numLevels - 1;
-
     // todo: can we get away with non-pow2, storing just one entry per symbol?
     const hist = new Uint32Array(2 ** numLevels);
     const borders = new Uint32Array(2 ** numLevels);
+    // note: if data is sorted, could we use a compressed set data structure for hist/borders?
+    // todo: can we perform better for sparse code sets, eg. [0, 2^32)?
+
     const levels = new Array(numLevels);
     // Initialize the level bit vectors
     for (let i = 0; i < numLevels; i++) {
@@ -96,6 +98,9 @@ export class WaveletMatrix {
     // todo: don't materialize these until needed - the alphabet might be big
     // and we can accept scratch space as an input parameter so we can reuse
     // the same space across wavelet trees
+    // todo: take the min with this.length, though figure out if this interferes
+    // with our tree-walking strategy in the case that we double at every visited node...
+    // i think large alphabets may violate some assumptions I've made... not sure which yet.
     const sz = Math.min(2 ** this.numLevels, this.alphabetSize);
     // todo: buffer pool of scratch spaces
     // todo: these names are also getting quite silly (and inaccurate)
@@ -129,21 +134,21 @@ export class WaveletMatrix {
 
   // Returns the number of occurrences of `symbol` in the range [first, last). Also known as `rank`.
   count(first, last, symbol, groupByLsb) {
-    const indices = this.symbolIndexRange(first, last, symbol, groupByLsb);
+    const indices = this.symbolIndices(first, last, symbol, groupByLsb);
     return indices.last - indices.first;
   }
 
   // Returns the index of the nth occurrence of `symbol` in the range [first, last). Also known as `select`.
   find(first, last, symbol, n) {
-    const indices = this.symbolIndexRange(first, last, symbol, 0);
+    const indices = this.symbolIndices(first, last, symbol, 0);
     if (indices.first === indices.last) throw new Error('symbol does not appear in index range');
     let index = indices.first + n - 1;
-      console.log('index',index, 'indices',indices)
+    console.log('index', index, 'indices', indices);
     for (let l = this.numLevels; l > 0; ) {
       l -= 1;
       const level = this.levels[l];
       const nz = this.numZeros[l];
-      console.log('index',index, 'nz',nz)
+      console.log('index', index, 'nz', nz);
       if (index < nz) {
         // this position was mapped from a zero at the previous level
         const n = index + 1; // this was the nth zero on the that level
@@ -157,10 +162,9 @@ export class WaveletMatrix {
     return index;
   }
 
-  // internal function returning the index range covered by this symbol on the virtual bottom level,
-  // or a higher level if groupByLsb > 0.
-  // last - first gives the symbol count within the provided range.
-  symbolIndexRange(first, last, symbol, groupByLsb = 0) {
+  // Internal function returning the (first, last] index range covered by this symbol on the virtual bottom level,
+  // or on a higher level if groupByLsb > 0. `last - first` gives the symbol count within the provided range.
+  symbolIndices(first, last, symbol, groupByLsb = 0) {
     const symbolBlockSize = 1 << groupByLsb;
     if (symbol % symbolBlockSize !== 0) {
       // note: could be done with bit math (check that low bits are zero)
@@ -235,6 +239,91 @@ export class WaveletMatrix {
     return this.countLessThan(first, last, upper) - this.countLessThan(first, last, lower);
   }
 
+  floop(first, last, lower, upper, bitSelector) {
+    if (first > last) throw new Error('first must be <= last');
+    if (last > this.length) throw new Error('last must be < wavelet matrix length');
+    // if selector is zero return last - first since it means we're grouping by all values?
+    const { F, L, S } = this;
+    const walk = new ArrayWalker(1, F.length);
+    const nextIndex = walk.nextStartIndex();
+    F[nextIndex] = first;
+    L[nextIndex] = last;
+    S[nextIndex] = 0;
+    walk.reset(F, L, S);
+    let nRankCalls = 0;
+
+    let rangeMask = 0;
+    const numLevels = this.numLevels - trailing0(bitSelector);
+    for (let l = 0; l < numLevels; l++) {
+      const level = this.levels[l];
+      const nz = this.numZeros[l];
+      const levelBitMask = 1 << (this.maxLevel - l);
+
+      if ((bitSelector & levelBitMask) === 0) rangeMask = 0;
+      else rangeMask |= levelBitMask;
+      console.log('bitSelector', bitSelector.toString(2).padStart(32, '0'));
+      console.log('and', (bitSelector & levelBitMask) === 0);
+      console.log('rangeMask', rangeMask.toString(2).padStart(32, '0'));
+
+      for (let i = 0; i < walk.len; i++) {
+        const first = F[i];
+        const first1 = level.rank1(first - 1);
+        const first0 = first - first1;
+
+        const last = L[i];
+        const last1 = level.rank1(last - 1);
+        const last0 = last - last1;
+        nRankCalls += 2;
+
+        const symbol = S[i];
+
+        const leftCount = last0 - first0;
+        if (leftCount > 0) {
+          // go left if the left node range [a, b] (inclusive) overlaps [lower, upper] (inclusive)
+          // or if there is no range mask. We use an inclusive symbol range since we allow permit all
+          // bit patterns as codes, including the maximum value.
+          const a = symbol;
+          const b = a | (levelBitMask - 1);
+          const rm = rangeMask;
+
+          const intervalsOverlap = (lower & rm) <= (b & rm) && (a & rm) <= (upper & rm);
+          if (rm === 0 || intervalsOverlap) {
+            // go left
+            const nextIndex = walk.nextEndIndex();
+            F[nextIndex] = first0;
+            L[nextIndex] = last0;
+            S[nextIndex] = symbol;
+          }
+        }
+
+        const rightCount = last1 - first1;
+        if (rightCount > 0) {
+          // go right if the right node range [a, b] (inclusive) overlaps [lower, upper] (inclusive)
+          // or if there is no range mask. We use an inclusive symbol range since we allow permit all
+          // bit patterns as codes, including the maximum value.
+          const a = symbol | levelBitMask;
+          const b = a | (levelBitMask - 1);
+          const rm = rangeMask;
+          const intervalsOverlap = (lower & rm) <= (b & rm) && (a & rm) <= (upper & rm);
+          if (rm === 0 || intervalsOverlap) {
+            // go right
+            const nextIndex = walk.nextEndIndex();
+            F[nextIndex] = nz + first1;
+            L[nextIndex] = nz + last1;
+            S[nextIndex] = symbol | levelBitMask;
+          }
+        }
+      }
+      walk.reset(F, L, S);
+    }
+
+    for (let i = 0; i < walk.len; i++) L[i] -= F[i];
+    const counts = L.subarray(0, walk.len).slice();
+    const symbols = S.subarray(0, walk.len).slice();
+
+    return { symbols, counts, nRankCalls };
+  }
+
   // todo: think about the behavior wrt. repeated input syms; only returns it once, but unclear what symbol it refers to.
   // I think we should just note that the return value is one symbol per *unique* symbol in the input
   countBatch(first, last, sortedSymbols, groupByLsb = 0) {
@@ -303,8 +392,8 @@ export class WaveletMatrix {
         if (numGoLeft > 0) {
           // go left
           const nextIndex = walk.nextEndIndex();
-          F[nextIndex] = F[i] - first1; // = first0
-          L[nextIndex] = L[i] - last1; // = last0
+          F[nextIndex] = first0;
+          L[nextIndex] = last0;
           C[nextIndex] = numGoLeft;
           S[nextIndex] = symbol;
         }
@@ -373,7 +462,7 @@ export class WaveletMatrix {
 
         const num0 = last0 - first0; // count of left children
         if (num0 > 0) {
-          // go left if the left node range [a, b] overlaps [lower, upper)
+          // go left if the left node range [a, b] (inclusive) overlaps [lower, upper) (exclusive)
           const a = symbol;
           const b = a | (levelBitMask - 1);
           const intervalsOverlap = lower <= b && a < upper;
@@ -387,7 +476,7 @@ export class WaveletMatrix {
 
         const num1 = last1 - first1; // count of right children
         if (num1 > 0) {
-          // go right if the right node range [a, b] overlaps [lower, upper)
+          // go right if the right node range [a, b] (inclusive) overlaps [lower, upper) (exclusive)
           const a = symbol | levelBitMask;
           const b = a | (levelBitMask - 1);
           const intervalsOverlap = lower <= b && a < upper;
@@ -751,3 +840,12 @@ class ArrayWalker {
 //    back to the original data, ie. show the user something. the other use case
 //    is to get a range of document indices back, but we can speed that up if/when
 //    we get there.
+// todo: can we infer a number of levels to ignore (groupLsb) from the symbol in countLessThan,
+// and the symbol range in the count function? (counts needs an explicit specifier since
+// it should be able to return values at multiple resolutions. But when the symbol range is
+// power-of-two-sized, I think we can just avoid reaching down into unnecessary levels.
+// (use xor+trailing0 to find the number of shared low bits?)
+
+// 🌶 i thought that .count was the 2d range version
+// todo: audit all conditional node expansion for whether we can prevent searching left/right
+// subtrees early when they have zero count (eg. floop)
