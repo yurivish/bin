@@ -143,12 +143,10 @@ export class WaveletMatrix {
     const indices = this.symbolIndices(first, last, symbol, 0);
     if (indices.first === indices.last) throw new Error('symbol does not appear in index range');
     let index = indices.first + n - 1;
-    console.log('index', index, 'indices', indices);
     for (let l = this.numLevels; l > 0; ) {
       l -= 1;
       const level = this.levels[l];
       const nz = this.numZeros[l];
-      console.log('index', index, 'nz', nz);
       if (index < nz) {
         // this position was mapped from a zero at the previous level
         const n = index + 1; // this was the nth zero on the that level
