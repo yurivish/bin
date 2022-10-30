@@ -118,127 +118,128 @@ export class WaveletMatrix {
     this.C2 = new Uint32Array(sz);
   }
 
-  // // new
-  // constructSparse(data, alphabetSize) {
-  //   // data is an array of integer values in [0, alphabetSize)
-  //   const numLevels = Math.ceil(Math.log2(alphabetSize));
-  //   const maxLevel = numLevels - 1;
-  //   // todo: can we get away with non-pow2, storing just one entry per symbol?
-  //   let hist = new Map(); // new Uint32Array(2 ** numLevels);
-  //   const borders = new Map(); //  new Uint32Array(2 ** numLevels);
-  //   // note: if data is sorted, could we use a compressed set data structure for hist/borders?
-  //   // todo: can we perform better for sparse code sets, eg. [0, 2^32)?
+  constructSparse(data, alphabetSize) {
+    // data is an array of integer values in [0, alphabetSize)
+    const numLevels = Math.ceil(Math.log2(alphabetSize));
+    const maxLevel = numLevels - 1;
+    // todo: can we get away with non-pow2, storing just one entry per symbol?
+    let hist = new Map(); // new Uint32Array(2 ** numLevels);
+    const borders = new Map(); //  new Uint32Array(2 ** numLevels);
+    // note: if data is sorted, could we use a compressed set data structure for hist/borders?
+    // todo: can we perform better for sparse code sets, eg. [0, 2^32)?
 
-  //   const levels = new Array(numLevels);
-  //   // Initialize the level bit vectors
-  //   for (let i = 0; i < numLevels; i++) {
-  //     levels[i] = new BitVector(data.length);
-  //     // try this once bits can be added to it out-of-order
-  //     // levels[i] = new ZeroCompressedBitVector(data.length, { rank: true });
-  //   }
+    const levels = new Array(numLevels);
+    // Initialize the level bit vectors
+    for (let i = 0; i < numLevels; i++) {
+      levels[i] = new BitVector(data.length);
+      // try this once bits can be added to it out-of-order
+      // levels[i] = new ZeroCompressedBitVector(data.length, { rank: true });
+    }
 
-  //   // Compute the histogram of the data
-  //   const level = levels[0];
-  //   const levelBitMask = 1 << maxLevel;
-  //   for (let i = 0; i < data.length; i++) {
-  //     const d = data[i];
-  //     hist.set(d, (hist.get(d) ?? 0) + 1); // hist[d] += 1;
-  //     // Fill the first bitvector (MSBs in data order)
-  //     if (d & levelBitMask) level.one(i);
-  //   }
-  //   console.log('initial hist', Object.fromEntries(hist));
+    // Compute the histogram of the data
+    const level = levels[0];
+    const levelBitMask = 1 << maxLevel;
+    for (let i = 0; i < data.length; i++) {
+      const d = data[i];
+      hist.set(d, (hist.get(d) ?? 0) + 1); // hist[d] += 1;
+      // Fill the first bitvector (MSBs in data order)
+      if (d & levelBitMask) level.one(i);
+    }
+    // console.log('initial hist', Object.fromEntries(hist));
 
-  //   // Construct the other levels bottom-up
-  //   for (let l = maxLevel; l > 0; l--) {
-  //     // const m = 2 ** l;
-  //     // Compute the histogram based on the previous level's one
-  //     // for (let i = 0; i < m; i++) {
-  //     //   // Update the histogram in-place
-  //     //   // hist[i] = hist[2 * i] + hist[2 * i + 1];
-  //     //   const value = (hist.get(2 * i) ?? 0) + (hist.get(2 * i + 1) ?? 0)
-  //     //   if (value > 0) hist.set(i, value)
-  //     // }
-  //     const ks = Uint32Array.from(hist.keys()).sort();
-  //     const nhist = new Map();
-  //     for (let i = 0; i < ks.length; i++) {
-  //       const k = ks[i];
-  //       const nk = k >>> 1;
-  //       nhist.set(nk, (nhist.get(nk) ?? 0) + hist.get(k));
-  //     }
-  //     hist = nhist;
-  //     console.log('hist', Object.fromEntries(hist));
-  //     // for each non-empty index in hist (ideally ascending)
-  //     borders.clear();
-  //     ks.map((k) => reverseBits(k, l))
-  //       .sort()
-  //       .map((k) => reverseBits(k, l));
-  //     if (ks.length > 0) borders.set(ks[0], 0);
-  //     for (let i = 1; i < ks.length; i++) {
-  //       const k = ks[i];
-  //       const pk = ks[i - 1];
-  //       borders.set(k, borders.get(pk) + hist.get(pk));
-  //     }
+    // Construct the other levels bottom-up
+    for (let l = maxLevel; l > 0; l--) {
+      // const m = 2 ** l;
+      // Compute the histogram based on the previous level's one
+      // for (let i = 0; i < m; i++) {
+      //   // Update the histogram in-place
+      //   // hist[i] = hist[2 * i] + hist[2 * i + 1];
+      //   const value = (hist.get(2 * i) ?? 0) + (hist.get(2 * i + 1) ?? 0)
+      //   if (value > 0) hist.set(i, value)
+      // }
+      let ks = Uint32Array.from(hist.keys()).sort();
+      const nhist = new Map();
+      for (let i = 0; i < ks.length; i++) {
+        const k = ks[i];
+        const nk = k >>> 1;
+        nhist.set(nk, (nhist.get(nk) ?? 0) + hist.get(k));
+      }
+      hist = nhist;
+      // console.log('hist', Object.fromEntries(hist));
+      // for each non-empty index in hist (ideally ascending)
+      borders.clear();
+      ks = Uint32Array.from(hist.keys()).map((k) => reverseBits(k, l))
+        .sort()
+        .map((k) => reverseBits(k, l));
+        // console.log(`ks ${ks}`)
+      if (ks.length > 0) borders.set(ks[0], 0);
+      for (let i = 1; i < ks.length; i++) {
+        const k = ks[i];
+        const pk = ks[i - 1];
+        // console.log(`borders.set(${k}, borders.get(${pk}) + hist.get(${pk}));`)
+        borders.set(k, borders.get(pk) + hist.get(pk));
+      }
 
-  //     // const prevIndex = reverseBits(i - 1, l);
-  //     // borders.set(0, 0); // borders[0] = 0;
-  //     // for (let i = 0; i < ks.length; i++) {
-  //     //   if (i === 0) continue;
-  //     //   const k = ks[i];
-  //     //   const prevIndex = reverseBits(reverseBits(k, l) - 1, l)
-  //     //   // borders[reverseBits(i, l)] = borders[prevIndex] + hist[prevIndex];
-  //     //   borders.set(k, (borders.get(prevIndex) ?? 0) + hist.get(prevIndex))
-  //     // }
-  //     console.log('borders  ', Object.fromEntries(hist));
+      // const prevIndex = reverseBits(i - 1, l);
+      // borders.set(0, 0); // borders[0] = 0;
+      // for (let i = 0; i < ks.length; i++) {
+      //   if (i === 0) continue;
+      //   const k = ks[i];
+      //   const prevIndex = reverseBits(reverseBits(k, l) - 1, l)
+      //   // borders[reverseBits(i, l)] = borders[prevIndex] + hist[prevIndex];
+      //   borders.set(k, (borders.get(prevIndex) ?? 0) + hist.get(prevIndex))
+      // }
+      // console.log('borders  ', Object.fromEntries(borders));
 
-  //     // Fill the bit vector of the current level
-  //     const level = levels[l];
-  //     const levelBit = maxLevel - l;
-  //     const levelBitMask = 1 << levelBit;
-  //     const bitPrefixMask = 0xfffffffe << levelBit;
-  //     const bitPrefixShift = levelBit + 1;
-  //     for (let i = 0; i < data.length; i++) {
-  //       const d = data[i];
-  //       // Get and update position for bit by computing its bit prefix,
-  //       // which encodes the path from the root to the node at level l
-  //       // containing this bit
-  //       const nodeIndex = (d & bitPrefixMask) >>> bitPrefixShift;
-  //       const p = borders.get(nodeIndex) ?? 0; // borders[nodeIndex];
-  //       borders.set(nodeIndex, p + 1); // borders[nodeIndex] += 1;
-  //       // Set the bit in the bitvector
-  //       if (d & levelBitMask) level.one(p);
-  //     }
-  //   }
+      // Fill the bit vector of the current level
+      const level = levels[l];
+      const levelBit = maxLevel - l;
+      const levelBitMask = 1 << levelBit;
+      const bitPrefixMask = 0xfffffffe << levelBit;
+      const bitPrefixShift = levelBit + 1;
+      for (let i = 0; i < data.length; i++) {
+        const d = data[i];
+        // Get and update position for bit by computing its bit prefix,
+        // which encodes the path from the root to the node at level l
+        // containing this bit
+        const nodeIndex = (d & bitPrefixMask) >>> bitPrefixShift;
+        const p = borders.get(nodeIndex) ?? 0; // borders[nodeIndex];
+        borders.set(nodeIndex, p + 1); // borders[nodeIndex] += 1;
+        // Set the bit in the bitvector
+        if (d & levelBitMask) level.one(p);
+      }
+    }
 
-  //   const numZeros = new Uint32Array(numLevels);
-  //   for (let i = 0; i < numLevels; i++) {
-  //     levels[i].finish();
-  //     numZeros[i] = levels[i].rank0(levels[i].length);
-  //   }
+    const numZeros = new Uint32Array(numLevels);
+    for (let i = 0; i < numLevels; i++) {
+      levels[i].finish();
+      numZeros[i] = levels[i].rank0(levels[i].length);
+    }
 
-  //   this.levels = levels;
-  //   this.alphabetSize = alphabetSize;
-  //   this.numZeros = numZeros;
-  //   this.numLevels = numLevels;
-  //   this.maxLevel = maxLevel;
-  //   this.length = data.length;
+    this.levels = levels;
+    this.alphabetSize = alphabetSize;
+    this.numZeros = numZeros;
+    this.numLevels = numLevels;
+    this.maxLevel = maxLevel;
+    this.length = data.length;
 
-  //   // scratch spaces for intermediate processing.
-  //   // todo: don't materialize these until needed - the alphabet might be big
-  //   // and we can accept scratch space as an input parameter so we can reuse
-  //   // the same space across wavelet trees
-  //   // todo: take the min with this.length, though figure out if this interferes
-  //   // with our tree-walking strategy in the case that we double at every visited node...
-  //   // i think large alphabets may violate some assumptions I've made... not sure which yet.
-  //   // multiplying length by 2 because I don't understand the worst-case behavior yet.
-  //   const sz = Math.min(2 ** this.numLevels, this.alphabetSize, 2 * this.length);
-  //   // todo: buffer pool of scratch spaces
-  //   // todo: these names are also getting quite silly (and inaccurate)
-  //   this.F = new Uint32Array(sz); // firsts
-  //   this.L = new Uint32Array(sz); // lasts
-  //   this.S = new Uint32Array(sz); // symbols
-  //   this.C = new Uint32Array(sz);
-  //   this.C2 = new Uint32Array(sz);
-  // }
+    // scratch spaces for intermediate processing.
+    // todo: don't materialize these until needed - the alphabet might be big
+    // and we can accept scratch space as an input parameter so we can reuse
+    // the same space across wavelet trees
+    // todo: take the min with this.length, though figure out if this interferes
+    // with our tree-walking strategy in the case that we double at every visited node...
+    // i think large alphabets may violate some assumptions I've made... not sure which yet.
+    // multiplying length by 2 because I don't understand the worst-case behavior yet.
+    const sz = Math.min(2 ** this.numLevels, this.alphabetSize, 2 * this.length);
+    // todo: buffer pool of scratch spaces
+    // todo: these names are also getting quite silly (and inaccurate)
+    this.F = new Uint32Array(sz); // firsts
+    this.L = new Uint32Array(sz); // lasts
+    this.S = new Uint32Array(sz); // symbols
+    this.C = new Uint32Array(sz);
+    this.C2 = new Uint32Array(sz);
+  }
 
   symbol(index) {
     if (index < 0 || index > this.length) throw new Error('symbol: out of bounds');
@@ -456,7 +457,7 @@ export class WaveletMatrix {
     return { symbols, counts, nRankCalls };
   }
 
-  subcodeSelector(fieldSizesInBits) {
+  subcodeMarker(fieldSizesInBits) {
     let selector = 0;
     let offset = 0;
     for (const sz of fieldSizesInBits) {
@@ -474,15 +475,16 @@ export class WaveletMatrix {
   // Each distinct group is labeled by its lowest element, which represents
   // the group containing symbols in the range [symbol, symbol + 2^groupByLsb).
   //
-  counts(first, last, lower, upper, { groupByLsb = 0, subcodeSelector = 0, sort = true } = {}) {
+  counts(first, last, lower, upper, { groupByLsb = 0, subcodeMarker = 0, sort = true } = {}) {
     const symbolGroupSize = 1 << groupByLsb;
     // todo: handle lower === upper
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
     if (lower % symbolGroupSize !== 0)
       throw new Error('lower must evenly divide the symbol block size implied by groupByLsb');
-    if (upper % symbolGroupSize !== 0)
-      throw new Error('upper must evenly divide the symbol block size implied by groupByLsb');
+    if ((upper + 1) % symbolGroupSize !== 0)
+      throw new Error('(upper + 1) must evenly divide the symbol block size implied by groupByLsb');
+    if (upper >= this.alphabetSize) throw new Error('upper must be < alphabetSize ([lower, upper] is inclusive)')
     const numLevels = this.numLevels - groupByLsb;
     const { F, L, S } = this; // firsts, lasts, symbols
 
@@ -503,14 +505,14 @@ export class WaveletMatrix {
 
       // Usually, the entire code is treated as a single integer, and the [lower, upper] range
       // limits the range of returned codes.
-      // It can be useful to instead treat the code as representing a concatenation of subcodeSelector,
+      // It can be useful to instead treat the code as representing a concatenation of subcodeMarker,
       // and the [lower, upper] values as representing a concatenation of the ranges of those
-      // subcodeSelector. This behavior can be specified by the `subcodeSelector` argument, which is a bitmask
-      // in which a 1 bit indicates the onset of a new subcode and a 0 implies the continuation
+      // subcodeMarker. This behavior can be specified by the `subcodeMarker` argument, which is a
+      // bitmask in which a 1 bit indicates the onset of a new subcode and a 0 implies the continuation
       // of the current subcode. All range comparisons are done within a subcode, and the default
-      // subcodeSelector of 0 gives us the default behavior in which the full code is treated as
+      // subcodeMarker of 0 gives us the default behavior in which the full code is treated as
       // a single subcode.
-      if ((subcodeSelector & levelBitMask) === 0) subcodeMask |= levelBitMask;
+      if ((subcodeMarker & levelBitMask) === 0) subcodeMask |= levelBitMask;
       else subcodeMask = levelBitMask;
       const subcodeLower = lower & subcodeMask;
       const subcodeUpper = upper & subcodeMask;
