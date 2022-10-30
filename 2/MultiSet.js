@@ -4,7 +4,8 @@ import { ZeroCompressedBitVector } from './ZeroCompressedBitVector';
 // represents a sorted list of integer elements (must be constructed from a sorted list)
 // todo: describe how it works (it keeps one bitmap of unique elements, and another of repetitions)
 export class RankMultiSet {
-  constructor(data) {
+  constructor(sortedData) {
+    const data = sortedData
     // stores a 1 for every unique value in the universe [0, maximum(data)]
     this.occupancy = new BitVector(data.length === 0 ? 0 : data[data.length - 1] + 1);
     // stores a trailing 1 for every unique value in the universe [0, length(data) - 1]
@@ -43,7 +44,8 @@ export class RankMultiSet {
 }
 
 export class AccessMultiSet {
-  constructor(data) {
+  constructor(sortedData) {
+    const data = sortedData
     // stores a 1 for every unique value in the universe [0, maximum(data)]
     this.occupancy = new ZeroCompressedBitVector(data.length === 0 ? 0 : data[data.length - 1] + 1, { select: true });
     // stores a leading 1 for every unique value in the universe [0, length(data) - 1]

@@ -1,9 +1,9 @@
 count
-	count(first, last, symbol, symbolBlockBits)
-	countBatch(first, last, sortedSymbols, symbolBlockBits)
+	count(first, last, symbol, { groupLsb })
+	countBatch(first, last, sortedSymbols, { groupLsb })
 	countLessThan(first, last, upper)
 	countRange(first, last, lower, upper)
-	counts(first, last, lower, upper, symbolBlockBits)
+	counts(first, last, lower, upper, { groupLsb, sorted,  })
 
 quantile
 	quantile(first, last, index)
