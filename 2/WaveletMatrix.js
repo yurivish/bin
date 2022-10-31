@@ -457,16 +457,27 @@ export class WaveletMatrix {
     return { symbols, counts, nRankCalls };
   }
 
-  subcodeMarker(fieldSizesInBits) {
+  // todo: implement this in terms of a subcodes function?
+  subcodeMarker(subcodeSizesInBits) {
     let selector = 0;
     let offset = 0;
-    for (const sz of fieldSizesInBits) {
+    for (const sz of subcodeSizesInBits) {
       if (sz === 0) throw 'cannot have zero-sized field';
       selector |= 1 << (sz + offset);
       offset += sz;
     }
     return selector;
   }
+  // subcodes(marker, values) {
+  //   let selector = 0;
+  //   let offset = 0;
+  //   for (const sz of subcodeSizesInBits) {
+  //     if (sz === 0) throw 'cannot have zero-sized field';
+  //     selector |= 1 << (sz + offset);
+  //     offset += sz;
+  //   }
+  //   return selector;
+  // }
 
   // Returns all of the distinct symbols [lower, upper] (inclusive) in the range [first, last)
   // together with their number of occurrences. Symbols are grouped and processed
