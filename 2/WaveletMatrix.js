@@ -1,6 +1,6 @@
 import { BitVector } from './BitVector';
 import { ZeroCompressedBitVector } from './ZeroCompressedBitVector';
-import { reverseBits, reverseBits32, clamp, trailing0 } from './util';
+import { reverseBits, reverseBits32, clamp, trailing0, popcount } from './util';
 // todo: range next value, range prev value (though these can be done using quantile), quantiles, majority,
 // intersection and more from "New algorithms on wavelet trees and applications to information retrieval"
 
@@ -118,103 +118,53 @@ export class WaveletMatrix {
     this.C2 = new Uint32Array(sz);
   }
 
-  constructSparse(data, alphabetSize) {
+  constructSparse(data, alphabetSize, { sparse = false } = {}) {
+    // todo: call this a 'large alphabet' version?
+    // todo: require this always? we need it here because we use .subarray in walk.reset
+    if (!(data instanceof Uint32Array)) data = new Uint32Array(data);
+
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));
     const maxLevel = numLevels - 1;
-    // todo: can we get away with non-pow2, storing just one entry per symbol?
-    let hist = new Map(); // new Uint32Array(2 ** numLevels);
-    const borders = new Map(); //  new Uint32Array(2 ** numLevels);
-    // note: if data is sorted, could we use a compressed set data structure for hist/borders?
-    // todo: can we perform better for sparse code sets, eg. [0, 2^32)?
 
-    const levels = new Array(numLevels);
     // Initialize the level bit vectors
+    const levels = new Array(numLevels);
     for (let i = 0; i < numLevels; i++) {
       levels[i] = new BitVector(data.length);
-      // try this once bits can be added to it out-of-order
-      // levels[i] = new ZeroCompressedBitVector(data.length, { rank: true });
-    }
-
-    // Compute the histogram of the data
-    const level = levels[0];
-    const levelBitMask = 1 << maxLevel;
-    for (let i = 0; i < data.length; i++) {
-      const d = data[i];
-      hist.set(d, (hist.get(d) ?? 0) + 1); // hist[d] += 1;
-      // Fill the first bitvector (MSBs in data order)
-      if (d & levelBitMask) level.one(i);
-    }
-    // console.log('initial hist', Object.fromEntries(hist));
-
-    // Construct the other levels bottom-up
-    for (let l = maxLevel; l > 0; l--) {
-      // const m = 2 ** l;
-      // Compute the histogram based on the previous level's one
-      // for (let i = 0; i < m; i++) {
-      //   // Update the histogram in-place
-      //   // hist[i] = hist[2 * i] + hist[2 * i + 1];
-      //   const value = (hist.get(2 * i) ?? 0) + (hist.get(2 * i + 1) ?? 0)
-      //   if (value > 0) hist.set(i, value)
-      // }
-      let ks = Uint32Array.from(hist.keys()).sort();
-      const nhist = new Map();
-      for (let i = 0; i < ks.length; i++) {
-        const k = ks[i];
-        const nk = k >>> 1;
-        nhist.set(nk, (nhist.get(nk) ?? 0) + hist.get(k));
-      }
-      hist = nhist;
-      // console.log('hist', Object.fromEntries(hist));
-      // for each non-empty index in hist (ideally ascending)
-      borders.clear();
-      ks = Uint32Array.from(hist.keys()).map((k) => reverseBits(k, l))
-        .sort()
-        .map((k) => reverseBits(k, l));
-        // console.log(`ks ${ks}`)
-      if (ks.length > 0) borders.set(ks[0], 0);
-      for (let i = 1; i < ks.length; i++) {
-        const k = ks[i];
-        const pk = ks[i - 1];
-        // console.log(`borders.set(${k}, borders.get(${pk}) + hist.get(${pk}));`)
-        borders.set(k, borders.get(pk) + hist.get(pk));
-      }
-
-      // const prevIndex = reverseBits(i - 1, l);
-      // borders.set(0, 0); // borders[0] = 0;
-      // for (let i = 0; i < ks.length; i++) {
-      //   if (i === 0) continue;
-      //   const k = ks[i];
-      //   const prevIndex = reverseBits(reverseBits(k, l) - 1, l)
-      //   // borders[reverseBits(i, l)] = borders[prevIndex] + hist[prevIndex];
-      //   borders.set(k, (borders.get(prevIndex) ?? 0) + hist.get(prevIndex))
-      // }
-      // console.log('borders  ', Object.fromEntries(borders));
-
-      // Fill the bit vector of the current level
-      const level = levels[l];
-      const levelBit = maxLevel - l;
-      const levelBitMask = 1 << levelBit;
-      const bitPrefixMask = 0xfffffffe << levelBit;
-      const bitPrefixShift = levelBit + 1;
-      for (let i = 0; i < data.length; i++) {
-        const d = data[i];
-        // Get and update position for bit by computing its bit prefix,
-        // which encodes the path from the root to the node at level l
-        // containing this bit
-        const nodeIndex = (d & bitPrefixMask) >>> bitPrefixShift;
-        const p = borders.get(nodeIndex) ?? 0; // borders[nodeIndex];
-        borders.set(nodeIndex, p + 1); // borders[nodeIndex] += 1;
-        // Set the bit in the bitvector
-        if (d & levelBitMask) level.one(p);
-      }
     }
 
     const numZeros = new Uint32Array(numLevels);
-    for (let i = 0; i < numLevels; i++) {
-      levels[i].finish();
-      numZeros[i] = levels[i].rank0(levels[i].length);
+    const walk = new ArrayWalker(0, data.length);
+    let next = new Uint32Array(data.length);
+
+    for (let l = 0; l < maxLevel; l++) {
+      const level = levels[l];
+      const levelBit = maxLevel - l;
+      const levelBitMask = 1 << levelBit;
+      for (let i = 0; i < data.length; i++) {
+        const d = data[i];
+        if (d & levelBitMask) {
+          level.one(i);
+          next[walk.nextBackIndex()] = d;
+        } else {
+          next[walk.nextFrontIndex()] = d;
+        }
+        numZeros[l] = walk.frontIndex;
+      }
+      walk.reset(next);
+      const tmp = data;
+      data = next;
+      next = tmp;
     }
+
+    const level = levels[maxLevel];
+    const levelBitMask = 1 << 0;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] & levelBitMask) level.one(i);
+    }
+    numZeros[maxLevel] = level.rank0(level.length);
+
+    for (let l = 0; l < numLevels; l++) levels[l].finish();
 
     this.levels = levels;
     this.alphabetSize = alphabetSize;
@@ -230,8 +180,9 @@ export class WaveletMatrix {
     // todo: take the min with this.length, though figure out if this interferes
     // with our tree-walking strategy in the case that we double at every visited node...
     // i think large alphabets may violate some assumptions I've made... not sure which yet.
-    // multiplying length by 2 because I don't understand the worst-case behavior yet.
     const sz = Math.min(2 ** this.numLevels, this.alphabetSize, 2 * this.length);
+    // multiplying length by 2 because I don't understand the worst-case behavior yet.
+    // const sz = Math.min(2 ** this.numLevels, this.alphabetSize, 2 * this.length);
     // todo: buffer pool of scratch spaces
     // todo: these names are also getting quite silly (and inaccurate)
     this.F = new Uint32Array(sz); // firsts
@@ -263,8 +214,8 @@ export class WaveletMatrix {
   }
 
   // Returns the number of occurrences of `symbol` in the range [first, last). Also known as `rank`.
-  countSymbol(first, last, symbol, groupByLsb) {
-    const indices = this.symbolIndices(first, last, symbol, groupByLsb);
+  countSymbol(first, last, symbol, groupBits) {
+    const indices = this.symbolIndices(first, last, symbol, groupBits);
     return indices.last - indices.first;
   }
 
@@ -291,19 +242,19 @@ export class WaveletMatrix {
   }
 
   // Internal function returning the (first, last] index range covered by this symbol on the virtual bottom level,
-  // or on a higher level if groupByLsb > 0. `last - first` gives the symbol count within the provided range.
-  symbolIndices(first, last, symbol, groupByLsb = 0) {
-    const symbolGroupSize = 1 << groupByLsb;
+  // or on a higher level if groupBits > 0. `last - first` gives the symbol count within the provided range.
+  symbolIndices(first, last, symbol, groupBits = 0) {
+    const symbolGroupSize = 1 << groupBits;
     if (symbol % symbolGroupSize !== 0) {
       // note: could be done with bit math (check that low bits are zero)
-      throw new Error('symbol must evenly divide the block size implied by groupByLsb');
+      throw new Error('symbol must evenly divide the block size implied by groupBits');
     }
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
     if (first > last) throw new Error('last must be <= first');
     if (first === last) return 0;
     if (first > this.length) throw new Error('first must be < wavelet matrix length');
     if (this.numLevels === 0) return 0;
-    const numLevels = this.numLevels - groupByLsb;
+    const numLevels = this.numLevels - groupBits;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const first1 = level.rank1(first - 1);
@@ -367,21 +318,21 @@ export class WaveletMatrix {
     return this.countLessThan(first, last, upper) - this.countLessThan(first, last, lower);
   }
 
-  countSymbolBatch(first, last, sortedSymbols, groupByLsb = 0) {
+  countSymbolBatch(first, last, sortedSymbols, groupBits = 0) {
     // splitByMsb requires the same sortedSymbol to be searched for in each of the split paths.
     // for now, we'll go with the relatively inefficient route of asking that this be done by
     // supplying a larger set of sortedSymbols, enumerating all MSB variations in the high bits.
-    const symbolGroupSize = 1 << groupByLsb;
+    const symbolGroupSize = 1 << groupBits;
     for (const symbol of sortedSymbols) {
       if (symbol % symbolGroupSize !== 0)
         // note: could be done with bit math (check that low bits are zero)
-        throw new Error('symbol must evenly divide the block size implied by groupByLsb');
+        throw new Error('symbol must evenly divide the block size implied by groupBits');
     }
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     const { F, L, C, S } = this;
     const walk = new ArrayWalker(sortedSymbols.length === 0 ? 0 : 1, F.length);
-    const nextIndex = walk.nextStartIndex();
+    const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
     C[nextIndex] = sortedSymbols.length;
@@ -389,7 +340,7 @@ export class WaveletMatrix {
     walk.reset(F, L, C, S);
     let nRankCalls = 0;
 
-    const numLevels = this.numLevels - groupByLsb;
+    const numLevels = this.numLevels - groupBits;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
@@ -420,7 +371,7 @@ export class WaveletMatrix {
         // Note that this relies on the fact that the symbols in `S` are in sorted order,
         // since we're marching `k` across the sorted symbols array to reduce the search
         // space for the binary search calls to those symbols corresponding to this node.
-        // This means that we have to use `walk.nextEndIndex()` for both left and right children,
+        // This means that we have to use `walk.nextBackIndex()` for both left and right children,
         // since that's what gives rise to the sorted order of `S` its sorted order.
         // [lo, hi) is the range of sorted indices covered by this node
         const lo = k;
@@ -432,7 +383,7 @@ export class WaveletMatrix {
 
         if (numGoLeft > 0) {
           // go left
-          const nextIndex = walk.nextEndIndex();
+          const nextIndex = walk.nextBackIndex();
           F[nextIndex] = first0;
           L[nextIndex] = last0;
           C[nextIndex] = numGoLeft;
@@ -441,7 +392,7 @@ export class WaveletMatrix {
 
         if (numGoRight > 0) {
           // go right
-          const nextIndex = walk.nextEndIndex();
+          const nextIndex = walk.nextBackIndex();
           F[nextIndex] = nz + first1;
           L[nextIndex] = nz + last1;
           C[nextIndex] = numGoRight;
@@ -458,49 +409,65 @@ export class WaveletMatrix {
   }
 
   // todo: implement this in terms of a subcodes function?
-  subcodeMarker(subcodeSizesInBits) {
-    let selector = 0;
+  subcodeIndicator(subcodeSizesInBits) {
+    let indicator = 0; 
     let offset = 0;
     for (const sz of subcodeSizesInBits) {
       if (sz === 0) throw 'cannot have zero-sized field';
-      selector |= 1 << (sz + offset);
+      indicator |= 1 << (sz - 1 + offset);
       offset += sz;
     }
-    return selector;
+    return indicator >>> 0;
   }
-  // subcodes(marker, values) {
-  //   let selector = 0;
-  //   let offset = 0;
-  //   for (const sz of subcodeSizesInBits) {
-  //     if (sz === 0) throw 'cannot have zero-sized field';
-  //     selector |= 1 << (sz + offset);
-  //     offset += sz;
-  //   }
-  //   return selector;
-  // }
+
+  encodeSubcodes(indicator, values) {
+    if (indicator === 0) {
+      if (values.length !== 1) {
+        throw new Error('number of values must be one if the indicator is zero');
+      }
+      return values[0];
+    }
+    if (popcount(indicator) !== values.length) {
+      throw new Error('number of values must be equal to the number of 1 bits in the indicator');
+    }
+    let code = 0;
+    let offset = 0;
+    let i = 0;
+    while (indicator > 0) {
+      // todo: validate that values[i] is 0 <= v < 2^subcodeSize
+      const subcodeSize = trailing0(indicator) + 1;
+      code |= values[i] << offset;
+      i += 1;
+      offset += subcodeSize;
+      indicator >>>= subcodeSize // shift off this subcode
+    }
+    return code >>> 0;
+  }
 
   // Returns all of the distinct symbols [lower, upper] (inclusive) in the range [first, last)
   // together with their number of occurrences. Symbols are grouped and processed
-  // in groups of size 2^groupByLsb (symbols are grouped together when they
-  // differ only in their lowest `groupByLsb` bits)
+  // in groups of size 2^groupBits (symbols are grouped together when they
+  // differ only in their lowest `groupBits` bits)
   // Each distinct group is labeled by its lowest element, which represents
-  // the group containing symbols in the range [symbol, symbol + 2^groupByLsb).
+  // the group containing symbols in the range [symbol, symbol + 2^groupBits).
   //
-  counts(first, last, lower, upper, { groupByLsb = 0, subcodeMarker = 0, sort = true } = {}) {
-    const symbolGroupSize = 1 << groupByLsb;
+  counts(first, last, lower, upper, { groupBits = 0, subcodeIndicator = 0, sort = true } = {}) {
+    const symbolGroupSize = 1 << groupBits;
     // todo: handle lower === upper
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
     if (lower % symbolGroupSize !== 0)
-      throw new Error('lower must evenly divide the symbol block size implied by groupByLsb');
+      throw new Error('lower must evenly divide the symbol block size implied by groupBits');
     if ((upper + 1) % symbolGroupSize !== 0)
-      throw new Error('(upper + 1) must evenly divide the symbol block size implied by groupByLsb');
-    if (upper >= this.alphabetSize) throw new Error('upper must be < alphabetSize ([lower, upper] is inclusive)')
-    const numLevels = this.numLevels - groupByLsb;
+      throw new Error('(upper + 1) must evenly divide the symbol block size implied by groupBits');
+    // if (upper >= this.alphabetSize) throw new Error('upper must be < alphabetSize ([lower, upper] is inclusive)');
+    // ^ we now allow this so that subcode stuff works without us having to be unrealistic about the true alphabet size
+    // (eg. allow querying code consisting of all maximum subcodes)
+    const numLevels = this.numLevels - groupBits;
     const { F, L, S } = this; // firsts, lasts, symbols
 
     const walk = new ArrayWalker(1, F.length);
-    const nextIndex = walk.nextStartIndex();
+    const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
     S[nextIndex] = 0;
@@ -512,22 +479,22 @@ export class WaveletMatrix {
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
-      const levelBitMask = 1 << (this.maxLevel - l);
+      const levelBit = this.maxLevel - l;
+      const levelBitMask = 1 << levelBit;
 
       // Usually, the entire code is treated as a single integer, and the [lower, upper] range
       // limits the range of returned codes.
-      // It can be useful to instead treat the code as representing a concatenation of subcodeMarker,
+      // It can be useful to instead treat the code as representing a concatenation of subcodeIndicator,
       // and the [lower, upper] values as representing a concatenation of the ranges of those
-      // subcodeMarker. This behavior can be specified by the `subcodeMarker` argument, which is a
+      // subcodeIndicator. This behavior can be specified by the `subcodeIndicator` argument, which is a
       // bitmask in which a 1 bit indicates the onset of a new subcode and a 0 implies the continuation
       // of the current subcode. All range comparisons are done within a subcode, and the default
-      // subcodeMarker of 0 gives us the default behavior in which the full code is treated as
+      // subcodeIndicator of 0 gives us the default behavior in which the full code is treated as
       // a single subcode.
-      if ((subcodeMarker & levelBitMask) === 0) subcodeMask |= levelBitMask;
+      if ((subcodeIndicator & levelBitMask) === 0) subcodeMask |= levelBitMask;
       else subcodeMask = levelBitMask;
       const subcodeLower = lower & subcodeMask;
       const subcodeUpper = upper & subcodeMask;
-
       for (let i = 0; i < walk.len; i++) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
@@ -548,7 +515,7 @@ export class WaveletMatrix {
           const a = symbol & subcodeMask;
           const b = (a | (levelBitMask - 1)) & subcodeMask;
           if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
-            const nextIndex = sort ? walk.nextEndIndex() : walk.nextStartIndex();
+            const nextIndex = sort ? walk.nextBackIndex() : walk.nextFrontIndex();
             F[nextIndex] = first0;
             L[nextIndex] = last0;
             S[nextIndex] = symbol;
@@ -561,7 +528,7 @@ export class WaveletMatrix {
           const a = (symbol | levelBitMask) & subcodeMask;
           const b = (a | (levelBitMask - 1)) & subcodeMask;
           if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
-            const nextIndex = walk.nextEndIndex();
+            const nextIndex = walk.nextBackIndex();
             F[nextIndex] = nz + first1;
             L[nextIndex] = nz + last1;
             S[nextIndex] = symbol | levelBitMask;
@@ -610,8 +577,8 @@ export class WaveletMatrix {
     return { symbol, count: last - first, nRankCalls };
   }
 
-  quantileBatch(first, last, sortedIndices, groupByLsb = 0) {
-    const symbolGroupSize = 1 << groupByLsb;
+  quantileBatch(first, last, sortedIndices, groupBits = 0) {
+    const symbolGroupSize = 1 << groupBits;
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
 
@@ -626,7 +593,7 @@ export class WaveletMatrix {
 
     const { F, L, S, C } = this; // firsts, lasts, symbols, counts
     const walk = new ArrayWalker(sortedIndices.length === 0 ? 0 : 1, F.length);
-    const nextIndex = walk.nextStartIndex();
+    const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
     S[nextIndex] = 0;
@@ -639,8 +606,8 @@ export class WaveletMatrix {
 
     // note: grouping by LSB computes approximate quantiles where
     // the count of symbols assigned to each range is given by I,
-    // and I think the ranges are [symbol, symbol+2^groupByLsb).
-    const numLevels = this.numLevels - groupByLsb;
+    // and I think the ranges are [symbol, symbol+2^groupBits).
+    const numLevels = this.numLevels - groupBits;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
@@ -678,7 +645,7 @@ export class WaveletMatrix {
 
         if (numGoLeft > 0) {
           // go left
-          const nextIndex = walk.nextEndIndex();
+          const nextIndex = walk.nextBackIndex();
           F[nextIndex] = first0;
           L[nextIndex] = last0;
           S[nextIndex] = symbol;
@@ -687,7 +654,7 @@ export class WaveletMatrix {
 
         if (numGoRight > 0) {
           // go right
-          const nextIndex = walk.nextEndIndex();
+          const nextIndex = walk.nextBackIndex();
           F[nextIndex] = nz + (first - first0); // = nz + first1
           L[nextIndex] = nz + (last - last0); // = nz + last1
           S[nextIndex] = symbol | levelBitMask;
@@ -708,8 +675,8 @@ export class WaveletMatrix {
     return { symbols, counts, numSortedIndices, nRankCalls };
   }
 
-  quantiles(first, last, firstIndex, lastIndex, groupByLsb = 0) {
-    const symbolGroupSize = 1 << groupByLsb;
+  quantiles(first, last, firstIndex, lastIndex, groupBits = 0) {
+    const symbolGroupSize = 1 << groupBits;
     // todo: for some reason  quantiles(first, last, 0, 0) returns a single value rather than nothing.
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
@@ -718,7 +685,7 @@ export class WaveletMatrix {
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
     const { F, L, S, C, C2 } = this; // firsts, lasts, symbols, counts
     const walk = new ArrayWalker(firstIndex === lastIndex ? 0 : 1, F.length);
-    const nextIndex = walk.nextStartIndex();
+    const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
     S[nextIndex] = 0;
@@ -727,7 +694,7 @@ export class WaveletMatrix {
     walk.reset(F, L, S, C, C2);
     let nRankCalls = 0;
 
-    const numLevels = this.numLevels - groupByLsb;
+    const numLevels = this.numLevels - groupBits;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
@@ -751,7 +718,7 @@ export class WaveletMatrix {
 
         if (c < leftChildCount) {
           // go left
-          const nextIndex = walk.nextEndIndex();
+          const nextIndex = walk.nextBackIndex();
           F[nextIndex] = first0;
           L[nextIndex] = last0;
           S[nextIndex] = symbol;
@@ -761,7 +728,7 @@ export class WaveletMatrix {
 
         if (c2 > leftChildCount) {
           // go right
-          const nextIndex = walk.nextEndIndex();
+          const nextIndex = walk.nextBackIndex();
           F[nextIndex] = nz + (first - first0); // = nz + first1
           L[nextIndex] = nz + (last - last0); // = nz + last1
           S[nextIndex] = symbol | levelBitMask;
@@ -866,50 +833,50 @@ function binarySearchBefore(A, T, L, R) {
 // in from the back, and reset() will preserve all left children in order at
 // the front of the array, and move the right children in order immediately
 // after them. to interleave left and right in the order they are generated,
-// use nextEndIndex() for both the left and right outputs (we cannot use nextStartIndex()
+// use nextBackIndex() for both the left and right outputs (we cannot use nextFrontIndex()
 // for both, since that would overwrite elements as they are being processed
 // in left-to-right order).
 class ArrayWalker {
   constructor(len, cap) {
     this.len = len; // length taken by elements
     this.cap = cap; // capacity for additional elements
-    this.first = 0;
-    this.last = cap; // nextIndex + 1
+    this.frontIndex = 0;
+    this.backIndex = cap; // nextIndex + 1
   }
 
   // Return the next index from the front (left side) of the array
   // note: ensure that the current value has been retrieved before
   // writing to the left, since it will overwrite the current value.
-  nextStartIndex() {
-    const index = this.first;
-    this.first += 1;
+  nextFrontIndex() {
+    const index = this.frontIndex;
+    this.frontIndex += 1;
     return index;
   }
   // Return the next index from the back (right side) of the array
-  nextEndIndex() {
+  nextBackIndex() {
     // return the next index at which we can append an element
     // (as we fill the array in backwards from arr[cap - 1])
-    return (this.last -= 1);
+    return (this.backIndex -= 1);
   }
   reset(...arrays) {
     // move the filled-in elements from the end
     // to the front of the array
     for (let i = 0; i < arrays.length; i++) {
       const arr = arrays[i];
-      arr.set(arr.subarray(this.last, this.cap).reverse(), this.first);
+      arr.set(arr.subarray(this.backIndex, this.cap).reverse(), this.frontIndex);
       // reverse and move right elements following the first element.
       // explicit loop (in js this is slower):
-      // let n = this.first;
-      // for (let i = this.cap; i > this.last; ) {
+      // let n = this.frontIndex;
+      // for (let i = this.cap; i > this.backIndex; ) {
       //   i--
       //   arr[n] = arr[i];
       //   n++;
       // }
     }
     // apply the same logical change to the last and len markers
-    this.len = this.first + (this.cap - this.last);
-    this.first = 0;
-    this.last = this.cap;
+    this.len = this.frontIndex + (this.cap - this.backIndex);
+    this.frontIndex = 0;
+    this.backIndex = this.cap;
   }
 }
 
@@ -940,3 +907,6 @@ function intervalsOverlapInclusive(aLo, aHi, bLo, bHi) {
 
 // todo: make first, last also inclusive? maybe not; only issue would be arrays of size exactly 2^32/2^64.
 // todo: consider csc for sparse construction
+
+
+ // todo: walk.len -> length
