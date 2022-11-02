@@ -1,0 +1,331 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+  </head>
+  <body>
+    <ul id="vmACcT8Y">
+      <li id="Nk">
+        <p><a href="https://nitter.net/simonw/status/1572285367382061057">If someone gives you a CSV file with 100,000 rows in it, what tools do you use to start exploring and understanding that data?</a></p>
+      </li>
+      <li id="HtL">
+        <p/>
+      </li>
+      <li id="A2s">
+        <p>Optimization</p>
+        <ul>
+          <li id="I2W">
+            <p>There might be a way to improve the performance of histograms by calling a call back after each sub code is computed inside of `counts`. At that point, there are less nodes, and we can tally up the histogram for that dimension with less work than it would take on the leaf node. Not sure this is actually more efficient, but there might be a workable idea in the vicinity.</p>
+          </li>
+          <li id="Qi1">
+            <p><span>Large [owers-of-2 iteration can be slower than other increments due to </span><a href="https://en.algorithmica.org/hpc/cpu-cache/associativity/">cache associativity</a><span>. </span></p>
+            <ul>
+              <li id="afN">
+                <p>"The solution is usually simple: avoid iterating in powers of two, make the last dimensions of multi-dimensional arrays a slightly different size or use any other method to insert “holes” in the memory layout, or create some seemingly random bijection between the array indices and the locations where the data is actually stored."</p>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+      <li id="-u3">
+        <p/>
+      </li>
+      <li id="FGj">
+        <p>Datasets</p>
+        <ul>
+          <li id="rBy">
+            <p>https://twitter.com/simonw/status/1586869743360692225</p>
+            <ul>
+              <li id="PH_">
+                <p><a href="https://twitter.com/forestgregg/status/1586863785469411328">here's data on the legislative activity of the chicago city council since about 2011. about 150 thousand pieces of legislation, over 2 thousand meetings, and 4 million votes.</a></p>
+              </li>
+            </ul>
+          </li>
+          <li id="gsi">
+            <p><span>Look at </span><a href="https://www.informationisbeautifulawards.com/showcase/5499-census-mapper">Census Mapper</a></p>
+            <ul>
+              <li id="F_K">
+                <p>can we do a go-based expore-even-larger-datasets thing?</p>
+              </li>
+            </ul>
+          </li>
+          <li id="rQh">
+            <p/>
+          </li>
+        </ul>
+      </li>
+      <li id="FhU">
+        <p>Next</p>
+        <ul>
+          <li id="XD">
+            <p><span>[x] Implement </span><em>dist.bsort.wm</em><span> for large alphabets and consider </span><em>dist.dd.wm</em><span> for small alphabets as it has lower memory requirements.</span></p>
+            <ul>
+              <li id="IDD">
+                <p><span>With </span><em>bsort</em><span> we get zero count per level for free.</span></p>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+      <li id="ME3">
+        <p>Ultorg notes</p>
+        <ul>
+          <li id="iK">
+            <p>First thing: I went to the file menu looking for an "Open" option, which I didn't find there.</p>
+          </li>
+          <li id="Sm">
+            <p>Only show rows with special characters: Nice idea!</p>
+          </li>
+          <li id="07">
+            <p>Went to "Help" to find a link to a guide, which I didn't find there.</p>
+          </li>
+          <li id="D8">
+            <p>It's nice to see "row index" as a column – ties it back to the original file.</p>
+          </li>
+          <li id="YaD">
+            <p/>
+            <ul>
+              <li id="car">
+                <p/>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+      <li id="Oo">
+        <p><span>Explore for testing: </span><a href="https://wallabyjs.com/">Wallaby</a></p>
+      </li>
+      <li id="jmK">
+        <p/>
+      </li>
+      <li id="AVW">
+        <p><span>Python EDA Packages (</span><a href="https://towardsdatascience.com/data-frame-eda-packages-comparison-pandas-profiling-sweetviz-and-pandasgui-bbab4841943b#:~:text=Sweetviz%20is%20another%20Sweetviz%20is,fully%20self%2Dcontained%20HTML%20application.">article</a><span>)</span></p>
+        <ul>
+          <li id="Hj8">
+            <p><a href="https://pypi.org/project/pandas-profiling/">Panads Profiling</a><span>,</span></p>
+          </li>
+          <li id="Qer">
+            <p><span> </span><a href="https://github.com/fbdesignpro/sweetviz">SweetViz</a><span> (</span><a href="http://cooltiming.com/SWEETVIZ_REPORT.html">ex.</a><span>)</span></p>
+          </li>
+          <li id="lLj">
+            <p>Missing</p>
+          </li>
+          <li id="QNA">
+            <p>Zeros</p>
+          </li>
+          <li id="lil">
+            <p>Infinity</p>
+          </li>
+          <li id="ByB">
+            <p>-Infinity</p>
+          </li>
+          <li id="Ugx">
+            <p>NaN</p>
+          </li>
+          <li id="V64">
+            <p>Compare two datasets (eg. test vs. train)</p>
+          </li>
+        </ul>
+      </li>
+      <li id="I-">
+        <p>What we want are log-linear histograms.</p>
+        <ul>
+          <li id="Py">
+            <p>Like HDR hisotgram, UDDsketch, hg64, etc.</p>
+          </li>
+          <li id="H_">
+            <p>Each bin should represent a range [0-1), [100, 200), [1430, 1440)</p>
+          </li>
+          <li id="3Q">
+            <p>With 3 digits of decimal precision (X.XX) we can eg. say that the count is between 1.23 million and 1.24 million.</p>
+          </li>
+          <li id="0u">
+            <p/>
+          </li>
+        </ul>
+      </li>
+      <li id="hW">
+        <p>Previous</p>
+        <ul>
+          <li id="EjC">
+            <p/>
+          </li>
+          <li id="lgz">
+            <p>```</p>
+          </li>
+          <li id="370">
+            <p>esbuild bin.js --bundle --target=es2020 --format=esm --outfile=bin.bundle.js --watch</p>
+          </li>
+          <li id="A6">
+            <p>ws --https --static.maxage 0</p>
+          </li>
+          <li id="7Z">
+            <p>```</p>
+          </li>
+          <li id="_LX">
+            <p/>
+          </li>
+          <li id="QF">
+            <p>Explore</p>
+            <ul>
+              <li id="u9P">
+                <p><a href="http://www.hiveplot.net/talks/hive-plot.pdf">Hive Plot</a><span>: https://observablehq.com/@cbuie/hive-plot</span></p>
+              </li>
+              <li id="Y5L">
+                <p><span>Using something like </span><a href="https://observablehq.com/@jobleonard/number-encodings-as-trees">phase-in codes</a><span> to shorten the number of ones on the last level (use all codes that end with 1 before using codes that end with 0, i think is what we want to make all of the 1s on the bottom layer cluster leftwards? modulo bit reversal stuff... I need to draw some pictures)</span></p>
+              </li>
+            </ul>
+          </li>
+          <li id="VRN">
+            <p/>
+            <ul>
+              <li id="eug">
+                <p>Path can encode whether or not to take 'both' in the last level or not, depending on how many symbols we have – no need for specila case</p>
+              </li>
+              <li id="V5l">
+                <p>Replace the current batched rank implementation with the path version</p>
+              </li>
+              <li id="DGi">
+                <p>For Huffman-shaped wavelet matrices we can additionally store the number of nodes at each tree level, and use that to cap the number of iterations that we do when performing batched queries</p>
+              </li>
+              <li id="Trs">
+                <p/>
+              </li>
+            </ul>
+          </li>
+          <li id="ZpH">
+            <p>Ideas</p>
+            <ul>
+              <li id="3Hx">
+                <p>Can use the 'partial rank' idea to organize data like 311</p>
+                <ul>
+                  <li id="PEO">
+                    <p>High bits: Hexbins</p>
+                  </li>
+                  <li id="QrU">
+                    <p>Low bits: Issue type</p>
+                  </li>
+                  <li id="U7p">
+                    <p>(allows us to 'not distinguish' between issue types, so long as the number of hexbins is a power of 2 and totally distinct levels encode issue type (start performing batched rank, then return once all hexbin levels are processed))</p>
+                  </li>
+                </ul>
+              </li>
+              <li id="3Pq">
+                <p>The 'query path' encoding is equivalent to saying whether we want that bit in the symbol to be a one, zero, or either one (return disaggregated result for both values; or, if we stop at this level, then sum; so 4 possible values).</p>
+                <ul>
+                  <li id="Gnb">
+                    <p>What implications does this have for using Morton-like codes to also include a time dimension? eg. [18 bit morton followed by 14 bit time; ]</p>
+                    <ul>
+                      <li id="8OF">
+                        <p>probably want time first, so can do early stopping on the morton code (partial rank)</p>
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+              <li id="PZ1">
+                <p/>
+              </li>
+            </ul>
+          </li>
+          <li id="wZ">
+            <p>Applications</p>
+            <ul>
+              <li id="VnO">
+                <p>Horizon chart over a long time period - wavelet matrix per time series?</p>
+              </li>
+              <li id="8w">
+                <p>Dynamic ddsketch – store the log-bucket index per data point, and compute all symbol ranks in the time window to construct its ddsketch.</p>
+              </li>
+              <li id="4k9">
+                <p>Map with selection and associated data</p>
+              </li>
+              <li id="bn">
+                <p>311</p>
+                <ul>
+                  <li id="Ml">
+                    <p>issue type</p>
+                  </li>
+                  <li id="bJ">
+                    <p>timestamp (hours, say)</p>
+                  </li>
+                  <li id="VA">
+                    <p>hexlocation</p>
+                  </li>
+                  <li id="P1">
+                    <p/>
+                  </li>
+                  <li id="sq">
+                    <p>2 selects per issue to get index of start/end timestamp</p>
+                  </li>
+                  <li id="za">
+                    <p>then, for each issue, (lo, hi) batched rank query to get hex location boundaries</p>
+                  </li>
+                  <li id="Zo">
+                    <p>then subtract to get counts per issue</p>
+                  </li>
+                  <li id="sy">
+                    <p/>
+                  </li>
+                  <li id="w9">
+                    <p>WM</p>
+                    <ul>
+                      <li id="T4">
+                        <p>partitioned by issue type</p>
+                      </li>
+                      <li id="uc">
+                        <p>sorted by timestamp within each partition [but how do we timestamp range query if it is partitioned...]</p>
+                        <ul>
+                          <li id="Sf">
+                            <p>i think we can store an auxiliary select bitvector that gives us the boundaries of every hour within every issue partition.</p>
+                          </li>
+                          <li id="Ff">
+                            <p>We need rank also, so we know how many ones there are before each partition. Or just store the cumulative some per issue type in a dense array, since there aren't a lot of issue types I think. And we're already storing the issue offsets.</p>
+                          </li>
+                          <li id="Ks">
+                            <p/>
+                          </li>
+                        </ul>
+                      </li>
+                      <li id="3S">
+                        <p>symbol = hexlocation</p>
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+              <li id="A_U">
+                <p/>
+              </li>
+            </ul>
+          </li>
+          <li id="Fwl">
+            <p/>
+          </li>
+          <li id="a19">
+            <p>Datasets</p>
+            <ul>
+              <li id="-IB">
+                <p>Bitcoin price history, 2012-2021</p>
+                <ul>
+                  <li id="VM8">
+                    <p><a href="https://www.kaggle.com/datasets/mczielinski/bitcoin-historical-data">Original</a></p>
+                  </li>
+                  <li id="kqo">
+                    <p><a href="https://www.kaggle.com/datasets/kognitron/zielaks-bitcoin-historical-data-wo-nan">Without NaNs and with a datetime column</a></p>
+                  </li>
+                  <li id="lM6">
+                    <p/>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li id="ji">
+            <p/>
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </body>
+</html>
