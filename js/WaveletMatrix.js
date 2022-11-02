@@ -17,7 +17,7 @@ export class WaveletMatrix {
   // todo: pass in maxSymbol, with alphabetSize = maxSymbol + 1?
   constructor(data, alphabetSize) {
     // As a simple heuristic, use the large alphabet constructor when
-    // the alphabet sides exceeds the number of data points. We can 
+    // the alphabet sides exceeds the number of data points. We can
     //fine-tune this when we better understand the performance trade-offs
     // between the two methods.
     if (alphabetSize > data.length) {
@@ -125,9 +125,13 @@ export class WaveletMatrix {
   // Alternative construction algorithm for the 'sparse' case when the alphabet size
   // is significantly larger than the number of symbols that actually occur in the data.
   constructLargeAlphabet(data, alphabetSize) {
+    // todo: be more explicit about this; we need it for the walker (calls .subarray)
+    if (!(data instanceof Uint32Array)) data = new Uint32Array(data) //  throw new Error('data must be u32 array (for now?)')
     // todo: require this always? we need it here because we use .subarray in walk.reset
     // if (!(data instanceof Uint32Array)) data = new Uint32Array(data);
-    data = new Uint32Array(data); // note: without this we mutate our input
+    let perm = new Uint32Array(data.length); // note: without this we mutate our input
+    for (let i = 0; i < perm.length; i++) perm[i] = i;
+    let next = new Uint32Array(data.length);
 
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));
@@ -141,34 +145,34 @@ export class WaveletMatrix {
 
     const numZeros = new Uint32Array(numLevels);
     const walk = new ArrayWalker(0, data.length);
-    let next = new Uint32Array(data.length);
 
     for (let l = 0; l < maxLevel; l++) {
       const level = levels[l];
       const levelBit = maxLevel - l;
       const levelBitMask = 1 << levelBit;
       for (let i = 0; i < data.length; i++) {
-        const d = data[i];
+        const pi = perm[i]
+        const d = data[pi];
         if (d & levelBitMask) {
           level.one(i);
-          next[walk.nextBackIndex()] = d;
+          next[walk.nextBackIndex()] = pi;
         } else {
-          next[walk.nextFrontIndex()] = d;
+          next[walk.nextFrontIndex()] = pi;
         }
         numZeros[l] = walk.frontIndex;
       }
       walk.reset(next);
-      const tmp = data;
-      data = next;
+      const tmp = perm;
+      perm = next;
       next = tmp;
     }
-
 
     // For the last level we don't need to build anything but the bitvector
     const level = levels[maxLevel];
     const levelBitMask = 1 << 0;
     for (let i = 0; i < data.length; i++) {
-      if (data[i] & levelBitMask) level.one(i);
+        const pi = perm[i]
+      if (data[pi] & levelBitMask) level.one(i);
     }
     numZeros[maxLevel] = level.rank0(level.length);
 
@@ -418,7 +422,7 @@ export class WaveletMatrix {
 
   // todo: implement this in terms of a subcodes function?
   subcodeIndicator(subcodeSizesInBits) {
-    let indicator = 0; 
+    let indicator = 0;
     let offset = 0;
     for (const sz of subcodeSizesInBits) {
       if (sz === 0) throw 'cannot have zero-sized field';
@@ -447,7 +451,7 @@ export class WaveletMatrix {
       code |= values[i] << offset;
       i += 1;
       offset += subcodeSize;
-      indicator >>>= subcodeSize // shift off this subcode
+      indicator >>>= subcodeSize; // shift off this subcode
     }
     return code >>> 0;
   }
@@ -475,13 +479,19 @@ export class WaveletMatrix {
     // (eg. allow querying code consisting of all maximum subcodes)
     const numLevels = this.numLevels - groupBits;
 
-    let F, L, S, walk
-    if (isObjectLiteral(batch)) {
-      { F, L, S, walk } = batch
+    let F, L, S, walk; // firsts, lasts, symbols
+    const batchIsObjectLiteral = isObjectLiteral(batch)
+    if (batchIsObjectLiteral) {
+      F = batch.F;
+      L = batch.L;
+      S = batch.S;
+      walk = batch.walk;
       // reset the symbols since we will be computing symbols for this tree as we go.
       S.subarray(0, walk.len).fill(0);
     } else {
-      { F, L, S } = this; // firsts, lasts, symbols
+      F = this.F;
+      L = this.L;
+      S = this.S;
       walk = new ArrayWalker(1, F.length);
       const nextIndex = walk.nextFrontIndex();
       F[nextIndex] = first;
@@ -536,6 +546,7 @@ export class WaveletMatrix {
             F[nextIndex] = first0;
             L[nextIndex] = last0;
             S[nextIndex] = symbol;
+            if (batchIsObjectLiteral) batch.O[nextIndex] = batch.O[i]
           }
         }
 
@@ -549,6 +560,7 @@ export class WaveletMatrix {
             F[nextIndex] = nz + first1;
             L[nextIndex] = nz + last1;
             S[nextIndex] = symbol | levelBitMask;
+            if (batchIsObjectLiteral) batch.I[nextIndex] = batch.I[i]
           }
         }
       }
@@ -557,9 +569,12 @@ export class WaveletMatrix {
 
     // if we started off this processing run with intermediate state,
     // return the the new state.
-    if (batch === true) return { F, L, S, walk };
+    if (batch === true) {
+      const I = new Uint32Array(F.length); // how long should this be?
+      for (let i = 0; i < I.length; i++) I[i] = i;
+      return { F, L, S, I, walk }
+    };
     if (isObjectLiteral(batch)) return batch;
-    
 
     for (let i = 0; i < walk.len; i++) L[i] -= F[i];
     const counts = L.subarray(0, walk.len).slice();
@@ -931,5 +946,4 @@ function intervalsOverlapInclusive(aLo, aHi, bLo, bHi) {
 // todo: make first, last also inclusive? maybe not; only issue would be arrays of size exactly 2^32/2^64.
 // todo: consider csc for sparse construction
 
-
- // todo: walk.len -> length
+// todo: walk.len -> length
