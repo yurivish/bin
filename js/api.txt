@@ -1,3 +1,5 @@
+// build: esbuild bin.js --bundle --target=es2020 --format=esm --outfile=bin.bundle.js --watch
+
 count
 	count(first, last, symbol, { groupLsb })
 	countBatch(first, last, sortedSymbols, { groupLsb })
