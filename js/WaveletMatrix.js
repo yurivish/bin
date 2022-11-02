@@ -15,9 +15,13 @@ export class WaveletMatrix {
   // a wavelet matrix instead requires changing the borders computation (see section 5.3).
   // todo: check that all symbols are < alphabetSize
   // todo: pass in maxSymbol, with alphabetSize = maxSymbol + 1?
-  constructor(data, alphabetSize, { sparse = false } = {}) {
-    if (sparse) {
-      this.constructSparse(data, alphabetSize);
+  constructor(data, alphabetSize) {
+    // As a simple heuristic, use the large alphabet constructor when
+    // the alphabet sides exceeds the number of data points. We can 
+    //fine-tune this when we better understand the performance trade-offs
+    // between the two methods.
+    if (alphabetSize > data.length) {
+      this.constructLargeAlphabet(data, alphabetSize);
       return;
     }
 
@@ -118,7 +122,9 @@ export class WaveletMatrix {
     this.C2 = new Uint32Array(sz);
   }
 
-  constructSparse(data, alphabetSize, { sparse = false } = {}) {
+  // Alternative construction algorithm for the 'sparse' case when the alphabet size
+  // is significantly larger than the number of symbols that actually occur in the data.
+  constructLargeAlphabet(data, alphabetSize, { sparse = false } = {}) {
     // todo: call this a 'large alphabet' version?
     // todo: require this always? we need it here because we use .subarray in walk.reset
     if (!(data instanceof Uint32Array)) data = new Uint32Array(data);
