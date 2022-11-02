@@ -16,6 +16,11 @@
         <ul>
           <li id="I2W">
             <p>There might be a way to improve the performance of histograms by calling a call back after each sub code is computed inside of `counts`. At that point, there are less nodes, and we can tally up the histogram for that dimension with less work than it would take on the leaf node. Not sure this is actually more efficient, but there might be a workable idea in the vicinity.</p>
+            <ul>
+              <li id="tO">
+                <p>Actually, I don't think we need to track which high 32 bits are connected to which low 32 bits, so long as no subcodes span the boundary. This is because we're just aggregating by counting up every field individually.</p>
+              </li>
+            </ul>
           </li>
           <li id="Qi1">
             <p><span>Large [owers-of-2 iteration can be slower than other increments due to </span><a href="https://en.algorithmica.org/hpc/cpu-cache/associativity/">cache associativity</a><span>. </span></p>
