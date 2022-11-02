@@ -65,3 +65,8 @@ export function onesArray(block, ret = []) {
   enumerateOnes(block, ret.push.bind(ret));
   return ret;
 }
+
+// Utility taken from htl.
+export function isObjectLiteral(value) {
+  return value && value.toString === Object.prototype.toString;
+}

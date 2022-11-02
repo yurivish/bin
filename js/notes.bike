@@ -8,8 +8,28 @@
       <li id="Nk">
         <p><a href="https://nitter.net/simonw/status/1572285367382061057">If someone gives you a CSV file with 100,000 rows in it, what tools do you use to start exploring and understanding that data?</a></p>
       </li>
-      <li id="HtL">
+      <li id="QU">
         <p/>
+      </li>
+      <li id="HtL">
+        <p>Multi-int symbols</p>
+        <ul>
+          <li id="Qd">
+            <p>To count across trees, do the first query with batch = true.</p>
+          </li>
+          <li id="h8">
+            <p>From the return value we want to keep the symbols since they tell us the high bits of the eventual results.</p>
+          </li>
+          <li id="5z">
+            <p>But how do we line up those high bits with low bits?</p>
+          </li>
+          <li id="Ed">
+            <p>We can track the original index in another array, though I don't see how to do this for free in the unbatched case</p>
+          </li>
+          <li id="4W">
+            <p/>
+          </li>
+        </ul>
       </li>
       <li id="A2s">
         <p>Optimization</p>
@@ -18,7 +38,7 @@
             <p>There might be a way to improve the performance of histograms by calling a call back after each sub code is computed inside of `counts`. At that point, there are less nodes, and we can tally up the histogram for that dimension with less work than it would take on the leaf node. Not sure this is actually more efficient, but there might be a workable idea in the vicinity.</p>
           </li>
           <li id="Qi1">
-            <p><span>Large [owers-of-2 iteration can be slower than other increments due to </span><a href="https://en.algorithmica.org/hpc/cpu-cache/associativity/">cache associativity</a><span>. </span></p>
+            <p><span>Large [owers-of-2 iteration can be slower than other increments due to </span><a href="https://en.algorithmica.org/hpc/cpu-cache/associativity/">cache associativity</a><span>.  </span><a href="https://news.ycombinator.com/item?id=33429974">Interesting clarification w/ more details</a><span>.</span></p>
             <ul>
               <li id="afN">
                 <p>"The solution is usually simple: avoid iterating in powers of two, make the last dimensions of multi-dimensional arrays a slightly different size or use any other method to insert “holes” in the memory layout, or create some seemingly random bijection between the array indices and the locations where the data is actually stored."</p>

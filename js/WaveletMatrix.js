@@ -1,6 +1,6 @@
 import { BitVector } from './BitVector';
 import { ZeroCompressedBitVector } from './ZeroCompressedBitVector';
-import { reverseBits, reverseBits32, clamp, trailing0, popcount } from './util';
+import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral } from './util';
 // todo: range next value, range prev value (though these can be done using quantile), quantiles, majority,
 // intersection and more from "New algorithms on wavelet trees and applications to information retrieval"
 
@@ -157,6 +157,8 @@ export class WaveletMatrix {
       next = tmp;
     }
 
+
+    // For the last level we don't need to build anything but the bitvector
     const level = levels[maxLevel];
     const levelBitMask = 1 << 0;
     for (let i = 0; i < data.length; i++) {
@@ -450,8 +452,10 @@ export class WaveletMatrix {
   // differ only in their lowest `groupBits` bits)
   // Each distinct group is labeled by its lowest element, which represents
   // the group containing symbols in the range [symbol, symbol + 2^groupBits).
-  //
-  counts(first, last, lower, upper, { groupBits = 0, subcodeIndicator = 0, sort = true } = {}) {
+  // The batch argument indicates whether this query forms part of a multi-tree counts query.
+  // If it `true` or an object literal, the intermediate state will be returned rather than the final counts.
+  // If it is an object literal, its contents will be used as the starting state for counting.
+  counts(first, last, lower, upper, { groupBits = 0, subcodeIndicator = 0, sort = true, batch = false } = {}) {
     const symbolGroupSize = 1 << groupBits;
     // todo: handle lower === upper
     // these error messages could be improved, explaining that ignore bits tells us the power of two
@@ -464,18 +468,25 @@ export class WaveletMatrix {
     // ^ we now allow this so that subcode stuff works without us having to be unrealistic about the true alphabet size
     // (eg. allow querying code consisting of all maximum subcodes)
     const numLevels = this.numLevels - groupBits;
-    const { F, L, S } = this; // firsts, lasts, symbols
 
-    const walk = new ArrayWalker(1, F.length);
-    const nextIndex = walk.nextFrontIndex();
-    F[nextIndex] = first;
-    L[nextIndex] = last;
-    S[nextIndex] = 0;
-    walk.reset(F, L, S);
+    let F, L, S, walk
+    if (isObjectLiteral(batch)) {
+      { F, L, S, walk } = batch
+      // reset the symbols since we will be computing symbols for this tree as we go.
+      S.subarray(0, walk.len).fill(0);
+    } else {
+      { F, L, S } = this; // firsts, lasts, symbols
+      walk = new ArrayWalker(1, F.length);
+      const nextIndex = walk.nextFrontIndex();
+      F[nextIndex] = first;
+      L[nextIndex] = last;
+      S[nextIndex] = 0;
+      walk.reset(F, L, S);
+    }
 
+    // count inner
     let nRankCalls = 0;
     let subcodeMask = 0;
-
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
@@ -536,6 +547,12 @@ export class WaveletMatrix {
         }
       }
       walk.reset(F, L, S);
+    }
+
+    // if we started off this processing run with intermediate state,
+    // return the the new state.
+    if (isObjectLiteral(batch) || batch === true) {
+      return batch;
     }
 
     for (let i = 0; i < walk.len; i++) L[i] -= F[i];
@@ -838,7 +855,7 @@ function binarySearchBefore(A, T, L, R) {
 // in left-to-right order).
 class ArrayWalker {
   constructor(len, cap) {
-    this.len = len; // length taken by elements
+    this.len = len; // length taken up by existing elements
     this.cap = cap; // capacity for additional elements
     this.frontIndex = 0;
     this.backIndex = cap; // nextIndex + 1
