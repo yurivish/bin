@@ -15,16 +15,8 @@ export class WaveletMatrix {
   // a wavelet matrix instead requires changing the borders computation (see section 5.3).
   // todo: check that all symbols are < alphabetSize
   // todo: pass in maxSymbol, with alphabetSize = maxSymbol + 1?
-  constructor(data, alphabetSize) {
-    // As a simple heuristic, use the large alphabet constructor when
-    // the alphabet sides exceeds the number of data points. We can
-    //fine-tune this when we better understand the performance trade-offs
-    // between the two methods.
-    if (alphabetSize > data.length) {
-      this.constructLargeAlphabet(data, alphabetSize);
-      return;
-    }
-
+  constructor(data, alphabetSize, opts = {}) {
+    if (opts.largeAlphabet) return this.constructLargeAlphabet(data, alphabetSize, opts);
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));
     const maxLevel = numLevels - 1;
@@ -122,14 +114,19 @@ export class WaveletMatrix {
     this.C2 = new Uint32Array(sz);
   }
 
+  // largeAlphabet = alphabetSize > data.length
+  // As a simple heuristic, by default use the large alphabet constructor when
+  // the alphabet sides exceeds the number of data points. We can
+  // fine-tune this when we better understand the performance trade-offs
+  // between the two methods.
+
   // Alternative construction algorithm for the 'sparse' case when the alphabet size
   // is significantly larger than the number of symbols that actually occur in the data.
-  constructLargeAlphabet(data, alphabetSize) {
-    // todo: be more explicit about this; we need it for the walker (calls .subarray)
-    if (!(data instanceof Uint32Array)) data = new Uint32Array(data) //  throw new Error('data must be u32 array (for now?)')
-    // todo: require this always? we need it here because we use .subarray in walk.reset
-    // if (!(data instanceof Uint32Array)) data = new Uint32Array(data);
-    let perm = new Uint32Array(data.length); // note: without this we mutate our input
+  constructLargeAlphabet(data, alphabetSize, opts = {}) {
+    let { perm = new Uint32Array(data.length) } = opts;
+    // note: could be more efficient without the perm indirection, but it allows us to
+    // create meta-wavelet trees that consist of multiple underlying wavelent trees
+    // in order to increase the symbol space (ie. query 64-bit or larger symbols)
     for (let i = 0; i < perm.length; i++) perm[i] = i;
     let next = new Uint32Array(data.length);
 
@@ -151,7 +148,7 @@ export class WaveletMatrix {
       const levelBit = maxLevel - l;
       const levelBitMask = 1 << levelBit;
       for (let i = 0; i < data.length; i++) {
-        const pi = perm[i]
+        const pi = perm[i];
         const d = data[pi];
         if (d & levelBitMask) {
           level.one(i);
@@ -168,12 +165,21 @@ export class WaveletMatrix {
     }
 
     // For the last level we don't need to build anything but the bitvector
+    // update: now we do, if we want to return the perm...
     const level = levels[maxLevel];
     const levelBitMask = 1 << 0;
     for (let i = 0; i < data.length; i++) {
-        const pi = perm[i]
-      if (data[pi] & levelBitMask) level.one(i);
+      const pi = perm[i];
+      const d = data[pi];
+      // if (d & levelBitMask) level.one(i);
+      if (d & levelBitMask) {
+        level.one(i);
+        next[walk.nextBackIndex()] = pi;
+      } else {
+        next[walk.nextFrontIndex()] = pi;
+      }
     }
+    perm = next;
     numZeros[maxLevel] = level.rank0(level.length);
 
     for (let l = 0; l < numLevels; l++) levels[l].finish();
@@ -202,6 +208,7 @@ export class WaveletMatrix {
     this.S = new Uint32Array(sz); // symbols
     this.C = new Uint32Array(sz);
     this.C2 = new Uint32Array(sz);
+    opts.perm = perm;
   }
 
   symbol(index) {
@@ -480,7 +487,7 @@ export class WaveletMatrix {
     const numLevels = this.numLevels - groupBits;
 
     let F, L, S, walk; // firsts, lasts, symbols
-    const batchIsObjectLiteral = isObjectLiteral(batch)
+    const batchIsObjectLiteral = isObjectLiteral(batch);
     if (batchIsObjectLiteral) {
       F = batch.F;
       L = batch.L;
@@ -546,7 +553,7 @@ export class WaveletMatrix {
             F[nextIndex] = first0;
             L[nextIndex] = last0;
             S[nextIndex] = symbol;
-            if (batchIsObjectLiteral) batch.O[nextIndex] = batch.O[i]
+            if (batchIsObjectLiteral) batch.I[nextIndex] = batch.I[i];
           }
         }
 
@@ -560,11 +567,12 @@ export class WaveletMatrix {
             F[nextIndex] = nz + first1;
             L[nextIndex] = nz + last1;
             S[nextIndex] = symbol | levelBitMask;
-            if (batchIsObjectLiteral) batch.I[nextIndex] = batch.I[i]
+            if (batchIsObjectLiteral) batch.I[nextIndex] = batch.I[i];
           }
         }
       }
-      walk.reset(F, L, S);
+      if (batchIsObjectLiteral) walk.reset(F, L, S, batch.I);
+        else walk.reset(F, L, S);
     }
 
     // if we started off this processing run with intermediate state,
@@ -572,9 +580,11 @@ export class WaveletMatrix {
     if (batch === true) {
       const I = new Uint32Array(F.length); // how long should this be?
       for (let i = 0; i < I.length; i++) I[i] = i;
-      return { F, L, S, I, walk }
-    };
-    if (isObjectLiteral(batch)) return batch;
+      return { F, L, S, I, walk };
+    }
+    if (isObjectLiteral(batch)) { 
+      return batch;
+    }
 
     for (let i = 0; i < walk.len; i++) L[i] -= F[i];
     const counts = L.subarray(0, walk.len).slice();
