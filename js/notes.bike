@@ -16,14 +16,34 @@
         <ul>
           <li id="I2W">
             <p>There might be a way to improve the performance of histograms by calling a call back after each sub code is computed inside of `counts`. At that point, there are less nodes, and we can tally up the histogram for that dimension with less work than it would take on the leaf node. Not sure this is actually more efficient, but there might be a workable idea in the vicinity.</p>
+          </li>
+          <li id="oIQ">
+            <p>To count across trees, do the first query with batch = true.</p>
             <ul>
+              <li id="XEL">
+                <p>From the return value we want to keep the symbols since they tell us the high bits of the eventual results</p>
+              </li>
+              <li id="ark">
+                <p>But how do we line up those high bits with low bits?</p>
+              </li>
+              <li id="5zZ">
+                <p>We can track the original index in another array, though I don't see how to do this for free in the unbatched case.</p>
+              </li>
               <li id="tO">
                 <p>Actually, I don't think we need to track which high 32 bits are connected to which low 32 bits, so long as no subcodes span the boundary. This is because we're just aggregating by counting up every field individually.</p>
+              </li>
+              <li id="sUp">
+                <p>We need to permute the second tree by the first tree...</p>
+                <ul>
+                  <li id="sMl">
+                    <p>May be an argument for doing large alphabet construction w/ a permutation vector; can seed it with an initial permutation from the high-bits tree.</p>
+                  </li>
+                </ul>
               </li>
             </ul>
           </li>
           <li id="Qi1">
-            <p><span>Large [owers-of-2 iteration can be slower than other increments due to </span><a href="https://en.algorithmica.org/hpc/cpu-cache/associativity/">cache associativity</a><span>. </span></p>
+            <p><span>Large [owers-of-2 iteration can be slower than other increments due to </span><a href="https://en.algorithmica.org/hpc/cpu-cache/associativity/">cache associativity</a><span>. </span><a href="https://news.ycombinator.com/item?id=33429974">Interesting clarification with more details.</a></p>
             <ul>
               <li id="afN">
                 <p>"The solution is usually simple: avoid iterating in powers of two, make the last dimensions of multi-dimensional arrays a slightly different size or use any other method to insert “holes” in the memory layout, or create some seemingly random bijection between the array indices and the locations where the data is actually stored."</p>
