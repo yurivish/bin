@@ -124,10 +124,10 @@ export class WaveletMatrix {
 
   // Alternative construction algorithm for the 'sparse' case when the alphabet size
   // is significantly larger than the number of symbols that actually occur in the data.
-  constructLargeAlphabet(data, alphabetSize, { sparse = false } = {}) {
-    // todo: call this a 'large alphabet' version?
+  constructLargeAlphabet(data, alphabetSize) {
     // todo: require this always? we need it here because we use .subarray in walk.reset
-    if (!(data instanceof Uint32Array)) data = new Uint32Array(data);
+    // if (!(data instanceof Uint32Array)) data = new Uint32Array(data);
+    data = new Uint32Array(data); // note: without this we mutate our input
 
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));

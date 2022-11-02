@@ -32,3 +32,7 @@ revision proposal
 	countBatch => countSymbols
 
 	// not sure how to preserve symmetry with quantile/symbol, but i confused countRange with count today.
+
+	[] decide on consistency wrt. inclusive vs. exclusive endpoints
+
+
