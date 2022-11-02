@@ -469,10 +469,7 @@ export class WaveletMatrix {
   // differ only in their lowest `groupBits` bits)
   // Each distinct group is labeled by its lowest element, which represents
   // the group containing symbols in the range [symbol, symbol + 2^groupBits).
-  // The batch argument indicates whether this query forms part of a multi-tree counts query.
-  // If it `true` or an object literal, the intermediate state will be returned rather than the final counts.
-  // If it is an object literal, its contents will be used as the starting state for counting.
-  counts(first, last, lower, upper, { groupBits = 0, subcodeIndicator = 0, sort = true, batch = false } = {}) {
+  counts(first, last, lower, upper, { groupBits = 0, subcodeIndicator = 0, sort = true } = {}) {
     const symbolGroupSize = 1 << groupBits;
     // todo: handle lower === upper
     // these error messages could be improved, explaining that ignore bits tells us the power of two
@@ -486,26 +483,13 @@ export class WaveletMatrix {
     // (eg. allow querying code consisting of all maximum subcodes)
     const numLevels = this.numLevels - groupBits;
 
-    let F, L, S, walk; // firsts, lasts, symbols
-    const batchIsObjectLiteral = isObjectLiteral(batch);
-    if (batchIsObjectLiteral) {
-      F = batch.F;
-      L = batch.L;
-      S = batch.S;
-      walk = batch.walk;
-      // reset the symbols since we will be computing symbols for this tree as we go.
-      S.subarray(0, walk.len).fill(0);
-    } else {
-      F = this.F;
-      L = this.L;
-      S = this.S;
-      walk = new ArrayWalker(1, F.length);
-      const nextIndex = walk.nextFrontIndex();
-      F[nextIndex] = first;
-      L[nextIndex] = last;
-      S[nextIndex] = 0;
-      walk.reset(F, L, S);
-    }
+    const {F, L, S} = this; // firsts, lasts, symbols
+    const walk = new ArrayWalker(1, F.length);
+    const nextIndex = walk.nextFrontIndex();
+    F[nextIndex] = first;
+    L[nextIndex] = last;
+    S[nextIndex] = 0;
+    walk.reset(F, L, S);
 
     // count inner
     let nRankCalls = 0;
@@ -553,7 +537,6 @@ export class WaveletMatrix {
             F[nextIndex] = first0;
             L[nextIndex] = last0;
             S[nextIndex] = symbol;
-            if (batchIsObjectLiteral) batch.I[nextIndex] = batch.I[i];
           }
         }
 
@@ -567,25 +550,12 @@ export class WaveletMatrix {
             F[nextIndex] = nz + first1;
             L[nextIndex] = nz + last1;
             S[nextIndex] = symbol | levelBitMask;
-            if (batchIsObjectLiteral) batch.I[nextIndex] = batch.I[i];
           }
         }
       }
-      if (batchIsObjectLiteral) walk.reset(F, L, S, batch.I);
-        else walk.reset(F, L, S);
+      walk.reset(F, L, S);
     }
-
-    // if we started off this processing run with intermediate state,
-    // return the the new state.
-    if (batch === true) {
-      const I = new Uint32Array(F.length); // how long should this be?
-      for (let i = 0; i < I.length; i++) I[i] = i;
-      return { F, L, S, I, walk };
-    }
-    if (isObjectLiteral(batch)) { 
-      return batch;
-    }
-
+   
     for (let i = 0; i < walk.len; i++) L[i] -= F[i];
     const counts = L.subarray(0, walk.len).slice();
     const symbols = S.subarray(0, walk.len).slice();
