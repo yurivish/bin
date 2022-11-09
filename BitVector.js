@@ -1,4 +1,4 @@
-import { popcount } from './util';
+import { popcount } from './util.js';
 
 // todo: consider the space required during construction; can we reduce it?
 // todo: use the same { rank: true, select: true } constructor to support both ops;

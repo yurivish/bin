@@ -1,5 +1,4 @@
 .DS_Store
-zig-cache
-Makefile
-bin.wasm
-*/**/*.bundle.js
+node_modules
+misc
+dist

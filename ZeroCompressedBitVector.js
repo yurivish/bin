@@ -1,5 +1,5 @@
-import { BitVector } from './BitVector';
-import { popcount, trailing0 } from './util';
+import { BitVector } from './BitVector.js';
+import { popcount, trailing0 } from './util.js';
 
 // todo: do the zero compression after all ones exist in a subsequent filter pass
 // that's also the time to do select block indexing.

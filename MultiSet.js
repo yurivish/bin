@@ -1,5 +1,5 @@
-import { BitVector } from './BitVector';
-import { ZeroCompressedBitVector } from './ZeroCompressedBitVector';
+import { BitVector } from './BitVector.js';
+import { ZeroCompressedBitVector } from './ZeroCompressedBitVector.js';
 
 // represents a sorted list of integer elements (must be constructed from a sorted list)
 // todo: describe how it works (it keeps one bitmap of unique elements, and another of repetitions)
