@@ -6,7 +6,7 @@
   "main": "bin.js",
   "scripts": {
     "test": "mocha",
-    "build": "esbuild bin.js --bundle --target=es2020 --format=esm --outfile=bin.bundle.js"
+    "build": "esbuild bin.js --bundle --target=es2020 --format=esm --outfile=dist/bin.bundle.js"
   },
   "repository": {
     "type": "git",
