@@ -8,8 +8,52 @@
       <li id="Nk">
         <p><a href="https://nitter.net/simonw/status/1572285367382061057">If someone gives you a CSV file with 100,000 rows in it, what tools do you use to start exploring and understanding that data?</a></p>
       </li>
+      <li id="KyQ">
+        <p>Explanation design</p>
+        <ul>
+          <li id="DQe">
+            <p><a href="https://twitter.com/ctietze/status/1587822446534696960">Arrows</a></p>
+          </li>
+          <li id="t-O">
+            <p/>
+          </li>
+        </ul>
+      </li>
       <li id="HtL">
-        <p/>
+        <p>Considerations</p>
+        <ul>
+          <li id="5Qs">
+            <p>Multi-file datasets (same schema); eg. batches of csv</p>
+          </li>
+          <li id="C9f">
+            <p>JSON data, actually; not just a table. Maybe JSON is the first format to support?</p>
+          </li>
+        </ul>
+      </li>
+      <li id="2pL">
+        <p>Many-bit trees (&gt;32 bit)</p>
+        <ul>
+          <li id="Bg1">
+            <p>Assume we can build a many-level wavelet tree. We can do this by providing multiple parallel 32 bit arrays and using a permutation vector. (make a new large alphabet construction method).</p>
+          </li>
+          <li id="rUo">
+            <p>We can then do manylevel counts by accumulating symbol information into multiple S buffers, one for each 32 bits.</p>
+            <ul>
+              <li id="tx1">
+                <p>We need to take care with the highest level, since it might not be completely full (not all 32 bits have info).</p>
+              </li>
+              <li id="htE">
+                <p>We need to swap the symbol array every 32 levels.</p>
+              </li>
+              <li id="5Do">
+                <p>The level bit should also be determined mod 32 (though it's possible that JavaScript has wraparound behavior for shifts greater than 32 bits?)</p>
+              </li>
+              <li id="xFj">
+                <p/>
+              </li>
+            </ul>
+          </li>
+        </ul>
       </li>
       <li id="A2s">
         <p>Optimization</p>
@@ -51,9 +95,6 @@
             </ul>
           </li>
         </ul>
-      </li>
-      <li id="-u3">
-        <p/>
       </li>
       <li id="FGj">
         <p>Datasets</p>
@@ -119,9 +160,6 @@
       </li>
       <li id="Oo">
         <p><span>Explore for testing: </span><a href="https://wallabyjs.com/">Wallaby</a></p>
-      </li>
-      <li id="jmK">
-        <p/>
       </li>
       <li id="AVW">
         <p><span>Python EDA Packages (</span><a href="https://towardsdatascience.com/data-frame-eda-packages-comparison-pandas-profiling-sweetviz-and-pandasgui-bbab4841943b#:~:text=Sweetviz%20is%20another%20Sweetviz%20is,fully%20self%2Dcontained%20HTML%20application.">article</a><span>)</span></p>

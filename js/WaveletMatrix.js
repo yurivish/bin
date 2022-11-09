@@ -16,7 +16,8 @@ export class WaveletMatrix {
   // todo: check that all symbols are < alphabetSize
   // todo: pass in maxSymbol, with alphabetSize = maxSymbol + 1?
   constructor(data, alphabetSize, opts = {}) {
-    if (opts.largeAlphabet) return this.constructLargeAlphabet(data, alphabetSize, opts);
+    const { largeAlphabet = alphabetSize > data.length } = opts
+    if (largeAlphabet) return this.constructLargeAlphabet(data, alphabetSize, opts);
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));
     const maxLevel = numLevels - 1;
@@ -149,8 +150,8 @@ export class WaveletMatrix {
       for (let i = 0; i < data.length; i++) {
         const d = data[i];
         if (d & levelBitMask) {
-          level.one(i);
           next[walk.nextBackIndex()] = d;
+          level.one(i);
         } else {
           next[walk.nextFrontIndex()] = d;
         }
@@ -163,7 +164,6 @@ export class WaveletMatrix {
     }
 
     // For the last level we don't need to build anything but the bitvector
-    // update: now we do, if we want to return the perm...
     const level = levels[maxLevel];
     const levelBitMask = 1 << 0;
     for (let i = 0; i < data.length; i++) {
@@ -186,8 +186,8 @@ export class WaveletMatrix {
     // the same space across wavelet trees
     // todo: take the min with this.length, though figure out if this interferes
     // with our tree-walking strategy in the case that we double at every visited node...
-    // i think large alphabets may violate some assumptions I've made... not sure which yet.
-    const sz = Math.min(2 ** this.numLevels, this.alphabetSize, 2 * this.length);
+    // Update: I don't think it interferes so long as we never recurse into an empty node.
+    const sz = Math.min(2 ** this.numLevels, this.alphabetSize, this.length);
     // multiplying length by 2 because I don't understand the worst-case behavior yet.
     // const sz = Math.min(2 ** this.numLevels, this.alphabetSize, 2 * this.length);
     // todo: buffer pool of scratch spaces
