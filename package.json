@@ -1,0 +1,25 @@
+{
+  "name": "bin",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "data toolkit",
+  "main": "bin.js",
+  "scripts": {
+    "test": "mocha",
+    "build": "esbuild bin.js --bundle --target=es2020 --format=esm --outfile=bin.bundle.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yurivish/bin.git"
+  },
+  "author": "yuri vishnevsky",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/yurivish/bin/issues"
+  },
+  "homepage": "https://github.com/yurivish/bin#readme",
+  "devDependencies": {
+    "esbuild": "^0.15.13",
+    "mocha": "^10.1.0"
+  }
+}
