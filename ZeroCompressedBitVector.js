@@ -144,11 +144,11 @@ export class ZeroCompressedBitVector {
   }
 
   access(i) {
+    if (i < 0 || i > this.length) throw new Error('access: out of bounds');
     const uncompressedBlockIndex = i >>> 5;
     const numPrecedingZeroBlocks = this.isZeroBlock.rank1(uncompressedBlockIndex - 1);
     const isZeroBlock = this.isZeroBlock.access(uncompressedBlockIndex);
     i -= numPrecedingZeroBlocks << 5;
-    if (i < 0 || i > this.length) throw new Error('access: out of bounds');
     const blockIndex = i >>> 5;
     if (blockIndex >= this.blocks.length) return 0; // we're beyond the stored length
     const bitOffset = isZeroBlock ? 0 : i & 31;

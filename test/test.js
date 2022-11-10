@@ -5,8 +5,8 @@ import { NaiveBitVector } from './NaiveBitVector.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 
-function testBitVector(construct, methods, destroy = (d) => d) {
-  describe('BitVector', function () {
+function testBitVector(name, construct, methods, destroy = (d) => d) {
+  describe('bit vector: ' + name, function () {
     describe('constructor()', function () {
       it('should return a BitVector of the specified length', function () {
         for (const length of [0, 10, 1000]) {
@@ -19,7 +19,9 @@ function testBitVector(construct, methods, destroy = (d) => d) {
     describe('rank, select, and access', function () {
       // enumerate all permutations of nBits bits,
       // construct bitvectors for each, and
-      // check all ranks
+      // check all valid ranks, selects, and accesess
+      // against NaiveBitVector. Also check specific
+      // out-of-bounds values.
       const nBits = 8;
       const limit = 2 ** nBits - 1;
       for (let i = 0; i < limit; i++) {
@@ -50,7 +52,7 @@ function testBitVector(construct, methods, destroy = (d) => d) {
                 assert.equal(v.access(j), w.access(j)), `access(${j})`;
               }
               // test out-of-bounds results
-              for (const j of [-1, 1e6]) {
+              for (const j of [-1, length + 1]) {
                 if (methods.rank1) assert.equal(v.rank1(j), w.rank1(j), `rank1(${j})`);
                 if (methods.rank0) assert.equal(v.rank0(j), w.rank0(j), `rank0(${j})`);
                 if (methods.select1) assert.equal(v.select1(j), w.select1(j), `select1(${j})`);
@@ -67,14 +69,17 @@ function testBitVector(construct, methods, destroy = (d) => d) {
   });
 }
 
-testBitVector((length, opts) => new BitVector(length, opts), {
+testBitVector(
+  'BitVector',
+  (length, opts) => new BitVector(length, opts), {
   rank1: true,
   rank0: true,
   select1: true,
   select0: true,
 });
 
-testBitVector((length, opts) => new ZeroCompressedBitVector(length, opts), {
+testBitVector('ZeroCompressedBitVector',
+  (length, opts) => new ZeroCompressedBitVector(length, opts), {
   rank1: true,
   rank0: true,
   select1: true,
@@ -85,6 +90,7 @@ const c_bitvector_wasm = readFileSync('./dist/bitvector.wasm');
 const C = await WebAssembly.instantiate(c_bitvector_wasm).then((r) => r.instance.exports);
 
 testBitVector(
+  'CBitVector',
   (length, opts) => new CBitVector(length, opts, C),
   {
     rank1: true,
