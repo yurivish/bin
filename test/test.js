@@ -54,7 +54,7 @@ function testBitVector(construct, methods, destroy = (d) => d) {
                 if (methods.rank1) assert.equal(v.rank1(j), w.rank1(j), `rank1(${j})`);
                 if (methods.rank0) assert.equal(v.rank0(j), w.rank0(j), `rank0(${j})`);
                 if (methods.select1) assert.equal(v.select1(j), w.select1(j), `select1(${j})`);
-                if (v.select0) assert.equal(v.select0(j), w.select0(j), `select0(${j})`);
+                if (methods.select0) assert.equal(v.select0(j), w.select0(j), `select0(${j})`);
                 assert.throws(() => v.access(j), `access(${j})`);
                 assert.throws(() => w.access(j), `access(${j})`);
               }
@@ -68,7 +68,7 @@ function testBitVector(construct, methods, destroy = (d) => d) {
 }
 
 testBitVector(
-  (...args) => new BitVector(...args), {
+  (length, opts) => new BitVector(length, opts), {
   rank1: true,
   rank0: true,
   select1: true,
@@ -76,23 +76,23 @@ testBitVector(
 });
 
 testBitVector(
-  (...args) => new ZeroCompressedBitVector(...args), {
+  (length, opts) => new ZeroCompressedBitVector(length, opts), {
   rank1: true,
   rank0: true,
   select1: true,
-  select0: false /* not implemented */,
+  select0: false, // not implemented
 });
 
 const c_bitvector_wasm = readFileSync("./dist/bitvector.wasm")
 const C = await WebAssembly.instantiate(c_bitvector_wasm).then((r) => r.instance.exports);
 
 testBitVector(
-  length => new CBitVector(length, C),
+  (length, opts) => new CBitVector(length, opts, C),
   {
     rank1: true,
     rank0: true,
     select1: true,
-    select0: false /* not implemented */,
+    select0: true
   },
   (v) => v.destroy(),
 );

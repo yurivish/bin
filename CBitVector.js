@@ -7,7 +7,7 @@
 // let C = null;
 
 export class CBitVector {
-  constructor(length, C) {
+  constructor(length, opts, C) {
     this.C = C
     this.v = C.bitvector_init(length);
     if (this.v === 0) throw new Error('c_error: bitvector_init')
