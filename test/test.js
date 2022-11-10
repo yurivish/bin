@@ -3,7 +3,7 @@ import { CBitVector } from './../CBitVector.js';
 import { ZeroCompressedBitVector } from './../ZeroCompressedBitVector.js';
 import { NaiveBitVector } from './NaiveBitVector.js';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'fs';
+import { readFileSync } from 'fs';
 
 function testBitVector(construct, methods, destroy = (d) => d) {
   describe('BitVector', function () {
@@ -12,7 +12,7 @@ function testBitVector(construct, methods, destroy = (d) => d) {
         for (const length of [0, 10, 1000]) {
           const v = construct(length, { rank: true, select: true });
           assert.equal(v.length, length);
-          destroy(v)
+          destroy(v);
         }
       });
     });
@@ -67,23 +67,21 @@ function testBitVector(construct, methods, destroy = (d) => d) {
   });
 }
 
-testBitVector(
-  (length, opts) => new BitVector(length, opts), {
+testBitVector((length, opts) => new BitVector(length, opts), {
   rank1: true,
   rank0: true,
   select1: true,
   select0: true,
 });
 
-testBitVector(
-  (length, opts) => new ZeroCompressedBitVector(length, opts), {
+testBitVector((length, opts) => new ZeroCompressedBitVector(length, opts), {
   rank1: true,
   rank0: true,
   select1: true,
   select0: false, // not implemented
 });
 
-const c_bitvector_wasm = readFileSync("./dist/bitvector.wasm")
+const c_bitvector_wasm = readFileSync('./dist/bitvector.wasm');
 const C = await WebAssembly.instantiate(c_bitvector_wasm).then((r) => r.instance.exports);
 
 testBitVector(
@@ -92,7 +90,7 @@ testBitVector(
     rank1: true,
     rank0: true,
     select1: true,
-    select0: true
+    select0: true,
   },
   (v) => v.destroy(),
 );
