@@ -5,14 +5,14 @@ import { NaiveBitVector } from './NaiveBitVector.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 
-function testBitVector(name, construct, methods, destroy = (d) => d) {
+function testBitVector(name, construct, methods, destroy) {
   describe('bit vector: ' + name, function () {
     describe('constructor()', function () {
       it('should return a BitVector of the specified length', function () {
         for (const length of [0, 10, 1000]) {
           const v = construct(length, { rank: true, select: true });
           assert.equal(v.length, length);
-          destroy(v);
+          if (destroy) destroy(v);
         }
       });
     });
@@ -28,7 +28,7 @@ function testBitVector(name, construct, methods, destroy = (d) => d) {
         if (methods.select0) assert.equal(v.select0(j), -1, `select0(${j})`);
         assert.throws(() => v.access(j), `access(${j})`);
       }
-      destroy(v);
+      if (destroy) destroy(v);
     });
 
     describe('rank, select, and access', function () {
@@ -76,7 +76,7 @@ function testBitVector(name, construct, methods, destroy = (d) => d) {
                 assert.throws(() => v.access(j), `access(${j})`);
                 assert.throws(() => w.access(j), `access(${j})`);
               }
-              destroy(v);
+              if (destroy) destroy(v);
             });
           }
         }
