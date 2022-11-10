@@ -3,6 +3,7 @@ import { popcount } from './util.js';
 // todo: consider the space required during construction; can we reduce it?
 // todo: use the same { rank: true, select: true } constructor to support both ops;
 // though here, select implies rank. and we may want larger rank blocks for select.
+// todo: rename position to i/index
 export class BitVector {
   constructor(length) {
     // todo: interleave rank and bits blocks for improved rank performance (access slows down)
@@ -56,7 +57,7 @@ export class BitVector {
     // incorrect results if called with an out-of-bounds index that is
     // within the final block. So we do the bounds checks here too.
     // Can optimize via copy-pasting the rank1 impl in here.
-    return i - this.rank1(i) + 1;
+    return i + 1 - this.rank1(i);
   }
 
   // These select1 and select0 implementations use binary search over the array
@@ -71,10 +72,11 @@ export class BitVector {
   // zero-compressed select. Perform exponential rather than binary search (determine
   // when and why this might be more efficient).
   select1(i, L = 0, R = this.length) {
-    if (i < 1) throw new Error('out of bounds: i < 1');
-    if (i > this.numOnes) {
-      throw new Error(`out of bounds: i (${i}) > numOnes (${this.numOnes})`);
-    }
+    if (i < 1 || i > this.numOnes) return -1; 
+    // if (i < 1) throw new Error('out of bounds: i < 1');
+    // if (i > this.numOnes) {
+    //   throw new Error(`out of bounds: i (${i}) > numOnes (${this.numOnes})`);
+    // }
     // Search based on the structure of binarySearchBefore
     while (L < R) {
       const m = (L + R) >>> 1;
@@ -85,11 +87,8 @@ export class BitVector {
   }
 
   select0(i, L = 0, R = this.length) {
-    if (i < 1) throw new Error('out of bounds: i < 1');
     const numZeros = this.length - this.numOnes;
-    if (i > numZeros) {
-      throw new Error(`out of bounds: i (${i}) > numZeros (${numZeros})`);
-    }
+    if (i < 1 || i > numZeros) return -1; 
     // Search based on the structure of binarySearchBefore
     while (L < R) {
       const m = (L + R) >>> 1;

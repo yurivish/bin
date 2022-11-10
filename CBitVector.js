@@ -9,6 +9,7 @@ let c = null;
 export class CBitVector {
   constructor(length) {
     this.v = c.bitvector_init(length);
+    this.length = length
   }
   destroy() {
     c.bitvector_free(this.v);
@@ -33,7 +34,9 @@ export class CBitVector {
     return c.bitvector_select0(this.v, i | 0);
   }
   access(i) {
-    return c.bitvector_access(this.v, i | 0);
+    const ret = c.bitvector_access(this.v, i | 0)
+    if (ret == -1) throw new Error('access: out of bounds')
+    return ret;
   }
   approxSizeInBits() {
     return -1; // for now

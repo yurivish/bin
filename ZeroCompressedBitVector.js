@@ -116,6 +116,7 @@ export class ZeroCompressedBitVector {
   rank1(i) {
     if (!this.rank) throw new Error('no indexing structures for rank (see constructor)');
     if (i < 0) return 0;
+    if (i >= this.length) return this.numOnes;
     const uncompressedBlockIndex = i >>> 5;
     const numPrecedingZeroBlocks = this.isZeroBlock.rank1(uncompressedBlockIndex - 1);
     // todo: find a way to avoid this extra memory access in most cases
@@ -133,6 +134,11 @@ export class ZeroCompressedBitVector {
     const rankSuperbock = this.rankSuperblocks[blockIndex];
     const block = this.blocks[blockIndex];
     const mask = 0xfffffffe << lowBitIndex;
+    if (blockIndex >= this.blocks.length) {
+      // todo: figure out why we get here!
+      // console.log(blockIndex, this.length, this.blocks.length, 'oi',oi,'i', i, 'numPrecedingZeroBlocks',numPrecedingZeroBlocks, 'uncompressedBlockIndex',uncompressedBlockIndex);
+      // console.log(this, blockIndex, i, numPrecedingZeroBlocks);
+    }
     return rankSuperbock - popcount(block & mask);
   }
 
@@ -146,7 +152,7 @@ export class ZeroCompressedBitVector {
     const bitOffset = isZeroBlock ? 0 : i & 31;
     const block = this.blocks[blockIndex];
     const targetMask = 1 << bitOffset; // mask out the target bit
-    return Boolean(block & targetMask);
+    return +Boolean(block & targetMask);
   }
 
   rank0(i) {
@@ -162,11 +168,8 @@ export class ZeroCompressedBitVector {
   }
 
   select1(i) {
-    if (!this.select) throw new Error('no indexing structures for select (see constructor)');
-    if (i < 1) throw new Error('out of bounds: i < 1');
-    if (i > this.numOnes) {
-      throw new Error(`out of bounds: i (${i}) > numOnes (${this.numOnes})`);
-    }
+    if (!this.select) throw new Error('no indexing structures for select1 (see constructor)');
+    if (i < 1 || i > this.numOnes) return -1;
     const selectSuperblockIndex = (i - 1) >>> 5;
     const selectSuperblock = this.selectSuperblocks[selectSuperblockIndex];
     let blockIndex = selectSuperblock >>> 5;

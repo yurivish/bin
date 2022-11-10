@@ -229,6 +229,7 @@ export class WaveletMatrix {
   // Returns the index of the nth occurrence of `symbol` in the range [first, last). Also known as `select`.
   find(first, last, symbol, n) {
     const indices = this.symbolIndices(first, last, symbol, 0);
+    // return -1 if not found, cf. findFirst and family?
     if (indices.first === indices.last) throw new Error('symbol does not appear in index range');
     let index = indices.first + n - 1;
     for (let l = this.numLevels; l > 0; ) {
