@@ -1,5 +1,15 @@
 ideas
 - add subcode support to other functions where it makes sense (eg. count)
+	- countSymbolBatch
+		- need to think about how subcodes interact with our strategy of
+		  going through the sorted symbol list once per level (subcodes aren't
+		  globally sorted; only sorted within their preceding subcode bit prefix.
+		- i think we need different subcode ranges specified separately; would be nice
+		  if some can be specified as (lo, hi) and others as arrays, so we can do
+		  combination range and batch queries. (could specify global (lower, upper)
+		  and also specific batch overrides per level, making this an extension of
+		  counts.
+		- see if this can be simplified.
 - interleave rank/plain blocks in BitVector
 - interleave rank/plain blocks and fetch both at once as u64 in CBitVector
 - add groupBits suppoert where it makes sense
@@ -16,3 +26,4 @@ ideas
 	- RankMultiSet
 	- AccessMultiSet
 - wavelet matrix tests
+- figure out the scratch space story; bump allocator?
