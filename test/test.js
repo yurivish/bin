@@ -22,19 +22,15 @@ function testBitVector(name, construct, methods, destroy = (d) => d) {
       const v = construct(length, { rank: true, select: true });
       v.finish()
       for (const j of [0, 100]) {
-        if (methods.rank1) assert.equal(v.rank1(0), 0, `rank1(${j})`);
-        if (methods.rank1) assert.equal(v.rank1(100), 0, `rank1(${j})`);
-        if (methods.rank0) assert.equal(v.rank0(0), 0, `rank0(${j})`);
-        if (methods.rank0) assert.equal(v.rank1(100), 0, `rank0(${j})`);
-        if (methods.select1) assert.equal(v.select1(0), -1, `select1(${j})`);
-        if (methods.select1) assert.equal(v.select1(100), -1, `select1(${j})`);
-        if (methods.select0) assert.equal(v.select0(0), -1, `select0(${j})`);
-        if (methods.select0) assert.equal(v.select0(100), -1, `select0(${j})`);
+        if (methods.rank1) assert.equal(v.rank1(j), 0, `rank1(${j})`);
+        if (methods.rank0) assert.equal(v.rank0(j), 0, `rank0(${j})`);
+        if (methods.select1) assert.equal(v.select1(j), -1, `select1(${j})`);
+        if (methods.select0) assert.equal(v.select0(j), -1, `select0(${j})`);
         assert.throws(() => v.access(j), `access(${j})`);
       }
       destroy(v);
     })
-    
+
     describe('rank, select, and access', function () {
       // enumerate all permutations of nBits bits,
       // construct bitvectors for each, and
