@@ -5,7 +5,7 @@
   "description": "data toolkit",
   "main": "bin.js",
   "scripts": {
-    "test": "mocha --no-color --reporter min",
+    "test": "mocha --bail --no-color --reporter min",
     "build": "esbuild bin.js --bundle --target=es2020 --format=esm --outfile=dist/bin.bundle.js"
   },
   "repository": {

@@ -34,8 +34,8 @@ typedef struct {
   BLOCK_TYPE* rankSuperblocks;
   int numOnes;
   int maxOneIndex;
-  size_t length;
-  size_t storedLength;
+  int length;
+  int storedLength;
 } bitvector;
 
 int ceilDivide(int a, int b) {
@@ -48,19 +48,15 @@ bitvector* WASM_EXPORT(bitvector_init)(int length) {
   bitvector* v = malloc(sizeof(bitvector));
   if (v == NULL) return NULL;
   
-  if (length > 0) {
-    // allocate blocks
-    int numBlocks = ceilDivide(length, BLOCK_SIZE);
-    BLOCK_TYPE *blocks = malloc(numBlocks * sizeof(BLOCK_TYPE));
-    if (blocks == NULL) {
-      free(v);
-      return NULL;
-    }
-    for (int i = 0; i < numBlocks; i++) blocks[i] = 0;
-    v->blocks = blocks;
-  } else {
-    v->blocks = NULL;
+  // allocate blocks (even if length == 0)
+  int numBlocks = ceilDivide(length, BLOCK_SIZE);
+  BLOCK_TYPE *blocks = malloc(numBlocks * sizeof(BLOCK_TYPE));
+  if (blocks == NULL) {
+    free(v);
+    return NULL;
   }
+  for (int i = 0; i < numBlocks; i++) blocks[i] = 0;
+  v->blocks = blocks;
 
   v->rankSuperblocks = NULL;
   v->numOnes = 0;
@@ -71,7 +67,7 @@ bitvector* WASM_EXPORT(bitvector_init)(int length) {
 }
 
 int WASM_EXPORT(bitvector_one)(bitvector* v, int i) {
-  if ((size_t)i >= v->length) return ERROR; // i must be < length
+  if (i >= v->length) return ERROR; // i must be < length
   int blockIndex = i / BLOCK_SIZE; 
   int bitOffset = i % BLOCK_SIZE; // i & (BLOCK_SIZE - 1);
   v->blocks[blockIndex] |= 1ULL << bitOffset;
@@ -82,7 +78,6 @@ int WASM_EXPORT(bitvector_one)(bitvector* v, int i) {
 
 int WASM_EXPORT(bitvector_finish)(bitvector* v) {
   v->storedLength = v->maxOneIndex + 1;
-
   // reallocate blocks if we oversized initially
   int origNumBlocks = ceilDivide(v->length, BLOCK_SIZE); 
   int numBlocks = ceilDivide(v->storedLength, BLOCK_SIZE); 
@@ -117,7 +112,7 @@ int WASM_EXPORT(bitvector_finish)(bitvector* v) {
 // Might be better to just write it all in Zig.
 int WASM_EXPORT(bitvector_rank1)(bitvector* v, int i) {
   if (i < 0) return 0;
-  if ((size_t)i > v->storedLength) return v->numOnes;
+  if (i >= v->storedLength) return v->numOnes;
   int blockIndex = i / BLOCK_SIZE;
   int lowBitIndex = i % BLOCK_SIZE; // i & (BLOCK_SIZE - 1);
   BLOCK_TYPE rankSuperblock = v->rankSuperblocks[blockIndex];
@@ -133,7 +128,7 @@ int WASM_EXPORT(bitvector_rank0)(bitvector* v, int i) {
   // note: the final block is padded with zeros so rank0 will return
   // incorrect results if called with an out-of-bounds index that is
   // within the final block. So we do the bounds checks here too.
-  if ((size_t)i >= v->length) return v->length - v->numOnes;
+  if (i >= v->length) return v->length - v->numOnes;
   return i - bitvector_rank1(v, i) + 1;
 }
 
@@ -168,9 +163,10 @@ int WASM_EXPORT(bitvector_select0)(bitvector* v, int i) {
 }
 
 int WASM_EXPORT(bitvector_access)(bitvector* v, int i) {
-  if (i < 0 || (size_t)i > v->length) return ERROR; // access: out of bounds
+  if (i < 0 || i >= v->length) return ERROR; // access: out of bounds
+  if (i >= v->storedLength) return 0;
   int blockIndex = i / BLOCK_SIZE;
-  int bitOffset = i & (BLOCK_SIZE - 1);
+  int bitOffset = i % BLOCK_SIZE; // i & (BLOCK_SIZE - 1);
   BLOCK_TYPE block = v->blocks[blockIndex];
   BLOCK_TYPE targetMask = 1ULL << bitOffset; // mask out the target bit
   return (block & targetMask) != 0;

@@ -150,6 +150,7 @@ export class ZeroCompressedBitVector {
     i -= numPrecedingZeroBlocks << 5;
     if (i < 0 || i > this.length) throw new Error('access: out of bounds');
     const blockIndex = i >>> 5;
+    if (blockIndex >= this.blocks.length) return 0; // we're beyond the stored length
     const bitOffset = isZeroBlock ? 0 : i & 31;
     const block = this.blocks[blockIndex];
     const targetMask = 1 << bitOffset; // mask out the target bit
