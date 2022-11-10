@@ -125,8 +125,9 @@ export class ZeroCompressedBitVector {
     // up wm.access(i).
     const isZeroBlock = this.isZeroBlock.access(uncompressedBlockIndex); // returns 0 or 1
     i -= numPrecedingZeroBlocks << 5;
-    if (i >= this.storedLength) return this.numOnes;
     const blockIndex = i >>> 5;
+    // Checking against storedLength wouldn't be correct due to the existence of zero blocks.
+    if (blockIndex >= this.blocks.length) return this.numOnes;
     // whether i points inside a zero block; if yes, we will need
     // to adjust lowBitIndex so that we point to the last bit in
     // the closest nonzero block that precedes it.
