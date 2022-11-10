@@ -99,7 +99,7 @@ export class BitVector {
   }
 
   access(i) {
-    if (i < 0 || i > this.length) throw new Error('access: out of bounds at index ' + i +' with length '+this.length);
+    if (i < 0 || i >= this.length) throw new Error('access: out of bounds at index ' + i +' with length '+this.length);
     if (i >= this.storedLength) return 0;
     const blockIndex = i >>> 5;
     const bitOffset = i & 31;

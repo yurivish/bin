@@ -16,6 +16,25 @@ function testBitVector(name, construct, methods, destroy = (d) => d) {
         }
       });
     });
+
+    describe('zero length', function () {
+      const length = 0
+      const v = construct(length, { rank: true, select: true });
+      v.finish()
+      for (const j of [0, 100]) {
+        if (methods.rank1) assert.equal(v.rank1(0), 0, `rank1(${j})`);
+        if (methods.rank1) assert.equal(v.rank1(100), 0, `rank1(${j})`);
+        if (methods.rank0) assert.equal(v.rank0(0), 0, `rank0(${j})`);
+        if (methods.rank0) assert.equal(v.rank1(100), 0, `rank0(${j})`);
+        if (methods.select1) assert.equal(v.select1(0), -1, `select1(${j})`);
+        if (methods.select1) assert.equal(v.select1(100), -1, `select1(${j})`);
+        if (methods.select0) assert.equal(v.select0(0), -1, `select0(${j})`);
+        if (methods.select0) assert.equal(v.select0(100), -1, `select0(${j})`);
+        assert.throws(() => v.access(j), `access(${j})`);
+      }
+      destroy(v);
+    })
+    
     describe('rank, select, and access', function () {
       // enumerate all permutations of nBits bits,
       // construct bitvectors for each, and
@@ -25,9 +44,8 @@ function testBitVector(name, construct, methods, destroy = (d) => d) {
       const nBits = 8;
       const limit = 2 ** nBits - 1;
       for (let i = 0; i < limit; i++) {
-        // todo: test offset too
-        for (let offset = 0; offset < 2; offset++) {
-          for (let spacing = 1; spacing < 100; spacing += 25) {
+        for (let offset = 0; offset < 2; offset++) { // test ones at a starting offst
+          for (let spacing = 1; spacing < 101; spacing += 25) { // test ones densely packed and spaced out
             const length = offset + nBits * spacing;
             it(`should work on vectors with offset ${offset}, spacing ${spacing}, length ${length}, and bits ${i} = b${i.toString(
               2,
