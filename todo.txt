@@ -1,0 +1,18 @@
+ideas
+- add subcode support to other functions where it makes sense (eg. count)
+- interleave rank/plain blocks in BitVector
+- interleave rank/plain blocks and fetch both at once as u64 in CBitVector
+- add groupBits suppoert where it makes sense
+- add alpha-majority functionality (query evenly-spaced quantiles)
+- more bitvector tests
+	- large vectors
+	- dense vs sparse patterns
+	- clusters of various shapes
+	- large empty vectors
+	- add same one bit multiple times
+	- add one bits out of order
+	- verify zero-compression space savings
+- multiset tests
+	- RankMultiSet
+	- AccessMultiSet
+- wavelet matrix tests
