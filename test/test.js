@@ -8,7 +8,7 @@ import { readFileSync } from 'fs';
 const C = await WebAssembly.instantiate(readFileSync('./dist/bitvector.wasm')).then((r) => r.instance.exports);
 
 function testBitVector(T) {
-  describe('bit vector: ' + T.constructor.name, function () {
+  describe('bit vector: ' + T.prototype.constructor.name, function () {
     describe('constructor()', function () {
       it('should return a BitVector of the specified length', function () {
         for (const length of [0, 10, 1000]) {
@@ -149,7 +149,6 @@ function testBitVector(T) {
     }
   });
 }
-
 
 testBitVector(BitVector);
 testBitVector(CBitVector);
