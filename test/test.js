@@ -63,6 +63,14 @@ function testBitVector(T) {
     });
 
     describe('rank, select, and access', function () {
+      it('works when a 1-bit is on a block boundary', function() {
+        const v = new ZeroCompressedBitVector(760, { rank: true, select: true, C });
+        v.one(32);
+        v.finish();
+        assert.equal(v.rank1(0), 0, 'rank1(0)')
+        assert.equal(v.access(0), 0, 'access(0)')
+      });
+
       // enumerate all permutations of nBits bits,
       // construct bitvectors for each, and
       // check all valid ranks, selects, and accesess
@@ -142,12 +150,6 @@ function testBitVector(T) {
   });
 }
 
-// const v = new ZeroCompressedBitVector(760, { rank: true, select: true, C });
-// v.one(32);
-// v.finish();
-// console.log(v)
-// console.log(v.rank1(0), 'rank1')
-// console.log(v.access(0), 'access')
 
 testBitVector(BitVector);
 testBitVector(CBitVector);
