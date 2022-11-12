@@ -5,30 +5,61 @@ import { NaiveBitVector } from './NaiveBitVector.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 
-function testBitVector(name, construct, destroy) {
-  describe('bit vector: ' + name, function () {
+const C = await WebAssembly.instantiate(readFileSync('./dist/bitvector.wasm')).then((r) => r.instance.exports);
+
+function testBitVector(T) {
+  describe('bit vector: ' + T.constructor.name, function () {
     describe('constructor()', function () {
       it('should return a BitVector of the specified length', function () {
         for (const length of [0, 10, 1000]) {
-          const v = construct(length, { rank: true, select: true });
+          const v = new T(length, { rank: true, select: true, C });
           assert.equal(v.length, length);
-          if (destroy) destroy(v);
+          if (v.destroy) v.destroy();
         }
       });
     });
 
     describe('zero length', function () {
       const length = 0;
-      const v = construct(length, { rank: true, select: true });
+      const v = new T(length, { rank: true, select: true, C });
       v.finish();
       for (const j of [0, 100]) {
-        if (v.rank1) assert.equal(v.rank1(j), 0, `rank1(${j})`);
-        if (v.rank0) assert.equal(v.rank0(j), 0, `rank0(${j})`);
+        assert.equal(v.rank1(j), 0, `rank1(${j})`);
+        assert.equal(v.rank0(j), 0, `rank0(${j})`);
         if (v.select1) assert.equal(v.select1(j), -1, `select1(${j})`);
         if (v.select0) assert.equal(v.select0(j), -1, `select0(${j})`);
         assert.throws(() => v.access(j), `access(${j})`);
       }
-      if (destroy) destroy(v);
+      if (v.destroy) v.destroy();
+    });
+
+    describe('extrema', function () {
+      const length = 1e4;
+      it(`should work with all zeros`, function () {
+        const v = new T(length, { rank: true, select: true, C });
+        v.finish();
+        for (let j = 0; j < length; j++) {
+          assert.equal(v.rank1(j), 0, `rank1(${j})`);
+          assert.equal(v.rank0(j), j + 1, `rank0(${j})`);
+          if (v.select1) assert.equal(v.select1(j), -1, `select1(${j})`);
+          if (v.select0) assert.equal(v.select0(j + 1), j, `select0(${j})`);
+          assert.equal(v.access(j), 0, `access(${j})`);
+        }
+        if (v.destroy) v.destroy();
+      });
+      it(`should work with all ones`, function () {
+        const v = new T(length, { rank: true, select: true, C });
+        for (let i = 0; i < length; i++) v.one(i);
+        v.finish();
+        for (let j = 0; j < length; j++) {
+          assert.equal(v.rank1(j), j + 1, `rank1(${j})`);
+          assert.equal(v.rank0(j), 0, `rank0(${j})`);
+          if (v.select1) assert.equal(v.select1(j + 1), j, `select1(${j})`);
+          if (v.select0) assert.equal(v.select0(j), -1, `select0(${j})`);
+          assert.equal(v.access(j), 1, `access(${j})`);
+        }
+        if (v.destroy) v.destroy();
+      });
     });
 
     describe('rank, select, and access', function () {
@@ -49,10 +80,11 @@ function testBitVector(name, construct, destroy) {
             it(`should work on vectors with offset ${offset}, spacing ${spacing}, length ${length}, and bits ${i} = b${i.toString(
               2,
             )}`, function () {
-              const v = construct(length, { rank: true, select: true });
+              // construct
+              const v = new T(length, { rank: true, select: true, C });
               const w = new NaiveBitVector(length);
-              // for each 1 bit in i, add the respective one to the bitvector
               for (let j = 0; j < nBits; j++) {
+                // for each 1 bit in i, add the respective one to the bitvector
                 if (i & (1 << j)) {
                   v.one(j * spacing);
                   w.one(j * spacing);
@@ -61,22 +93,23 @@ function testBitVector(name, construct, destroy) {
               v.finish();
               w.finish();
               for (let j = 0; j < length; j++) {
-                if (v.rank1) assert.equal(v.rank1(j), w.rank1(j), `rank1(${j})`);
-                if (v.rank0) assert.equal(v.rank0(j), w.rank0(j), `rank0(${j})`);
+                // test in-bounds values
+                assert.equal(v.rank1(j), w.rank1(j), `rank1(${j})`);
+                assert.equal(v.rank0(j), w.rank0(j), `rank0(${j})`);
                 if (v.select1) assert.equal(v.select1(j), w.select1(j), `select1(${j})`);
                 if (v.select0) assert.equal(v.select0(j), w.select0(j), `select0(${j})`);
                 assert.equal(v.access(j), w.access(j)), `access(${j})`;
               }
-              // test out-of-bounds results
               for (const j of [-1000, -1, length + 1, length + 1000]) {
-                if (v.rank1) assert.equal(v.rank1(j), w.rank1(j), `rank1(${j})`);
-                if (v.rank0) assert.equal(v.rank0(j), w.rank0(j), `rank0(${j})`);
+                // test out-of-bounds results
+                assert.equal(v.rank1(j), w.rank1(j), `rank1(${j})`);
+                assert.equal(v.rank0(j), w.rank0(j), `rank0(${j})`);
                 if (v.select1) assert.equal(v.select1(j), w.select1(j), `select1(${j})`);
                 if (v.select0) assert.equal(v.select0(j), w.select0(j), `select0(${j})`);
                 assert.throws(() => v.access(j), `access(${j})`);
                 assert.throws(() => w.access(j), `access(${j})`);
               }
-              if (destroy) destroy(v);
+              if (v.destroy) v.destroy();
             });
           }
         }
@@ -85,15 +118,18 @@ function testBitVector(name, construct, destroy) {
   });
 }
 
-testBitVector('BitVector', (length, opts) => new BitVector(length, opts));
+// const v = new BitVector(1e4, { rank: true, select: true, C });
+// v.finish();
+// console.log(v.rank0(0), v.select0(123))
 
-testBitVector('ZeroCompressedBitVector', (length, opts) => new ZeroCompressedBitVector(length, opts));
+testBitVector(BitVector);
+testBitVector(ZeroCompressedBitVector);
+testBitVector(CBitVector);
 
-const c_bitvector_wasm = readFileSync('./dist/bitvector.wasm');
-const C = await WebAssembly.instantiate(c_bitvector_wasm).then((r) => r.instance.exports);
+// testBitVector('ZeroCompressedBitVector', (length, opts) => new ZeroCompressedBitVector(length, opts));
 
-testBitVector(
-  'CBitVector',
-  (length, opts) => new CBitVector(length, opts, C),
-  (v) => v.destroy(),
-);
+// testBitVector(
+//   'CBitVector',
+//   (length, opts) => new CBitVector(length, opts, C),
+//   (v) => v.destroy(),
+// );

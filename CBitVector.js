@@ -7,24 +7,24 @@
 // let C = null;
 
 export class CBitVector {
-  constructor(length, opts, C) {
-    this.C = C
+  constructor(length, opts) {
+    const { C } = opts;
+    this.C = C;
     this.v = C.bitvector_init(length);
-    if (this.v === 0) throw new Error('c_error: bitvector_init')
-    this.length = length
+    if (this.v === 0) throw new Error('c_error: bitvector_init');
+    this.length = length;
   }
   destroy() {
     const ret = this.C.bitvector_free(this.v);
-
   }
   one(i) {
     const ret = this.C.bitvector_one(this.v, i | 0);
-    if (ret === -1) throw new Error('c_error: bitvector_one')
+    if (ret === -1) throw new Error('c_error: bitvector_one');
     return ret;
   }
   finish() {
     const ret = this.C.bitvector_finish(this.v);
-    if (ret === -1) throw new Error('c_error: bitvector_finish')
+    if (ret === -1) throw new Error('c_error: bitvector_finish');
     return ret;
   }
   rank1(i) {
@@ -45,8 +45,8 @@ export class CBitVector {
     return ret;
   }
   access(i) {
-    const ret = this.C.bitvector_access(this.v, i | 0)
-    if (ret == -1) throw new Error('c_error: bitvector_access')
+    const ret = this.C.bitvector_access(this.v, i | 0);
+    if (ret == -1) throw new Error('c_error: bitvector_access');
     return ret;
   }
   approxSizeInBits() {

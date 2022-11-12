@@ -10,9 +10,7 @@ ideas
 		  and also specific batch overrides per level, making this an extension of
 		  counts.
 		- see if this can be simplified.
-- interleave rank/plain blocks in BitVector
-- interleave rank/plain blocks and fetch both at once as u64 in CBitVector
-- add groupBits suppoert where it makes sense
+- add groupBits support where it makes sense
 - add alpha-majority functionality (query evenly-spaced quantiles)
 - more bitvector tests
 	- large vectors
@@ -25,5 +23,13 @@ ideas
 - multiset tests
 	- RankMultiSet
 	- AccessMultiSet
+	- can we make a single (configurable) multiset now that we have rank/select for 1 and 0 on the plain vec?
 - wavelet matrix tests
 - figure out the scratch space story; bump allocator?
+- bitvcetor
+	- store only one of maxOnesIndex / storedLength; the latter is former plus 1
+	- only resize down in finish if the smaller size is eg. 90% of the larger size
+	- interleave rank/plain blocks in BitVector
+	- interleave rank/plain blocks and fetch both at once as u64 in CBitVector
+- wavelet matrix
+	- explore keeping an associated weight vector (RankMultiSet) in order to support weighted quantiles, counts, etc.
