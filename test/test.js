@@ -33,7 +33,7 @@ function testBitVector(T) {
       if (v.destroy) v.destroy();
     });
 
-    describe('extrema', function () {
+    describe('all full, all empty', function () {
       const length = 1e4;
       it(`should work with all zeros`, function () {
         const v = new T(length, { rank: true, select: true, C });
@@ -41,7 +41,7 @@ function testBitVector(T) {
         for (let j = 0; j < length; j++) {
           assert.equal(v.rank1(j), 0, `rank1(${j})`);
           assert.equal(v.rank0(j), j + 1, `rank0(${j})`);
-          if (v.select1) assert.equal(v.select1(j), -1, `select1(${j})`);
+          assert.equal(v.select1(j), -1, `select1(${j})`);
           if (v.select0) assert.equal(v.select0(j + 1), j, `select0(${j})`);
           assert.equal(v.access(j), 0, `access(${j})`);
         }
@@ -54,7 +54,7 @@ function testBitVector(T) {
         for (let j = 0; j < length; j++) {
           assert.equal(v.rank1(j), j + 1, `rank1(${j})`);
           assert.equal(v.rank0(j), 0, `rank0(${j})`);
-          if (v.select1) assert.equal(v.select1(j + 1), j, `select1(${j})`);
+          assert.equal(v.select1(j + 1), j, `select1(${j})`);
           if (v.select0) assert.equal(v.select0(j), -1, `select0(${j})`);
           assert.equal(v.access(j), 1, `access(${j})`);
         }
@@ -69,7 +69,8 @@ function testBitVector(T) {
       // against NaiveBitVector. Also check specific
       // out-of-bounds values that are just beyond/far
       // beyond the valid values.
-      const nBits = 8;
+      // todo: found a rank1 🐛 at 10 (should work on vectors with offset 0, spacing 76, length 760, and bits 256 = b100000000:)
+      const nBits = 10;
       const limit = 2 ** nBits - 1;
       for (let i = 0; i < limit; i++) {
         for (let offset = 0; offset < 2; offset++) {
@@ -96,7 +97,7 @@ function testBitVector(T) {
                 // test in-bounds values
                 assert.equal(v.rank1(j), w.rank1(j), `rank1(${j})`);
                 assert.equal(v.rank0(j), w.rank0(j), `rank0(${j})`);
-                if (v.select1) assert.equal(v.select1(j), w.select1(j), `select1(${j})`);
+                assert.equal(v.select1(j), w.select1(j), `select1(${j})`);
                 if (v.select0) assert.equal(v.select0(j), w.select0(j), `select0(${j})`);
                 assert.equal(v.access(j), w.access(j)), `access(${j})`;
               }
@@ -104,7 +105,7 @@ function testBitVector(T) {
                 // test out-of-bounds results
                 assert.equal(v.rank1(j), w.rank1(j), `rank1(${j})`);
                 assert.equal(v.rank0(j), w.rank0(j), `rank0(${j})`);
-                if (v.select1) assert.equal(v.select1(j), w.select1(j), `select1(${j})`);
+                assert.equal(v.select1(j), w.select1(j), `select1(${j})`);
                 if (v.select0) assert.equal(v.select0(j), w.select0(j), `select0(${j})`);
                 assert.throws(() => v.access(j), `access(${j})`);
                 assert.throws(() => w.access(j), `access(${j})`);
@@ -116,20 +117,40 @@ function testBitVector(T) {
       }
     });
   });
+
+  // todo: deterministic random
+  describe('randomized', function () {
+    const length = 1e5;
+    for (let i = 0; i < 5; i++) {
+      const v = new T(length, { rank: true, select: true, C });
+      const nv = new NaiveBitVector(length, { rank: true, select: true, C });
+      const n = Math.random();
+      for (let j = 0; j < n; j++) {
+        const i = Math.floor(length * Math.random());
+        v.one(i);
+        nv.one(i);
+      }
+      v.finish();
+      nv.finish();
+      for (let j = 0; j < length; j++) {
+        assert.equal(v.rank1(j), nv.rank1(j), `rank1(${j})`);
+        assert.equal(v.rank0(j), nv.rank0(j), `rank0(${j})`);
+        assert.equal(v.select1(j), nv.select1(j), `select1(${j})`);
+        assert.equal(v.access(j), nv.access(j), `access(${j})`);
+      }
+      if (v.destroy) v.destroy();
+    }
+  });
 }
 
-// const v = new BitVector(1e4, { rank: true, select: true, C });
+// const v = new ZeroCompressedBitVector(760, { rank: true, select: true, C });
+// v.one(32);
 // v.finish();
-// console.log(v.rank0(0), v.select0(123))
+// console.log(v)
+// console.log(v.rank1(0), 'rank1')
 
-testBitVector(BitVector);
+//          // should work on vectors with offset 0, spacing 76, length 760, and bits 256 = b100000000:
+
+// testBitVector(BitVector);
+// testBitVector(CBitVector);
 testBitVector(ZeroCompressedBitVector);
-testBitVector(CBitVector);
-
-// testBitVector('ZeroCompressedBitVector', (length, opts) => new ZeroCompressedBitVector(length, opts));
-
-// testBitVector(
-//   'CBitVector',
-//   (length, opts) => new CBitVector(length, opts, C),
-//   (v) => v.destroy(),
-// );

@@ -119,28 +119,34 @@ export class ZeroCompressedBitVector {
     if (i >= this.length) return this.numOnes;
     const uncompressedBlockIndex = i >>> 5;
     const numPrecedingZeroBlocks = this.isZeroBlock.rank1(uncompressedBlockIndex - 1);
+    console.log('numPrecedingZeroBlocks', numPrecedingZeroBlocks);
     // todo: find a way to avoid this extra memory access in most cases
     // (it's often in the same block as the call to rank1 above)
     // note: wavelet matrix also wants a combined accessAndRank(i) to speed
     // up wm.access(i).
     const isZeroBlock = this.isZeroBlock.access(uncompressedBlockIndex); // returns 0 or 1
+    console.log('isZeroBlock', isZeroBlock);
     i -= numPrecedingZeroBlocks << 5;
-    const blockIndex = i >>> 5;
+    const blockIndex = (i >>> 5) - isZeroBlock;
     // Checking against storedLength wouldn't be correct due to the existence of zero blocks.
+    if (blockIndex < 0) return 0;
     if (blockIndex >= this.blocks.length) return this.numOnes;
     // whether i points inside a zero block; if yes, we will need
     // to adjust lowBitIndex so that we point to the last bit in
     // the closest nonzero block that precedes it.
     const lowBitIndex = isZeroBlock ? 0 : i & 31; // could be (1 - isZeroBlock) * (i & 31)
-    const rankSuperbock = this.rankSuperblocks[blockIndex];
+    const rankSuperblock = this.rankSuperblocks[blockIndex];
     const block = this.blocks[blockIndex];
     const mask = 0xfffffffe << lowBitIndex;
+    console.log('blockIndex', blockIndex);
+    console.log('block', block.toString(2));
+    console.log('rankSuperblock', rankSuperblock);
+    console.log('mask', (mask >>> 0).toString(2));
+    console.log('block', block & mask);
     if (blockIndex >= this.blocks.length) {
-      // todo: figure out why we get here!
-      // console.log(blockIndex, this.length, this.blocks.length, 'oi',oi,'i', i, 'numPrecedingZeroBlocks',numPrecedingZeroBlocks, 'uncompressedBlockIndex',uncompressedBlockIndex);
-      // console.log(this, blockIndex, i, numPrecedingZeroBlocks);
+      throw new Error('ZeroCompressedBitVector: invariant violated');
     }
-    return rankSuperbock - popcount(block & mask);
+    return rankSuperblock - popcount(block & mask);
   }
 
   access(i) {

@@ -3,7 +3,6 @@ import { popcount } from './util.js';
 // todo: consider the space required during construction; can we reduce it?
 // todo: use the same { rank: true, select: true } constructor to support both ops;
 // though here, select implies rank. and we may want larger rank blocks for select.
-// todo: rename position to i/index
 export class BitVector {
   constructor(length) {
     // todo: interleave rank and bits blocks for improved rank performance (access slows down)
@@ -11,21 +10,21 @@ export class BitVector {
     const n = Math.ceil(length / 32);
     this.blocks = new Uint32Array(n);
     this.numOnes = 0;
-    this.maxOnePosition = -1;
+    this.maxOneIndex = -1;
     this.length = length;
   }
 
-  one(position) {
-    if (position >= this.length) throw new Error('position must be < length')
-    const blockIndex = position >>> 5;
-    const bitOffset = position & 31;
+  one(i) {
+    if (i >= this.length) throw new Error('i must be < length')
+    const blockIndex = i >>> 5;
+    const bitOffset = i & 31;
     this.blocks[blockIndex] |= 1 << bitOffset;
     this.numOnes += 1;
-    if (position > this.maxOnePosition) this.maxOnePosition = position;
+    if (i > this.maxOneIndex) this.maxOneIndex = i;
   }
 
   finish() {
-    this.storedLength = this.maxOnePosition + 1;
+    this.storedLength = this.maxOneIndex + 1;
     const numBlocks = Math.ceil(this.storedLength / 32);
     if (numBlocks < this.blocks.length) {
       this.blocks = this.blocks.slice(0, numBlocks);
