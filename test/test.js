@@ -69,8 +69,7 @@ function testBitVector(T) {
       // against NaiveBitVector. Also check specific
       // out-of-bounds values that are just beyond/far
       // beyond the valid values.
-      // todo: found a rank1 🐛 at 10 (should work on vectors with offset 0, spacing 76, length 760, and bits 256 = b100000000:)
-      const nBits = 10;
+      const nBits = 7; 
       const limit = 2 ** nBits - 1;
       for (let i = 0; i < limit; i++) {
         for (let offset = 0; offset < 2; offset++) {
@@ -148,9 +147,8 @@ function testBitVector(T) {
 // v.finish();
 // console.log(v)
 // console.log(v.rank1(0), 'rank1')
+// console.log(v.access(0), 'access')
 
-//          // should work on vectors with offset 0, spacing 76, length 760, and bits 256 = b100000000:
-
-// testBitVector(BitVector);
-// testBitVector(CBitVector);
+testBitVector(BitVector);
+testBitVector(CBitVector);
 testBitVector(ZeroCompressedBitVector);

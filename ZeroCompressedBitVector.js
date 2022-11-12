@@ -1,3 +1,6 @@
+//
+// note: this code passes tests, but is unnecessarily complex. See if we can refactor and simplify.
+//
 import { BitVector } from './BitVector.js';
 import { popcount, trailing0 } from './util.js';
 
@@ -119,13 +122,13 @@ export class ZeroCompressedBitVector {
     if (i >= this.length) return this.numOnes;
     const uncompressedBlockIndex = i >>> 5;
     const numPrecedingZeroBlocks = this.isZeroBlock.rank1(uncompressedBlockIndex - 1);
-    console.log('numPrecedingZeroBlocks', numPrecedingZeroBlocks);
+    // console.log('numPrecedingZeroBlocks', numPrecedingZeroBlocks);
     // todo: find a way to avoid this extra memory access in most cases
     // (it's often in the same block as the call to rank1 above)
     // note: wavelet matrix also wants a combined accessAndRank(i) to speed
     // up wm.access(i).
     const isZeroBlock = this.isZeroBlock.access(uncompressedBlockIndex); // returns 0 or 1
-    console.log('isZeroBlock', isZeroBlock);
+    // console.log('isZeroBlock', isZeroBlock);
     i -= numPrecedingZeroBlocks << 5;
     const blockIndex = (i >>> 5) - isZeroBlock;
     // Checking against storedLength wouldn't be correct due to the existence of zero blocks.
@@ -134,19 +137,19 @@ export class ZeroCompressedBitVector {
     // whether i points inside a zero block; if yes, we will need
     // to adjust lowBitIndex so that we point to the last bit in
     // the closest nonzero block that precedes it.
-    const lowBitIndex = isZeroBlock ? 0 : i & 31; // could be (1 - isZeroBlock) * (i & 31)
+    const lowBitIndex = i & 31; // could be (1 - isZeroBlock) * (i & 31)
     const rankSuperblock = this.rankSuperblocks[blockIndex];
     const block = this.blocks[blockIndex];
     const mask = 0xfffffffe << lowBitIndex;
-    console.log('blockIndex', blockIndex);
-    console.log('block', block.toString(2));
-    console.log('rankSuperblock', rankSuperblock);
-    console.log('mask', (mask >>> 0).toString(2));
-    console.log('block', block & mask);
+    // console.log('blockIndex', blockIndex);
+    // console.log('block', block.toString(2));
+    // console.log('rankSuperblock', rankSuperblock);
+    // console.log('mask', (mask >>> 0).toString(2));
+    // console.log('block', block & mask);
     if (blockIndex >= this.blocks.length) {
       throw new Error('ZeroCompressedBitVector: invariant violated');
     }
-    return rankSuperblock - popcount(block & mask);
+    return rankSuperblock - (isZeroBlock ? 0 : popcount(block & mask));
   }
 
   access(i) {
@@ -157,7 +160,9 @@ export class ZeroCompressedBitVector {
     i -= numPrecedingZeroBlocks << 5;
     const blockIndex = i >>> 5;
     if (blockIndex >= this.blocks.length) return 0; // we're beyond the stored length
-    const bitOffset = isZeroBlock ? 0 : i & 31;
+    if (isZeroBlock) return 0;
+
+    const bitOffset = i & 31;
     const block = this.blocks[blockIndex];
     const targetMask = 1 << bitOffset; // mask out the target bit
     return +Boolean(block & targetMask);
