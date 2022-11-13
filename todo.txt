@@ -33,3 +33,6 @@ ideas
 	- interleave rank/plain blocks and fetch both at once as u64 in CBitVector
 - wavelet matrix
 	- explore keeping an associated weight vector (RankMultiSet) in order to support weighted quantiles, counts, etc.
+	  unclear how to do this in the general case (what order do we store the weights in s. t. we can access the weight
+	  sum for an arbitrary node?) but we should do it for the non-large-alphabet case if possible...
+	- what if the 'unique value' for which we store repetitions is the element index?

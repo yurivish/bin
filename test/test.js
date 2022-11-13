@@ -8,18 +8,16 @@ import { readFileSync } from 'fs';
 const C = await WebAssembly.instantiate(readFileSync('./dist/bitvector.wasm')).then((r) => r.instance.exports);
 
 function testBitVector(T) {
-  describe('bit vector: ' + T.prototype.constructor.name, function () {
-    describe('constructor()', function () {
-      it('should return a BitVector of the specified length', function () {
-        for (const length of [0, 10, 1000]) {
-          const v = new T(length, { rank: true, select: true, C });
-          assert.equal(v.length, length);
-          if (v.destroy) v.destroy();
-        }
-      });
+  describe(T.prototype.constructor.name, function () {
+    it('constructor should return a BitVector of the specified length', function () {
+      for (const length of [0, 10, 1000]) {
+        const v = new T(length, { rank: true, select: true, C });
+        assert.equal(v.length, length);
+        if (v.destroy) v.destroy();
+      }
     });
 
-    describe('zero length', function () {
+    it('should support zero-length bitvectors', function () {
       const length = 0;
       const v = new T(length, { rank: true, select: true, C });
       v.finish();
@@ -33,51 +31,51 @@ function testBitVector(T) {
       if (v.destroy) v.destroy();
     });
 
-    describe('all full, all empty', function () {
+    it('should work if the bitvector is all 0', function () {
       const length = 1e4;
-      it(`should work with all zeros`, function () {
-        const v = new T(length, { rank: true, select: true, C });
-        v.finish();
-        for (let j = 0; j < length; j++) {
-          assert.equal(v.rank1(j), 0, `rank1(${j})`);
-          assert.equal(v.rank0(j), j + 1, `rank0(${j})`);
-          assert.equal(v.select1(j), -1, `select1(${j})`);
-          if (v.select0) assert.equal(v.select0(j + 1), j, `select0(${j})`);
-          assert.equal(v.access(j), 0, `access(${j})`);
-        }
-        if (v.destroy) v.destroy();
-      });
-      it(`should work with all ones`, function () {
-        const v = new T(length, { rank: true, select: true, C });
-        for (let i = 0; i < length; i++) v.one(i);
-        v.finish();
-        for (let j = 0; j < length; j++) {
-          assert.equal(v.rank1(j), j + 1, `rank1(${j})`);
-          assert.equal(v.rank0(j), 0, `rank0(${j})`);
-          assert.equal(v.select1(j + 1), j, `select1(${j})`);
-          if (v.select0) assert.equal(v.select0(j), -1, `select0(${j})`);
-          assert.equal(v.access(j), 1, `access(${j})`);
-        }
-        if (v.destroy) v.destroy();
-      });
+      const v = new T(length, { rank: true, select: true, C });
+      v.finish();
+      for (let j = 0; j < length; j++) {
+        assert.equal(v.rank1(j), 0, `rank1(${j})`);
+        assert.equal(v.rank0(j), j + 1, `rank0(${j})`);
+        assert.equal(v.select1(j), -1, `select1(${j})`);
+        if (v.select0) assert.equal(v.select0(j + 1), j, `select0(${j})`);
+        assert.equal(v.access(j), 0, `access(${j})`);
+      }
+      if (v.destroy) v.destroy();
+    });
+
+    it(`should work if the bitvector is all 1`, function () {
+      const length = 1e4;
+      const v = new T(length, { rank: true, select: true, C });
+      for (let i = 0; i < length; i++) v.one(i);
+      v.finish();
+      for (let j = 0; j < length; j++) {
+        assert.equal(v.rank1(j), j + 1, `rank1(${j})`);
+        assert.equal(v.rank0(j), 0, `rank0(${j})`);
+        assert.equal(v.select1(j + 1), j, `select1(${j})`);
+        if (v.select0) assert.equal(v.select0(j), -1, `select0(${j})`);
+        assert.equal(v.access(j), 1, `access(${j})`);
+      }
+      if (v.destroy) v.destroy();
+    });
+
+    it('should work when a 1-bit is on a block boundary', function () {
+      const v = new ZeroCompressedBitVector(760, { rank: true, select: true, C });
+      v.one(32);
+      v.finish();
+      assert.equal(v.rank1(0), 0, 'rank1(0)');
+      assert.equal(v.access(0), 0, 'access(0)');
     });
 
     describe('rank, select, and access', function () {
-      it('works when a 1-bit is on a block boundary', function() {
-        const v = new ZeroCompressedBitVector(760, { rank: true, select: true, C });
-        v.one(32);
-        v.finish();
-        assert.equal(v.rank1(0), 0, 'rank1(0)')
-        assert.equal(v.access(0), 0, 'access(0)')
-      });
-
       // enumerate all permutations of nBits bits,
       // construct bitvectors for each, and
       // check all valid ranks, selects, and accesess
       // against NaiveBitVector. Also check specific
       // out-of-bounds values that are just beyond/far
       // beyond the valid values.
-      const nBits = 7; 
+      const nBits = 6;
       const limit = 2 ** nBits - 1;
       for (let i = 0; i < limit; i++) {
         for (let offset = 0; offset < 2; offset++) {
@@ -123,30 +121,30 @@ function testBitVector(T) {
         }
       }
     });
-  });
 
-  // todo: deterministic random
-  describe('randomized', function () {
-    const length = 1e5;
-    for (let i = 0; i < 5; i++) {
-      const v = new T(length, { rank: true, select: true, C });
-      const nv = new NaiveBitVector(length, { rank: true, select: true, C });
-      const n = Math.random();
-      for (let j = 0; j < n; j++) {
-        const i = Math.floor(length * Math.random());
-        v.one(i);
-        nv.one(i);
+    // todo: deterministic random
+    it('should return correct results in randomized tests', function () {
+      const length = 1e5;
+      for (let i = 0; i < 5; i++) {
+        const v = new T(length, { rank: true, select: true, C });
+        const nv = new NaiveBitVector(length, { rank: true, select: true, C });
+        const n = Math.random();
+        for (let j = 0; j < n; j++) {
+          const i = Math.floor(length * Math.random());
+          v.one(i);
+          nv.one(i);
+        }
+        v.finish();
+        nv.finish();
+        for (let j = 0; j < length; j++) {
+          assert.equal(v.rank1(j), nv.rank1(j), `rank1(${j})`);
+          assert.equal(v.rank0(j), nv.rank0(j), `rank0(${j})`);
+          assert.equal(v.select1(j), nv.select1(j), `select1(${j})`);
+          assert.equal(v.access(j), nv.access(j), `access(${j})`);
+        }
+        if (v.destroy) v.destroy();
       }
-      v.finish();
-      nv.finish();
-      for (let j = 0; j < length; j++) {
-        assert.equal(v.rank1(j), nv.rank1(j), `rank1(${j})`);
-        assert.equal(v.rank0(j), nv.rank0(j), `rank0(${j})`);
-        assert.equal(v.select1(j), nv.select1(j), `select1(${j})`);
-        assert.equal(v.access(j), nv.access(j), `access(${j})`);
-      }
-      if (v.destroy) v.destroy();
-    }
+    });
   });
 }
 
