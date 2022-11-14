@@ -6,13 +6,26 @@ import { NaiveBitVector } from './NaiveBitVector.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 
-const doTestBitVector = false; // ⚠️
-const doTestWaveletMatrix = true;
+const doTestBitVector = !true; // ⚠️
+const doTestWaveletMatrix = true; 
+
+// const wm = new WaveletMatrix([0, 1, 2], 3, {largeAlphabet: false});
+// console.log(wm.counts(0, wm.length, 0, 2));
+
+// const wm = new WaveletMatrix([0, 1, 3, 7, 1, 5, 4], 8, {largeAlphabet:false});
+// console.log(wm.counts(0, wm.length, 0, 6));
+
+// const wm = new WaveletMatrix([0, 1, 3, 7, 1, 5, 4, 2, 6, 3], 8);
+// console.log(wm.counts(0, wm.length, 0, 8))
+
+
 
 // Wavelet matrix tests
-function testWaveletMatrix() {
+// todo: test with sort true/false (check equality of arr.sort())
+// todo: test with construction w/ largeAlphabet / not 
+function testWaveletMatrix(opts) {
   describe('wavelet matrix', function () {
-    const wm = new WaveletMatrix([0, 1, 3, 7, 1, 5, 4, 2, 6, 3], 8);
+    const wm = new WaveletMatrix([0, 1, 3, 7, 1, 5, 4, 2, 6, 3], 8, opts);
     it('counts correctly', function () {
       assert.equal(wm.countSymbol(0, wm.length, 3), 2);
       assert.equal(wm.countSymbol(0, wm.length - 1, 3), 1);
@@ -50,26 +63,25 @@ function testWaveletMatrix() {
         assert.deepStrictEqual(res.symbols, new Uint32Array([2]));
         assert.deepStrictEqual(res.counts, new Uint32Array([2]));
       }
+
       {
-        // const res = wm.counts(0, wm.length, 0, 8); // 🐛 returns only symbol 0
-        const res = wm.counts(0, wm.length, 0, 7); // 🐛 returns symbol 5 twice
-        console.log('res:', res);
-
+        const res = wm.counts(0, wm.length, 0, 7);
         assert.deepStrictEqual(res.symbols, new Uint32Array([0, 1, 2, 3, 4, 5, 6, 7]));
-        // assert.deepStrictEqual(res.counts, new Uint32Array([1, 2, 2, 1, 1, 1, 1, 1]));
+        assert.deepStrictEqual(res.counts, new Uint32Array([1, 2, 1, 2, 1, 1, 1, 1]));
       }
-
-      // {
-      //   const res = wm.counts(0, wm.length, 0, 8, {groupBits: 1});
-      //   assert.deepStrictEqual(res.symbols, new Uint32Array([2]));
-      //   assert.deepStrictEqual(res.counts, new Uint32Array([2]));
-      // }
+      
+      {
+        const res = wm.counts(0, wm.length, 0, 8);
+        assert.deepStrictEqual(res.symbols, new Uint32Array([0, 1, 2, 3, 4, 5, 6, 7]));
+        assert.deepStrictEqual(res.counts, new Uint32Array([1, 2, 1, 2, 1, 1, 1, 1]));
+      }
     });
   });
 }
 
 if (doTestWaveletMatrix) {
-  testWaveletMatrix();
+  testWaveletMatrix({ largeAlphabet: false });
+  testWaveletMatrix({ largeAlphabet: true });
 }
 
 // Bit vector tests

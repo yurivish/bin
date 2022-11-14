@@ -16,7 +16,7 @@ export class WaveletMatrix {
   // todo: check that all symbols are < alphabetSize
   // todo: pass in maxSymbol, with alphabetSize = maxSymbol + 1?
   constructor(data, alphabetSize, opts = {}) {
-    const { largeAlphabet = alphabetSize > data.length } = opts
+    const { largeAlphabet = alphabetSize > data.length } = opts;
     if (largeAlphabet) return this.constructLargeAlphabet(data, alphabetSize, opts);
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));
@@ -103,9 +103,10 @@ export class WaveletMatrix {
     // todo: take the min with this.length, though figure out if this interferes
     // with our tree-walking strategy in the case that we double at every visited node...
     // i think large alphabets may violate some assumptions I've made... not sure which yet.
-    const sz = Math.min(2 ** this.numLevels, this.alphabetSize);
-    // multiplying length by 2 because I don't understand the worst-case behavior yet.
-    // const sz = Math.min(2 ** this.numLevels, this.alphabetSize, 2 * this.length);
+    // Since for sorted symbols in the return value we need to always use the backIndex,
+    // the scratch spaces need to be able to hold (3/2)x the number of nodes (I think...)
+    // We should try using dynamically growable scratch spaces in the future, eg. arraylists.
+    const sz = 3 * (Math.min(2 ** this.numLevels, this.alphabetSize) >>> 1);
     // todo: buffer pool of scratch spaces
     // todo: these names are also getting quite silly (and inaccurate)
     this.F = new Uint32Array(sz); // firsts
@@ -184,10 +185,10 @@ export class WaveletMatrix {
     // todo: don't materialize these until needed - the alphabet might be big
     // and we can accept scratch space as an input parameter so we can reuse
     // the same space across wavelet trees
-    // todo: take the min with this.length, though figure out if this interferes
-    // with our tree-walking strategy in the case that we double at every visited node...
     // Update: I don't think it interferes so long as we never recurse into an empty node.
-    const sz = Math.min(2 ** this.numLevels, this.alphabetSize, this.length);
+    // const sz = Math.min(2 ** this.numLevels, this.alphabetSize)//, 2 * this.length);
+    const sz = 3 * (Math.min(2 ** this.numLevels, this.alphabetSize, 2 * this.length) >>> 1);
+
     // multiplying length by 2 because I don't understand the worst-case behavior yet.
     // const sz = Math.min(2 ** this.numLevels, this.alphabetSize, 2 * this.length);
     // todo: buffer pool of scratch spaces
@@ -471,7 +472,7 @@ export class WaveletMatrix {
     // (eg. allow querying code consisting of all maximum subcodes)
     const numLevels = this.numLevels - groupBits;
 
-    const {F, L, S} = this; // firsts, lasts, symbols
+    const { F, L, S } = this; // firsts, lasts, symbols
     const walk = new ArrayWalker(1, F.length);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
@@ -481,13 +482,14 @@ export class WaveletMatrix {
 
     // count inner
     let nRankCalls = 0;
-    let subcodeMask = 0;
+    // start with all 'extra' high bits set so that we properly handle an
+    // `upper` value above ceil(log2(alphabetSize))
+    let subcodeMask = 0xffffffff << numLevels;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
       const levelBit = this.maxLevel - l;
       const levelBitMask = 1 << levelBit;
-
       // Usually, the entire code is treated as a single integer, and the [lower, upper] range
       // limits the range of returned codes.
       // It can be useful to instead treat the code as representing a concatenation of subcodeIndicator,
@@ -543,7 +545,7 @@ export class WaveletMatrix {
       }
       walk.reset(F, L, S);
     }
-   
+
     for (let i = 0; i < walk.len; i++) L[i] -= F[i];
     const counts = L.subarray(0, walk.len).slice();
     const symbols = S.subarray(0, walk.len).slice();
