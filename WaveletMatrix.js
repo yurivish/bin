@@ -1,4 +1,4 @@
-import { CBitVector } from './CBitVector.js';
+import { BitVector } from './BitVector.js';
 import { ZeroCompressedBitVector } from './ZeroCompressedBitVector.js';
 import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral } from './util.js';
 // todo: range next value, range prev value (though these can be done using quantile), quantiles, majority,
@@ -30,7 +30,7 @@ export class WaveletMatrix {
     const levels = new Array(numLevels);
     // Initialize the level bit vectors
     for (let i = 0; i < numLevels; i++) {
-      levels[i] = new CBitVector(data.length);
+      levels[i] = new BitVector(data.length);
       // try this once bits can be added to it out-of-order
       // levels[i] = new ZeroCompressedBitVector(data.length, { rank: true });
     }
@@ -137,7 +137,7 @@ export class WaveletMatrix {
     // Initialize the level bit vectors
     const levels = new Array(numLevels);
     for (let i = 0; i < numLevels; i++) {
-      levels[i] = new CBitVector(data.length);
+      levels[i] = new BitVector(data.length);
     }
 
     const numZeros = new Uint32Array(numLevels);
@@ -892,7 +892,7 @@ function intervalsOverlapInclusive(aLo, aHi, bLo, bHi) {
 }
 
 // todo: assert that splitLsb + groupMsb <= numLevels
-// [] try implementing select in the CBitVector using binary search over ranks.
+// [] try implementing select in the BitVector using binary search over ranks.
 //    then we don't need any more space for select1 and select0, and we'll likely
 //    be doing few rank queries anyway since they correspond to wanting to connect
 //    back to the original data, ie. show the user something. the other use case
