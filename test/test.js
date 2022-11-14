@@ -6,17 +6,17 @@ import { NaiveBitVector } from './NaiveBitVector.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 
-const doTestBitVector = true; // ⚠️
+const doTestBitVector = !true; // ⚠️
 const doTestWaveletMatrix = true;
 
 // wm to test
 // x counts sort
 // - counts w/ subcodes
 // - counts w/ groupBits for all funcs that support it
-// - access
-// - quantile
+// x access
+// x quantile
 // - majority
-// - find
+// x find
 // - subcodeIndicator
 // - encodeSubcodes
 
@@ -36,7 +36,8 @@ const doTestWaveletMatrix = true;
 // [] test alphabetsize >> max symbol
 function testWaveletMatrix(wmOpts) {
   describe('wavelet matrix', function () {
-    const wm = new WaveletMatrix([0, 1, 3, 7, 1, 5, 4, 2, 6, 3], 8, wmOpts);
+    const data = [0, 1, 3, 7, 1, 5, 4, 2, 6, 3];
+    const wm = new WaveletMatrix(data, 8, wmOpts);
     it('counts correctly', function () {
       assert.equal(wm.countSymbol(0, wm.length, 3), 2);
       assert.equal(wm.countSymbol(0, wm.length - 1, 3), 1);
@@ -76,19 +77,8 @@ function testWaveletMatrix(wmOpts) {
           assert.deepStrictEqual(res.counts, new Uint32Array([2]));
         }
 
-        {
-          const res = wm.counts(0, wm.length, 0, 7, { sort });
-          if (sort) {
-            assert.deepStrictEqual(res.symbols, new Uint32Array([0, 1, 2, 3, 4, 5, 6, 7]));
-            assert.deepStrictEqual(res.counts, new Uint32Array([1, 2, 1, 2, 1, 1, 1, 1]));
-          } else {
-            assert.deepStrictEqual(res.symbols.sort(), new Uint32Array([0, 1, 2, 3, 4, 5, 6, 7]));
-            assert.deepStrictEqual(res.counts.sort(), new Uint32Array([1, 1, 1, 1, 1, 1, 2, 2]));
-          }
-        }
-
-        {
-          const res = wm.counts(0, wm.length, 0, 8, { sort });
+        for (const upper of [7, 8, 100]) {
+          const res = wm.counts(0, wm.length, 0, upper, { sort });
           if (sort) {
             assert.deepStrictEqual(res.symbols, new Uint32Array([0, 1, 2, 3, 4, 5, 6, 7]));
             assert.deepStrictEqual(res.counts, new Uint32Array([1, 2, 1, 2, 1, 1, 1, 1]));
@@ -98,6 +88,74 @@ function testWaveletMatrix(wmOpts) {
           }
         }
       }
+    });
+    it('quantiles correctly', function () {
+      {
+        const ret = wm.quantile(0, wm.length, 0);
+        assert.equal(ret.symbol, 0);
+        assert.equal(ret.count, 1);
+      }
+      {
+        const ret = wm.quantile(0, wm.length, 0);
+        assert.equal(ret.symbol, 0);
+        assert.equal(ret.count, 1);
+      }
+      {
+        const ret = wm.quantile(0, wm.length, 0);
+        assert.equal(ret.symbol, 0);
+        assert.equal(ret.count, 1);
+      }
+      {
+        const ret = wm.quantile(1, wm.length, 0);
+        assert.equal(ret.symbol, 1);
+        assert.equal(ret.count, 2);
+      }
+      {
+        const ret = wm.quantile(0, wm.length, 1);
+        assert.equal(ret.symbol, 1);
+        assert.equal(ret.count, 2);
+      }
+      {
+        const ret = wm.quantile(0, wm.length, 9);
+        assert.equal(ret.symbol, 7);
+        assert.equal(ret.count, 1);
+      }
+      {
+        const ret = wm.quantileBatch(0, wm.length, [0, 1, 9]);
+        assert.deepStrictEqual(ret.symbols, new Uint32Array([0, 1, 7]));
+        assert.deepStrictEqual(ret.counts, new Uint32Array([1, 2, 1]));
+      }
+      {
+        const ret = wm.quantiles(0, wm.length, 0, 1 + 1); // todo: upper index should be inclusive?
+        assert.deepStrictEqual(ret.symbols, new Uint32Array([0, 1]));
+        assert.deepStrictEqual(ret.counts, new Uint32Array([1, 2]));
+      }
+      //
+    });
+    it('accesses correctly', function () {
+      for (let i = 0; i < data.length; i++) {
+        assert.equal(wm.access(i), data[i]);
+      }
+      assert.throws(() => wm.access(-1), `access(-1)`);
+      assert.throws(() => wm.access(data.length), `access(data.length)`);
+    });
+
+    it('finds correctly', function () {
+      // data: [0, 1, 3, 7, 1, 5, 4, 2, 6, 3];
+      // init with a larger alphabet size so we can search for non-appearing symbols:
+      const wm = new WaveletMatrix(data, 10, wmOpts); 
+      assert.equal(wm.find(0, wm.length, 0, -1), -1);
+      assert.equal(wm.find(0, wm.length, 0, 0), -1);
+      assert.equal(wm.find(0, wm.length, 0, 1), 0);
+      assert.equal(wm.find(0, wm.length, 1, 1), 1);
+      assert.equal(wm.find(0, wm.length, 1, 0), -1);
+      assert.equal(wm.find(0, wm.length, 3, 1), 2);
+      assert.equal(wm.find(0, wm.length, 3, 2), 9);
+      assert.equal(wm.find(3, wm.length, 3, 1), 9);
+      assert.equal(wm.find(0, wm.length, 3, 3), -1);
+      assert.equal(wm.find(0, wm.length, 0, 2), -1);
+      assert.equal(wm.find(0, wm.length, 10, 1), -1);
+      assert.equal(wm.find(1, wm.length, 0, 1), -1);
     });
   });
 }

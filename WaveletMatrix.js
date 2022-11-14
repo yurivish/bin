@@ -204,8 +204,8 @@ export class WaveletMatrix {
     this.C2 = new Uint32Array(sz);
   }
 
-  symbol(index) {
-    if (index < 0 || index > this.length) throw new Error('symbol: out of bounds');
+  access(index) {
+    if (index < 0 || index > this.length) throw new Error('access: out of bounds');
     let symbol = 0;
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
@@ -233,8 +233,10 @@ export class WaveletMatrix {
 
   // Returns the index of the nth occurrence of `symbol` in the range [first, last). Also known as `select`.
   find(first, last, symbol, n) {
+    if (symbol < 0 || symbol >= this.alphabetSize) return -1;
+    if (n < 1 || symbol > this.length) return -1;
     const indices = this.symbolIndices(first, last, symbol, 0);
-    if (indices.first === indices.last) return -1; // in analogy with select
+    if (indices.last - indices.first < n) return -1; // in analogy with select
     let index = indices.first + n - 1;
     for (let l = this.numLevels; l > 0; ) {
       l -= 1;
