@@ -1,9 +1,78 @@
+import { WaveletMatrix } from './../WaveletMatrix.js';
 import { BitVector } from './../BitVector.js';
 import { CBitVector } from './../CBitVector.js';
 import { ZeroCompressedBitVector } from './../ZeroCompressedBitVector.js';
 import { NaiveBitVector } from './NaiveBitVector.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
+
+const doTestBitVector = false; // ⚠️
+const doTestWaveletMatrix = true;
+
+// Wavelet matrix tests
+function testWaveletMatrix() {
+  describe('wavelet matrix', function () {
+    const wm = new WaveletMatrix([0, 1, 3, 7, 1, 5, 4, 2, 6, 3], 8);
+    it('counts correctly', function () {
+      assert.equal(wm.countSymbol(0, wm.length, 3), 2);
+      assert.equal(wm.countSymbol(0, wm.length - 1, 3), 1);
+      assert.equal(wm.countSymbol(3, wm.length - 1, 3), 0);
+      assert.equal(wm.countSymbol(3, wm.length - 1, 5), 1);
+      assert.equal(wm.countLessThan(3, wm.length - 1, 5), 3);
+      assert.equal(wm.countLessThan(0, wm.length, 8), 10);
+      assert.equal(wm.countLessThan(0, wm.length, 7), 9);
+      assert.equal(wm.count(0, wm.length, 1, 7), 8);
+      assert.equal(wm.count(0, wm.length, 7, 7), 0);
+
+      {
+        const res = wm.countSymbolBatch(0, wm.length, [1, 2, 3]);
+        assert.deepStrictEqual(res.symbols, new Uint32Array([1, 2, 3]));
+        assert.deepStrictEqual(res.counts, new Uint32Array([2, 1, 2]));
+      }
+
+      {
+        const res = wm.countSymbolBatch(5, wm.length, [1, 2, 3]);
+        assert.deepStrictEqual(res.symbols, new Uint32Array([1, 2, 3]));
+        assert.deepStrictEqual(res.counts, new Uint32Array([0, 1, 1]));
+      }
+
+      {
+        const res = wm.counts(5, wm.length, 1, 3);
+        assert.deepStrictEqual(res.symbols, new Uint32Array([2, 3]));
+        assert.deepStrictEqual(res.counts, new Uint32Array([1, 1]));
+      }
+
+      {
+        // error: groupBits must evenly divide lower
+        assert.throws(() => wm.counts(5, wm.length, 1, 3, { groupBits: 1 }));
+
+        const res = wm.counts(5, wm.length, 0, 3, { groupBits: 1 });
+        assert.deepStrictEqual(res.symbols, new Uint32Array([2]));
+        assert.deepStrictEqual(res.counts, new Uint32Array([2]));
+      }
+      {
+        // const res = wm.counts(0, wm.length, 0, 8); // 🐛 returns only symbol 0
+        const res = wm.counts(0, wm.length, 0, 7); // 🐛 returns symbol 5 twice
+        console.log('res:', res);
+
+        assert.deepStrictEqual(res.symbols, new Uint32Array([0, 1, 2, 3, 4, 5, 6, 7]));
+        // assert.deepStrictEqual(res.counts, new Uint32Array([1, 2, 2, 1, 1, 1, 1, 1]));
+      }
+
+      // {
+      //   const res = wm.counts(0, wm.length, 0, 8, {groupBits: 1});
+      //   assert.deepStrictEqual(res.symbols, new Uint32Array([2]));
+      //   assert.deepStrictEqual(res.counts, new Uint32Array([2]));
+      // }
+    });
+  });
+}
+
+if (doTestWaveletMatrix) {
+  testWaveletMatrix();
+}
+
+// Bit vector tests
 
 const C = await WebAssembly.instantiate(readFileSync('./dist/bitvector.wasm')).then((r) => r.instance.exports);
 
@@ -148,6 +217,8 @@ function testBitVector(T) {
   });
 }
 
-testBitVector(BitVector);
-testBitVector(CBitVector);
-testBitVector(ZeroCompressedBitVector);
+if (doTestBitVector) {
+  testBitVector(BitVector);
+  testBitVector(CBitVector);
+  testBitVector(ZeroCompressedBitVector);
+}
