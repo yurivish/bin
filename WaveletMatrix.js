@@ -106,6 +106,10 @@ export class WaveletMatrix {
     // Since for sorted symbols in the return value we need to always use the backIndex,
     // the scratch spaces need to be able to hold (3/2)x the number of nodes (I think...)
     // We should try using dynamically growable scratch spaces in the future, eg. arraylists.
+    // Note that this also depends on the ArrayWalker – right now we iterate forwards and append
+    // to the back, which is why need the extra space. If we iterated backwards and appended to
+    // the back, then we could use less space, though we also need to ensure that we do all
+    // necessary array reversals to preserve the desired orderings / access patterns.
     const sz = 3 * (Math.min(2 ** this.numLevels, this.alphabetSize) >>> 1);
     // todo: buffer pool of scratch spaces
     // todo: these names are also getting quite silly (and inaccurate)
