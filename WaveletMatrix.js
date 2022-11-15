@@ -363,7 +363,7 @@ export class WaveletMatrix {
       const symbolBitMask = 0xffffffff << (this.maxLevel - l); // clears the low bits from a symbol, giving the left edge of its node
 
       let k = 0; // march k over the sorted symbols array
-      for (let i = 0; i < walk.len; i++) {
+      for (let i = 0; i < walk.length; i++) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
         const first0 = first - first1;
@@ -416,9 +416,9 @@ export class WaveletMatrix {
       walk.reset(F, L, C, S);
     }
 
-    for (let i = 0; i < walk.len; i++) L[i] -= F[i];
-    const counts = L.subarray(0, walk.len).slice();
-    const symbols = S.subarray(0, walk.len).slice();
+    for (let i = 0; i < walk.length; i++) L[i] -= F[i];
+    const counts = L.subarray(0, walk.length).slice();
+    const symbols = S.subarray(0, walk.length).slice();
     return { symbols, counts, nRankCalls };
   }
 
@@ -509,7 +509,7 @@ export class WaveletMatrix {
       else subcodeMask = levelBitMask;
       const subcodeLower = lower & subcodeMask;
       const subcodeUpper = upper & subcodeMask;
-      for (let i = 0; i < walk.len; i++) {
+      for (let i = 0; i < walk.length; i++) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
         const first0 = first - first1;
@@ -552,9 +552,9 @@ export class WaveletMatrix {
       walk.reset(F, L, S);
     }
 
-    for (let i = 0; i < walk.len; i++) L[i] -= F[i];
-    const counts = L.subarray(0, walk.len).slice();
-    const symbols = S.subarray(0, walk.len).slice();
+    for (let i = 0; i < walk.length; i++) L[i] -= F[i];
+    const counts = L.subarray(0, walk.length).slice();
+    const symbols = S.subarray(0, walk.length).slice();
     return { symbols, counts, nRankCalls };
   }
 
@@ -626,7 +626,7 @@ export class WaveletMatrix {
       const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l);
       let k = 0; // march k over the sorted indices array
-      for (let i = 0; i < walk.len; i++) {
+      for (let i = 0; i < walk.length; i++) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
         const first0 = first - first1;
@@ -678,13 +678,13 @@ export class WaveletMatrix {
       walk.reset(F, L, S, C);
     }
 
-    for (let i = 0; i < walk.len; i++) L[i] -= F[i];
-    const counts = L.subarray(0, walk.len).slice();
-    const symbols = S.subarray(0, walk.len).slice();
+    for (let i = 0; i < walk.length; i++) L[i] -= F[i];
+    const counts = L.subarray(0, walk.length).slice();
+    const symbols = S.subarray(0, walk.length).slice();
     // numSortedIndices indicates how many entries in sortedIndices are assigned
     // to each symbol. this is a more economical representation than a dense array of
     // length sortedIndices when multiple sortedIndices point to the same symbol.
-    const numSortedIndices = C.subarray(0, walk.len).slice();
+    const numSortedIndices = C.subarray(0, walk.length).slice();
     return { symbols, counts, numSortedIndices, nRankCalls };
   }
 
@@ -711,7 +711,7 @@ export class WaveletMatrix {
       const level = this.levels[l];
       const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l);
-      for (let i = 0; i < walk.len; i++) {
+      for (let i = 0; i < walk.length; i++) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
         const first0 = first - first1;
@@ -751,9 +751,9 @@ export class WaveletMatrix {
       walk.reset(F, L, S, C, C2);
     }
 
-    for (let i = 0; i < walk.len; i++) L[i] -= F[i];
-    const counts = L.subarray(0, walk.len).slice();
-    const symbols = S.subarray(0, walk.len).slice();
+    for (let i = 0; i < walk.length; i++) L[i] -= F[i];
+    const counts = L.subarray(0, walk.length).slice();
+    const symbols = S.subarray(0, walk.length).slice();
     return { symbols, counts, nRankCalls };
   }
 
@@ -869,8 +869,8 @@ function binarySearchBefore(A, T, L, R) {
 // for both, since that would overwrite elements as they are being processed
 // in left-to-right order).
 class ArrayWalker {
-  constructor(len, cap) {
-    this.len = len; // length taken up by existing elements
+  constructor(length, cap) {
+    this.length = length; // length taken up by existing elements
     this.cap = cap; // capacity for additional elements
     this.frontIndex = 0;
     this.backIndex = cap; // nextIndex + 1
@@ -905,8 +905,8 @@ class ArrayWalker {
       //   n++;
       // }
     }
-    // apply the same logical change to the last and len markers
-    this.len = this.frontIndex + (this.cap - this.backIndex);
+    // apply the same logical change to the last and length markers
+    this.length = this.frontIndex + (this.cap - this.backIndex);
     this.frontIndex = 0;
     this.backIndex = this.cap;
   }
@@ -917,27 +917,4 @@ function intervalsOverlapInclusive(aLo, aHi, bLo, bHi) {
   return aLo <= bHi && bLo <= aHi;
 }
 
-// todo: assert that splitLsb + groupMsb <= numLevels
-// [] try implementing select in the BitVector using binary search over ranks.
-//    then we don't need any more space for select1 and select0, and we'll likely
-//    be doing few rank queries anyway since they correspond to wanting to connect
-//    back to the original data, ie. show the user something. the other use case
-//    is to get a range of document indices back, but we can speed that up if/when
-//    we get there.
-// todo: can we infer a number of levels to ignore (groupLsb) from the symbol in countLessThan,
-// and the symbol range in the count function? (counts needs an explicit specifier since
-// it should be able to return values at multiple resolutions. But when the symbol range is
-// power-of-two-sized, I think we can just avoid reaching down into unnecessary levels.
-// (use xor+trailing0 to find the number of shared low bits?)
-
-// 🌶 i thought that .count was the 2d range version
-// todo: audit all conditional node expansion for whether we can prevent searching left/right
-// subtrees early when they have zero count (eg. floop)
-// todo: make lessThan into lessThanOrEqualTo, and same for other functions that filter on a symbol range
-// so that it is possible for symbols to cover the full space of the underlying datatype, eg. u32 and being
-// able to query for that last symbol.
-
-// todo: make first, last also inclusive? maybe not; only issue would be arrays of size exactly 2^32/2^64.
-// todo: consider csc for sparse construction
-
-// todo: walk.len -> length
+// todo: walk.length -> length
