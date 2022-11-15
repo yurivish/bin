@@ -35,4 +35,8 @@ ideas
 	- explore keeping an associated weight vector (RankMultiSet) in order to support weighted quantiles, counts, etc.
 	  unclear how to do this in the general case (what order do we store the weights in s. t. we can access the weight
 	  sum for an arbitrary node?) but we should do it for the non-large-alphabet case if possible...
+    - weighted counts can be accomplished for a particular symbol by indexing into a cumulative weight array stably sorted
+      in order of increasing symbol value (parallel with the implicit leaf nodes). We can use symbolIndices and then index
+      into the weight vector from the outside; no need to support this within the wavelet matrix itself.
+    - if we store cumulative weights at every level, then I think this gets us weighted quantile queries. Can use EF encoding.
 	- what if the 'unique value' for which we store repetitions is the element index?
