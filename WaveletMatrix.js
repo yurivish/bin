@@ -7,6 +7,10 @@ import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral
 // wavelet tree is from 2003, wavelet matrix is from oct. 2012
 // to do: hoist error objects to the top?
 
+// todo
+// [] figure out scratch spaces
+// [] 
+
 // note: implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
 export class WaveletMatrix {
@@ -16,6 +20,8 @@ export class WaveletMatrix {
   // todo: check that all symbols are < alphabetSize
   // todo: pass in maxSymbol, with alphabetSize = maxSymbol + 1?
   constructor(data, alphabetSize, opts = {}) {
+    // As a simple heuristic, by default use the large alphabet constructor when
+    // the alphabet sides exceeds the number of data points.
     const { largeAlphabet = alphabetSize > data.length } = opts;
     if (largeAlphabet) return this.constructLargeAlphabet(data, alphabetSize, opts);
     // data is an array of integer values in [0, alphabetSize)
@@ -120,12 +126,6 @@ export class WaveletMatrix {
     this.C2 = new Uint32Array(sz);
   }
 
-  // largeAlphabet = alphabetSize > data.length
-  // As a simple heuristic, by default use the large alphabet constructor when
-  // the alphabet sides exceeds the number of data points. We can
-  // fine-tune this when we better understand the performance trade-offs
-  // between the two methods.
-
   // Alternative construction algorithm for the 'sparse' case when the alphabet size
   // is significantly larger than the number of symbols that actually occur in the data.
   constructLargeAlphabet(data, alphabetSize, opts = {}) {
@@ -225,31 +225,31 @@ export class WaveletMatrix {
     return symbol;
   }
 
-  // Returns the number of occurrences of `symbol` in the range [first, last). Also known as `rank`.
+  // Returns the number of occurrences of `symbol` in the range [first, last).
   countSymbol(first, last, symbol, opts) {
     const indices = this.symbolIndices(first, last, symbol, opts);
     return indices.last - indices.first;
   }
 
-  // Returns the index of the nth occurrence of `symbol` in the range [first, last). Also known as `select`.
-  select(first, last, symbol, n) {
+  // Returns the index of the kth occurrence of `symbol` in the range [first, last).
+  select(first, last, symbol, k) {
     if (symbol < 0 || symbol >= this.alphabetSize) return -1;
-    if (n < 1 || symbol > this.length) return -1;
+    if (k < 1 || symbol > this.length) return -1;
     const indices = this.symbolIndices(first, last, symbol, 0);
-    if (indices.last - indices.first < n) return -1; // in analogy with select
-    let index = indices.first + n - 1;
+    if (indices.last - indices.first < k) return -1; // in analogy with select
+    let index = indices.first + k - 1;
     for (let l = this.numLevels; l > 0; ) {
       l -= 1;
       const level = this.levels[l];
       const nz = this.numZeros[l];
       if (index < nz) {
         // this position was mapped from a zero at the previous level
-        const n = index + 1; // this was the nth zero on the that level
-        index = level.select0(n); // locate the corresponding index on the preceding level
+        const k = index + 1; // this was the nth zero on the that level
+        index = level.select0(k); // locate the corresponding index on the preceding level
       } else {
         // this position was mapped from a one at the previous level
-        const n = index - nz + 1; // this was the nth one on the that level
-        index = level.select1(n); // locate the corresponding index on the preceding level
+        const k = index - nz + 1; // this was the nth one on the that level
+        index = level.select1(k); // locate the corresponding index on the preceding level
       }
     }
     return index;
@@ -422,7 +422,6 @@ export class WaveletMatrix {
     return { symbols, counts, nRankCalls };
   }
 
-  // todo: implement this in terms of a subcodes function?
   subcodeIndicator(subcodeSizesInBits) {
     let indicator = 0;
     let offset = 0;
@@ -458,7 +457,7 @@ export class WaveletMatrix {
     return code >>> 0;
   }
 
-  // Returns all of the distinct symbols [lower, upper] (inclusive) in the range [first, last)
+  // Returns all  distinct symbols [lower, upper] (inclusive) in the range [first, last)
   // together with their number of occurrences. Symbols are grouped and processed
   // in groups of size 2^groupBits (symbols are grouped together when they
   // differ only in their lowest `groupBits` bits)
@@ -689,7 +688,7 @@ export class WaveletMatrix {
   }
 
   quantiles(first, last, firstIndex, lastIndex) {
-    // todo: for some reason  quantiles(first, last, 0, 0) returns a single value rather than nothing.
+    // todo: for some reason quantiles(first, last, 0, 0) returns a single value rather than nothing.
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     if (firstIndex > lastIndex) throw new Error('firstIndex must be <= lastIndex');
@@ -795,32 +794,6 @@ export class WaveletMatrix {
     }
     return size;
   }
-
-  // For visualization
-  symbolPath(i) {
-    if (i < 0 || i > this.length) throw new Error('symbol: out of bounds');
-    let l = 0; // level index
-    let a = 0; // left symbol index
-    let b = (1 << this.numLevels) - 1; // right symbol index
-    const path = [];
-    while (a !== b) {
-      const level = this.levels[l];
-      const m = (a + b) >>> 1;
-      path.push({ index: i, bit: level.access(i) });
-      if (level.access(i) === 0) {
-        // go left
-        i = level.rank0(i - 1);
-        b = m;
-      } else {
-        // go right
-        const nz = this.numZeros[l];
-        i = nz + level.rank1(i - 1);
-        a = m + 1;
-      }
-      l += 1;
-    }
-    return { symbol: a, path, virtualLeafIndex: i };
-  }
 }
 
 // Find the rightmost insertion index in A for T
@@ -916,5 +889,3 @@ class ArrayWalker {
 function intervalsOverlapInclusive(aLo, aHi, bLo, bHi) {
   return aLo <= bHi && bLo <= aHi;
 }
-
-// todo: walk.length -> length
