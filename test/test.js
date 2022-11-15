@@ -1,7 +1,7 @@
-import { WaveletMatrix } from './../WaveletMatrix.js';
-import { BitVector } from './../BitVector.js';
-import { CBitVector } from './../CBitVector.js';
-import { ZeroCompressedBitVector } from './../ZeroCompressedBitVector.js';
+import { WaveletMatrix } from './../js/WaveletMatrix.js';
+import { BitVector } from './../js/BitVector.js';
+import { CBitVector } from './../js/CBitVector.js';
+import { ZeroCompressedBitVector } from './../js/ZeroCompressedBitVector.js';
 import { NaiveBitVector } from './NaiveBitVector.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
