@@ -15,10 +15,12 @@ const doTestWaveletMatrix = true; // ⚠️
 // x quantile
 // x majority
 // x find
-// - counts w/ subcodes
-// - counts w/ groupBits for all funcs that support it
-// - subcodeIndicator
-// - encodeSubcodes
+// x counts w/ subcodes
+// x counts w/ groupBits for all funcs that support it
+// - countSymbolBatch/quantileBatch/quantiles with groupBits
+// - groupBits should be a keyword arg in all cases?
+// x subcodeIndicator
+// x encodeSubcodes
 
 // const wm = new WaveletMatrix([0, 1, 2], 3, {largeAlphabet: false});
 // console.log(wm.counts(0, wm.length, 0, 2));
@@ -46,6 +48,12 @@ function testWaveletMatrix(wmOpts) {
       assert.equal(wm.countSymbol(0, wm.length - 1, 3), 1);
       assert.equal(wm.countSymbol(3, wm.length - 1, 3), 0);
       assert.equal(wm.countSymbol(3, wm.length - 1, 5), 1);
+
+      // test groupBits:
+      assert.equal(wm.countSymbol(0, wm.length, 0, 3), data.length); 
+      assert.equal(wm.countSymbol(0, wm.length, 0, 2), 6); 
+      assert.equal(wm.countSymbol(0, wm.length, 4, 2), 4); 
+
       assert.equal(wm.countLessThan(3, wm.length - 1, 5), 3);
       assert.equal(wm.countLessThan(0, wm.length, 8), 10);
       assert.equal(wm.countLessThan(0, wm.length, 7), 9);
