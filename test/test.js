@@ -157,6 +157,14 @@ function testWaveletMatrix(wmOpts) {
       assert.equal(wm.find(0, wm.length, 10, 1), -1);
       assert.equal(wm.find(1, wm.length, 0, 1), -1);
     });
+    it('majorities correctly', function () {
+      let wm = new WaveletMatrix(data, 10, wmOpts); 
+      assert.equal(wm.majority(0, wm.length), null);
+      assert.equal(wm.majority(0, 1), 0);
+      wm = new WaveletMatrix([1, 1, 2, 1, 2, 2, 2], 10, wmOpts); 
+      assert.equal(wm.majority(0, wm.length), 2);
+      assert.equal(wm.majority(0, 4), 1);
+    });
   });
 }
 
