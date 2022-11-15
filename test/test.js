@@ -64,6 +64,25 @@ function testWaveletMatrix(wmOpts) {
         assert.deepStrictEqual(res.counts, new Uint32Array([0, 1, 1]));
       }
 
+      {
+        // test subcode queries
+        const wm = new WaveletMatrix([0, 1, 2, 3, 4, 5, 6, 7], 8, wmOpts);
+        // 0b00001111
+        // 0b00110011 <-- we're querying for elements with a 1 bit at this level
+        // 0b01010101
+        const res = wm.counts(1, wm.length, 0b010, 0b111, { subcodeIndicator: 0b111 });
+        assert.deepStrictEqual(res.symbols, new Uint32Array([2, 3, 6, 7]));
+        assert.deepStrictEqual(res.counts, new Uint32Array([1, 1, 1, 1]));
+      }
+
+      {
+        // subcodes
+        assert.throws(() => wm.subcodeIndicator([2, 0, 2]));
+        assert.equal(wm.subcodeIndicator([2, 1, 2]), 0b10110);
+        assert.equal(wm.subcodeIndicator([3, 1, 3]), 0b1001100);
+        assert.equal(wm.subcodeIndicator([3, 1, 4]), 0b10001100);
+      }
+
       for (const sort of [true, false]) {
         {
           const res = wm.counts(5, wm.length, 1, 3, { sort });
@@ -143,42 +162,48 @@ function testWaveletMatrix(wmOpts) {
       assert.throws(() => wm.access(data.length), `access(data.length)`);
     });
 
-    it('finds correctly', function () {
+    it('selects correctly', function () {
       // data: [0, 1, 3, 7, 1, 5, 4, 2, 6, 3];
       // init with a larger alphabet size so we can search for non-appearing symbols:
-      const wm = new WaveletMatrix(data, 10, wmOpts); 
-      assert.equal(wm.find(0, wm.length, 0, -1), -1);
-      assert.equal(wm.find(0, wm.length, 0, 0), -1);
-      assert.equal(wm.find(0, wm.length, 0, 1), 0);
-      assert.equal(wm.find(0, wm.length, 1, 1), 1);
-      assert.equal(wm.find(0, wm.length, 1, 0), -1);
-      assert.equal(wm.find(0, wm.length, 3, 1), 2);
-      assert.equal(wm.find(0, wm.length, 3, 2), 9);
-      assert.equal(wm.find(3, wm.length, 3, 1), 9);
-      assert.equal(wm.find(0, wm.length, 3, 3), -1);
-      assert.equal(wm.find(0, wm.length, 0, 2), -1);
-      assert.equal(wm.find(0, wm.length, 10, 1), -1);
-      assert.equal(wm.find(1, wm.length, 0, 1), -1);
+      const wm = new WaveletMatrix(data, 10, wmOpts);
+      assert.equal(wm.select(0, wm.length, 0, -1), -1);
+      assert.equal(wm.select(0, wm.length, 0, 0), -1);
+      assert.equal(wm.select(0, wm.length, 0, 1), 0);
+      assert.equal(wm.select(0, wm.length, 1, 1), 1);
+      assert.equal(wm.select(0, wm.length, 1, 0), -1);
+      assert.equal(wm.select(0, wm.length, 3, 1), 2);
+      assert.equal(wm.select(0, wm.length, 3, 2), 9);
+      assert.equal(wm.select(3, wm.length, 3, 1), 9);
+      assert.equal(wm.select(0, wm.length, 3, 3), -1);
+      assert.equal(wm.select(0, wm.length, 0, 2), -1);
+      assert.equal(wm.select(0, wm.length, 10, 1), -1);
+      assert.equal(wm.select(1, wm.length, 0, 1), -1);
     });
     it('majorities correctly', function () {
-      let wm = new WaveletMatrix(data, 10, wmOpts); 
+      let wm = new WaveletMatrix(data, 10, wmOpts);
       assert.equal(wm.simpleMajority(0, wm.length), null);
       assert.equal(wm.simpleMajority(0, 1).symbol, 0);
       assert.equal(wm.simpleMajority(0, 1).count, 1);
-      wm = new WaveletMatrix([1, 1, 2, 1, 2, 2, 2], 10, wmOpts); 
+      wm = new WaveletMatrix([1, 1, 2, 1, 2, 2, 2], 10, wmOpts);
       assert.equal(wm.simpleMajority(0, wm.length).symbol, 2);
       assert.equal(wm.simpleMajority(0, wm.length).count, 4);
       assert.equal(wm.simpleMajority(0, 4).symbol, 1);
       assert.equal(wm.simpleMajority(0, 4).count, 3);
       assert.deepStrictEqual(wm.majority(0, 4, 2), { symbols: new Uint32Array([1]), counts: new Uint32Array([3]) });
       assert.deepStrictEqual(wm.majority(0, 4, 1), { symbols: new Uint32Array([]), counts: new Uint32Array([]) });
-      assert.deepStrictEqual(wm.majority(0, 4, 5), { symbols: new Uint32Array([1, 2]), counts: new Uint32Array([3, 1]) });
-      assert.deepStrictEqual(wm.majority(0, 3, 4), { symbols: new Uint32Array([1, 2]), counts: new Uint32Array([2, 1]) });
-      assert.deepStrictEqual(wm.majority(0, wm.length, 2), { symbols: new Uint32Array([2]), counts: new Uint32Array([4]) });
-
-
+      assert.deepStrictEqual(wm.majority(0, 4, 5), {
+        symbols: new Uint32Array([1, 2]),
+        counts: new Uint32Array([3, 1]),
+      });
+      assert.deepStrictEqual(wm.majority(0, 3, 4), {
+        symbols: new Uint32Array([1, 2]),
+        counts: new Uint32Array([2, 1]),
+      });
+      assert.deepStrictEqual(wm.majority(0, wm.length, 2), {
+        symbols: new Uint32Array([2]),
+        counts: new Uint32Array([4]),
+      });
     });
-
   });
 }
 
