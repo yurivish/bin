@@ -6,25 +6,28 @@ import { NaiveBitVector } from './NaiveBitVector.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 
-const doTestBitVector = !true; // ⚠️
-const doTestWaveletMatrix = true;
+const doTestBitVector = true; // ⚠️
+const doTestWaveletMatrix = true; // ⚠️
 
 // wm to test
 // x counts sort
-// - counts w/ subcodes
-// - counts w/ groupBits for all funcs that support it
 // x access
 // x quantile
-// - majority
+// x majority
 // x find
+// - counts w/ subcodes
+// - counts w/ groupBits for all funcs that support it
 // - subcodeIndicator
 // - encodeSubcodes
 
 // const wm = new WaveletMatrix([0, 1, 2], 3, {largeAlphabet: false});
 // console.log(wm.counts(0, wm.length, 0, 2));
 
-// const wm = new WaveletMatrix([0, 1, 3, 7, 1, 5, 4], 8, {largeAlphabet:false});
-// console.log(wm.counts(0, wm.length, 0, 6));
+// const wm = new WaveletMatrix([0, 1, 1, 7, 1, 5, 4], 8, {largeAlphabet:false});
+// console.log(wm.majority(0, 3));
+// console.log(wm.majority(0, 3));
+// console.log(wm.majority2(0, 4, 5));
+// console.log(wm.majority(0, wm.length, 0, 6));
 
 // const wm = new WaveletMatrix([0, 1, 3, 7, 1, 5, 4, 2, 6, 3], 8);
 // console.log(wm.counts(0, wm.length, 0, 8))
@@ -159,12 +162,23 @@ function testWaveletMatrix(wmOpts) {
     });
     it('majorities correctly', function () {
       let wm = new WaveletMatrix(data, 10, wmOpts); 
-      assert.equal(wm.majority(0, wm.length), null);
-      assert.equal(wm.majority(0, 1), 0);
+      assert.equal(wm.simpleMajority(0, wm.length), null);
+      assert.equal(wm.simpleMajority(0, 1).symbol, 0);
+      assert.equal(wm.simpleMajority(0, 1).count, 1);
       wm = new WaveletMatrix([1, 1, 2, 1, 2, 2, 2], 10, wmOpts); 
-      assert.equal(wm.majority(0, wm.length), 2);
-      assert.equal(wm.majority(0, 4), 1);
+      assert.equal(wm.simpleMajority(0, wm.length).symbol, 2);
+      assert.equal(wm.simpleMajority(0, wm.length).count, 4);
+      assert.equal(wm.simpleMajority(0, 4).symbol, 1);
+      assert.equal(wm.simpleMajority(0, 4).count, 3);
+      assert.deepStrictEqual(wm.majority(0, 4, 2), { symbols: new Uint32Array([1]), counts: new Uint32Array([3]) });
+      assert.deepStrictEqual(wm.majority(0, 4, 1), { symbols: new Uint32Array([]), counts: new Uint32Array([]) });
+      assert.deepStrictEqual(wm.majority(0, 4, 5), { symbols: new Uint32Array([1, 2]), counts: new Uint32Array([3, 1]) });
+      assert.deepStrictEqual(wm.majority(0, 3, 4), { symbols: new Uint32Array([1, 2]), counts: new Uint32Array([2, 1]) });
+      assert.deepStrictEqual(wm.majority(0, wm.length, 2), { symbols: new Uint32Array([2]), counts: new Uint32Array([4]) });
+
+
     });
+
   });
 }
 
