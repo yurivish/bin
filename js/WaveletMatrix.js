@@ -8,8 +8,10 @@ import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral
 // to do: hoist error objects to the top?
 
 // todo
-// [] figure out scratch spaces
-// [] 
+// - figure out scratch spaces
+//   - the sort option for counts makes it hard to write general code...
+//   - right now it uses nextBackIndex to push both to the back, while iterating from the front.
+//   - this would work better with reverse-order iteration...
 
 // note: implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
@@ -109,14 +111,7 @@ export class WaveletMatrix {
     // todo: take the min with this.length, though figure out if this interferes
     // with our tree-walking strategy in the case that we double at every visited node...
     // i think large alphabets may violate some assumptions I've made... not sure which yet.
-    // Since for sorted symbols in the return value we need to always use the backIndex,
-    // the scratch spaces need to be able to hold (3/2)x the number of nodes (I think...)
-    // We should try using dynamically growable scratch spaces in the future, eg. arraylists.
-    // Note that this also depends on the ArrayWalker – right now we iterate forwards and append
-    // to the back, which is why need the extra space. If we iterated backwards and appended to
-    // the back, then we could use less space, though we also need to ensure that we do all
-    // necessary array reversals to preserve the desired orderings / access patterns.
-    const sz = 3 * (Math.min(2 ** this.numLevels, this.alphabetSize) >>> 1);
+    const sz = Math.min(2 ** this.numLevels, this.alphabetSize);
     // todo: buffer pool of scratch spaces
     // todo: these names are also getting quite silly (and inaccurate)
     this.F = new Uint32Array(sz); // firsts
@@ -162,7 +157,7 @@ export class WaveletMatrix {
         }
         numZeros[l] = walk.frontIndex;
       }
-      walk.reset(next);
+      walk.reset(true, next);
       const tmp = data;
       data = next;
       next = tmp;
@@ -186,15 +181,8 @@ export class WaveletMatrix {
     this.length = data.length;
 
     // scratch spaces for intermediate processing.
-    // todo: don't materialize these until needed - the alphabet might be big
-    // and we can accept scratch space as an input parameter so we can reuse
-    // the same space across wavelet trees
-    // Update: I don't think it interferes so long as we never recurse into an empty node.
-    // const sz = Math.min(2 ** this.numLevels, this.alphabetSize)//, 2 * this.length);
-    const sz = 3 * (Math.min(2 ** this.numLevels, this.alphabetSize, 2 * this.length) >>> 1);
+    const sz = Math.min(2 ** this.numLevels, this.alphabetSize, 2 * this.length);
 
-    // multiplying length by 2 because I don't understand the worst-case behavior yet.
-    // const sz = Math.min(2 ** this.numLevels, this.alphabetSize, 2 * this.length);
     // todo: buffer pool of scratch spaces
     // todo: these names are also getting quite silly (and inaccurate)
     this.F = new Uint32Array(sz); // firsts
@@ -351,7 +339,7 @@ export class WaveletMatrix {
     L[nextIndex] = last;
     C[nextIndex] = sortedSymbols.length;
     S[nextIndex] = 0;
-    walk.reset(F, L, C, S);
+    walk.reset(true, F, L, C, S);
     let nRankCalls = 0;
 
     const numLevels = this.numLevels - groupBits;
@@ -413,48 +401,13 @@ export class WaveletMatrix {
           S[nextIndex] = symbol | levelBitMask;
         }
       }
-      walk.reset(F, L, C, S);
+      walk.reset(true, F, L, C, S);
     }
 
     for (let i = 0; i < walk.length; i++) L[i] -= F[i];
     const counts = L.subarray(0, walk.length).slice();
     const symbols = S.subarray(0, walk.length).slice();
     return { symbols, counts, nRankCalls };
-  }
-
-  subcodeIndicator(subcodeSizesInBits) {
-    let indicator = 0;
-    let offset = 0;
-    for (const sz of subcodeSizesInBits) {
-      if (sz === 0) throw 'cannot have zero-sized field';
-      indicator |= 1 << (sz - 1 + offset);
-      offset += sz;
-    }
-    return indicator >>> 0;
-  }
-
-  encodeSubcodes(indicator, values) {
-    if (indicator === 0) {
-      if (values.length !== 1) {
-        throw new Error('number of values must be one if the indicator is zero');
-      }
-      return values[0];
-    }
-    if (popcount(indicator) !== values.length) {
-      throw new Error('number of values must be equal to the number of 1 bits in the indicator');
-    }
-    let code = 0;
-    let offset = 0;
-    let i = 0;
-    while (indicator > 0) {
-      // todo: validate that values[i] is 0 <= v < 2^subcodeSize
-      const subcodeSize = trailing0(indicator) + 1;
-      code |= values[i] << offset;
-      i += 1;
-      offset += subcodeSize;
-      indicator >>>= subcodeSize; // shift off this subcode
-    }
-    return code >>> 0;
   }
 
   // Returns all  distinct symbols [lower, upper] (inclusive) in the range [first, last)
@@ -479,11 +432,12 @@ export class WaveletMatrix {
 
     const { F, L, S } = this; // firsts, lasts, symbols
     const walk = new ArrayWalker(1, F.length);
+    const reverse = !sort // walk.reset(reverse, ...)
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
     S[nextIndex] = 0;
-    walk.reset(F, L, S);
+    walk.reset(false, F, L, S);
 
     // count inner
     let nRankCalls = 0;
@@ -508,7 +462,13 @@ export class WaveletMatrix {
       else subcodeMask = levelBitMask;
       const subcodeLower = lower & subcodeMask;
       const subcodeUpper = upper & subcodeMask;
-      for (let i = 0; i < walk.length; i++) {
+
+      // note: if we want sorted outputs, iterate in reverse to ensure that we don't 
+      // overwrite unprocessed elements when writing from the back of the array.
+      const start = sort ? walk.length - 1: 0;
+      const step = sort ? -1 : 1;
+      const end = sort ? -1 : walk.length;
+      for (let i = start; i != end; i += step) {
         const first = F[i];
         const first1 = level.rank1(first - 1);
         const first0 = first - first1;
@@ -519,6 +479,19 @@ export class WaveletMatrix {
 
         const symbol = S[i];
         nRankCalls += 2;
+
+        const rightCount = last1 - first1;
+        if (rightCount > 0) {
+          // go right if the right node range [a, b] (inclusive) overlaps [lower, upper) (exclusive)
+          const a = (symbol | levelBitMask) & subcodeMask;
+          const b = (a | (levelBitMask - 1)) & subcodeMask;
+          if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
+            const nextIndex = walk.nextBackIndex();
+            F[nextIndex] = nz + first1;
+            L[nextIndex] = nz + last1;
+            S[nextIndex] = symbol | levelBitMask;
+          }
+        }
 
         const leftCount = last0 - first0;
         if (leftCount > 0) {
@@ -534,21 +507,8 @@ export class WaveletMatrix {
             S[nextIndex] = symbol;
           }
         }
-
-        const rightCount = last1 - first1;
-        if (rightCount > 0) {
-          // go right if the right node range [a, b] (inclusive) overlaps [lower, upper) (exclusive)
-          const a = (symbol | levelBitMask) & subcodeMask;
-          const b = (a | (levelBitMask - 1)) & subcodeMask;
-          if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
-            const nextIndex = walk.nextBackIndex();
-            F[nextIndex] = nz + first1;
-            L[nextIndex] = nz + last1;
-            S[nextIndex] = symbol | levelBitMask;
-          }
-        }
       }
-      walk.reset(F, L, S);
+      walk.reset(reverse, F, L, S);
     }
 
     for (let i = 0; i < walk.length; i++) L[i] -= F[i];
@@ -593,7 +553,6 @@ export class WaveletMatrix {
   quantileBatch(first, last, sortedIndices) {
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
-
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     for (let i = 1; i < sortedIndices.length; i++) {
@@ -610,7 +569,7 @@ export class WaveletMatrix {
     L[nextIndex] = last;
     S[nextIndex] = 0;
     C[nextIndex] = sortedIndices.length; // number of sortedIndices represented by node 0
-    walk.reset(F, L, S, C);
+    walk.reset(true, F, L, S, C);
     // copy sorted indices into a scratch space since they are mutated as we go
     const I = this.C2.subarray(0, sortedIndices.length);
     I.set(sortedIndices);
@@ -674,7 +633,7 @@ export class WaveletMatrix {
         }
       }
 
-      walk.reset(F, L, S, C);
+      walk.reset(true, F, L, S, C);
     }
 
     for (let i = 0; i < walk.length; i++) L[i] -= F[i];
@@ -702,7 +661,7 @@ export class WaveletMatrix {
     S[nextIndex] = 0;
     C[nextIndex] = firstIndex;
     C2[nextIndex] = lastIndex;
-    walk.reset(F, L, S, C, C2);
+    walk.reset(true, F, L, S, C, C2);
     let nRankCalls = 0;
 
     const numLevels = this.numLevels
@@ -747,7 +706,7 @@ export class WaveletMatrix {
           C2[nextIndex] = c2 - leftChildCount;
         }
       }
-      walk.reset(F, L, S, C, C2);
+      walk.reset(true, F, L, S, C, C2);
     }
 
     for (let i = 0; i < walk.length; i++) L[i] -= F[i];
@@ -786,6 +745,41 @@ export class WaveletMatrix {
     return { symbols: res.symbols.subarray(0, n), counts: res.counts.subarray(0, n) };
   }
 
+  subcodeIndicator(subcodeSizesInBits) {
+    let indicator = 0;
+    let offset = 0;
+    for (const sz of subcodeSizesInBits) {
+      if (sz === 0) throw 'cannot have zero-sized field';
+      indicator |= 1 << (sz - 1 + offset);
+      offset += sz;
+    }
+    return indicator >>> 0;
+  }
+
+  encodeSubcodes(indicator, values) {
+    if (indicator === 0) {
+      if (values.length !== 1) {
+        throw new Error('number of values must be one if the indicator is zero');
+      }
+      return values[0];
+    }
+    if (popcount(indicator) !== values.length) {
+      throw new Error('number of values must be equal to the number of 1 bits in the indicator');
+    }
+    let code = 0;
+    let offset = 0;
+    let i = 0;
+    while (indicator > 0) {
+      // todo: validate that values[i] is 0 <= v < 2^subcodeSize
+      const subcodeSize = trailing0(indicator) + 1;
+      code |= values[i] << offset;
+      i += 1;
+      offset += subcodeSize;
+      indicator >>>= subcodeSize; // shift off this subcode
+    }
+    return code >>> 0;
+  }
+  
   approxSizeInBits() {
     // ignores fixed-size fields
     let size = 0;
@@ -863,12 +857,14 @@ class ArrayWalker {
     // (as we fill the array in backwards from arr[cap - 1])
     return (this.backIndex -= 1);
   }
-  reset(...arrays) {
+  reset(reverse, ...arrays) {
     // move the filled-in elements from the end
     // to the front of the array
     for (let i = 0; i < arrays.length; i++) {
       const arr = arrays[i];
-      arr.set(arr.subarray(this.backIndex, this.cap).reverse(), this.frontIndex);
+      const sub = arr.subarray(this.backIndex, this.cap)
+      if (reverse) sub.reverse()
+      arr.set(sub, this.frontIndex);
       // reverse and move right elements following the first element.
       // explicit loop (in js this is slower):
       // let n = this.frontIndex;
