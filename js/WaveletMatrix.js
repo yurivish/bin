@@ -333,7 +333,7 @@ export class WaveletMatrix {
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     const { F, L, C, S } = this;
-    const walkCap = Math.min(this.alphabetSize, sortedSymbols.length) // account for duplicate sorted sybmols
+    const walkCap = Math.min(this.alphabetSize, sortedSymbols.length); // account for duplicate sorted sybmols
     const walk = new ArrayWalker(sortedSymbols.length === 0 ? 0 : 1, walkCap);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
@@ -434,7 +434,7 @@ export class WaveletMatrix {
 
     const { F, L, S } = this; // firsts, lasts, symbols
     const walk = new ArrayWalker(1, F.length); // tricky to upper-bound due to subcodes...
-    const reverse = !sort // walk.reset(reverse, ...)
+    const reverse = !sort; // walk.reset(reverse, ...)
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
@@ -465,9 +465,9 @@ export class WaveletMatrix {
       const subcodeLower = lower & subcodeMask;
       const subcodeUpper = upper & subcodeMask;
 
-      // note: if we want sorted outputs, iterate in reverse to ensure that we don't 
+      // note: if we want sorted outputs, iterate in reverse to ensure that we don't
       // overwrite unprocessed elements when writing from the back of the array.
-      const start = sort ? walk.length - 1: 0;
+      const start = sort ? walk.length - 1 : 0;
       const step = sort ? -1 : 1;
       const end = sort ? -1 : walk.length;
       for (let i = start; i != end; i += step) {
@@ -565,7 +565,7 @@ export class WaveletMatrix {
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
 
     const { F, L, S, C } = this; // firsts, lasts, symbols, counts
-    const walkCap = Math.min(this.alphabetSize, sortedIndices.length) // account for duplicate sorted indices
+    const walkCap = Math.min(this.alphabetSize, sortedIndices.length); // account for duplicate sorted indices
     const walk = new ArrayWalker(sortedIndices.length === 0 ? 0 : 1, walkCap);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
@@ -668,7 +668,7 @@ export class WaveletMatrix {
     walk.reset(true, F, L, S, C, C2);
     let nRankCalls = 0;
 
-    const numLevels = this.numLevels
+    const numLevels = this.numLevels;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
@@ -710,7 +710,6 @@ export class WaveletMatrix {
           C[nextIndex] = c;
           C2[nextIndex] = leftChildCount < c2 ? leftChildCount : c2; // = min(leftChildCount, c2);
         }
-
       }
       walk.reset(false, F, L, S, C, C2);
     }
@@ -785,7 +784,7 @@ export class WaveletMatrix {
     }
     return code >>> 0;
   }
-  
+
   approxSizeInBits() {
     // ignores fixed-size fields
     let size = 0;
@@ -873,8 +872,8 @@ class ArrayWalker {
     // to the front of the array
     for (let i = 0; i < arrays.length; i++) {
       const arr = arrays[i];
-      const sub = arr.subarray(this.backIndex, this.cap)
-      if (reverse) sub.reverse()
+      const sub = arr.subarray(this.backIndex, this.cap);
+      if (reverse) sub.reverse();
       arr.set(sub, this.frontIndex);
       // reverse and move right elements following the first element.
       // explicit loop (in js this is slower):
