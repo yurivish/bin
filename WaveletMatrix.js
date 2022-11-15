@@ -762,30 +762,31 @@ export class WaveletMatrix {
   simpleMajority(first, last) {
     const index = (last + first) >>> 1;
     const q = this.quantile(first, last, index);
-    const count = last - first;
-    const half = count >>> 1;
+    const total = last - first;
+    const half = total >>> 1;
     if (q.count > half) return q;
     return null;
   }
 
   majority(first, last, denominator = 2) {
-    const indices = new Uint32Array(denominator - 1)
-    const count = last - first; // todo: change if inclusive
+    const indices = new Uint32Array(denominator - 1);
+    const total = last - first; // todo: change if inclusive
     for (let i = 1; i < denominator; i++) {
       const pc = i / denominator;
-      indices[i - 1] = first + count * pc // implicit floor
+      // implicit floor; we consistently round down.
+      indices[i - 1] = first + total * pc;
     }
     const res = this.quantileBatch(first, last, indices);
-    const half = Math.floor((last - first) / denominator)
+    const count = Math.floor((last - first) / denominator);
     let n = 0;
-    for (let i=0;i<res.symbols.length;i++) {
-      if (res.counts[i] > half) {
-        res.counts[n] = res.counts[i]
-        res.symbols[n] = res.symbols[i]
-        n += 1
+    for (let i = 0; i < res.symbols.length; i++) {
+      if (res.counts[i] > count) {
+        res.counts[n] = res.counts[i];
+        res.symbols[n] = res.symbols[i];
+        n += 1;
       }
     }
-    return { symbols: res.symbols.subarray(0, n), counts: res.counts.subarray(0, n) }
+    return { symbols: res.symbols.subarray(0, n), counts: res.counts.subarray(0, n) };
   }
 
   approxSizeInBits() {
