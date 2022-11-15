@@ -9,40 +9,26 @@ import { readFileSync } from 'fs';
 const doTestBitVector = true; // ⚠️
 const doTestWaveletMatrix = true; // ⚠️
 
-// wm to test
-// x counts sort
-// x access
-// x quantile
-// x majority
-// x find
-// x counts w/ subcodes
-// x counts w/ groupBits for all funcs that support it
-// - countSymbolBatch/quantileBatch/quantiles with groupBits
-// - groupBits should be a keyword arg in all cases?
-// x subcodeIndicator
-// x encodeSubcodes
-
-// const wm = new WaveletMatrix([0, 1, 2], 3, {largeAlphabet: false});
-// console.log(wm.counts(0, wm.length, 0, 2));
-
-// const wm = new WaveletMatrix([0, 1, 1, 7, 1, 5, 4], 8, {largeAlphabet:false});
-// console.log(wm.majority(0, 3));
-// console.log(wm.majority(0, 3));
-// console.log(wm.majority2(0, 4, 5));
-// console.log(wm.majority(0, wm.length, 0, 6));
-
-// const wm = new WaveletMatrix([0, 1, 3, 7, 1, 5, 4, 2, 6, 3], 8);
-// console.log(wm.counts(0, wm.length, 0, 8))
-
 // Wavelet matrix tests
-// [] test with sort true/false (check equality of arr.sort())
+// [x] test with sort true/false (check equality of arr.sort())
 // [x] test with construction w/ largeAlphabet / not
-// [] test alphabetsize >> number of present symbols
-// [] test alphabetsize >> max symbol
-function testWaveletMatrix(wmOpts) {
+// [x] test alphabetsize >> number of present symbols
+// [x] test alphabetsize >> max symbol
+// [x] counts sort
+// [x] access
+// [x] quantile
+// [x] majority
+// [x] find
+// [x] counts w/ subcodes
+// [x] counts w/ groupBits
+// [x] countSymbolBatch with groupBits
+// [x] subcodeIndicator
+// [x] encodeSubcodes
+
+function testWaveletMatrix(alphabetSizePadding, wmOpts) {
   describe('wavelet matrix', function () {
     const data = [0, 1, 3, 7, 1, 5, 4, 2, 6, 3];
-    const wm = new WaveletMatrix(data, 8, wmOpts);
+    const wm = new WaveletMatrix(data, 8 + alphabetSizePadding, wmOpts);
     it('counts correctly', function () {
       assert.equal(wm.countSymbol(0, wm.length, 3), 2);
       assert.equal(wm.countSymbol(0, wm.length - 1, 3), 1);
@@ -50,9 +36,9 @@ function testWaveletMatrix(wmOpts) {
       assert.equal(wm.countSymbol(3, wm.length - 1, 5), 1);
 
       // test groupBits:
-      assert.equal(wm.countSymbol(0, wm.length, 0, 3), data.length); 
-      assert.equal(wm.countSymbol(0, wm.length, 0, 2), 6); 
-      assert.equal(wm.countSymbol(0, wm.length, 4, 2), 4); 
+      assert.equal(wm.countSymbol(0, wm.length, 0, { groupBits: 3 }), data.length); 
+      assert.equal(wm.countSymbol(0, wm.length, 0, { groupBits: 2 }), 6); 
+      assert.equal(wm.countSymbol(0, wm.length, 4, { groupBits: 2 }), 4); 
 
       assert.equal(wm.countLessThan(3, wm.length - 1, 5), 3);
       assert.equal(wm.countLessThan(0, wm.length, 8), 10);
@@ -73,8 +59,20 @@ function testWaveletMatrix(wmOpts) {
       }
 
       {
+        const res = wm.countSymbolBatch(0, wm.length, [0], { groupBits: 3 });
+        assert.deepStrictEqual(res.symbols, new Uint32Array([0]));
+        assert.deepStrictEqual(res.counts, new Uint32Array([10]));
+      }
+
+      {
+        const res = wm.countSymbolBatch(0, wm.length, [0], { groupBits: 2 });
+        assert.deepStrictEqual(res.symbols, new Uint32Array([0]));
+        assert.deepStrictEqual(res.counts, new Uint32Array([6]));
+      }
+      
+      {
         // test subcode queries
-        const wm = new WaveletMatrix([0, 1, 2, 3, 4, 5, 6, 7], 8, wmOpts);
+        const wm = new WaveletMatrix([0, 1, 2, 3, 4, 5, 6, 7], 8 + alphabetSizePadding, wmOpts);
         // 0b00001111
         // 0b00110011 <-- we're querying for elements with a 1 bit at this level
         // 0b01010101
@@ -173,7 +171,7 @@ function testWaveletMatrix(wmOpts) {
     it('selects correctly', function () {
       // data: [0, 1, 3, 7, 1, 5, 4, 2, 6, 3];
       // init with a larger alphabet size so we can search for non-appearing symbols:
-      const wm = new WaveletMatrix(data, 10, wmOpts);
+      const wm = new WaveletMatrix(data, 10 + alphabetSizePadding, wmOpts);
       assert.equal(wm.select(0, wm.length, 0, -1), -1);
       assert.equal(wm.select(0, wm.length, 0, 0), -1);
       assert.equal(wm.select(0, wm.length, 0, 1), 0);
@@ -188,11 +186,11 @@ function testWaveletMatrix(wmOpts) {
       assert.equal(wm.select(1, wm.length, 0, 1), -1);
     });
     it('majorities correctly', function () {
-      let wm = new WaveletMatrix(data, 10, wmOpts);
+      let wm = new WaveletMatrix(data, 10 + alphabetSizePadding, wmOpts);
       assert.equal(wm.simpleMajority(0, wm.length), null);
       assert.equal(wm.simpleMajority(0, 1).symbol, 0);
       assert.equal(wm.simpleMajority(0, 1).count, 1);
-      wm = new WaveletMatrix([1, 1, 2, 1, 2, 2, 2], 10, wmOpts);
+      wm = new WaveletMatrix([1, 1, 2, 1, 2, 2, 2], 10 + alphabetSizePadding, wmOpts);
       assert.equal(wm.simpleMajority(0, wm.length).symbol, 2);
       assert.equal(wm.simpleMajority(0, wm.length).count, 4);
       assert.equal(wm.simpleMajority(0, 4).symbol, 1);
@@ -218,8 +216,11 @@ function testWaveletMatrix(wmOpts) {
 if (doTestWaveletMatrix) {
   // Ensure we're testing both wavelet matrix construction algorithms,
   // since which one to use would otherwise be decided by a heuristic.
-  testWaveletMatrix({ largeAlphabet: false });
-  testWaveletMatrix({ largeAlphabet: true });
+  testWaveletMatrix(0, { largeAlphabet: false });
+  testWaveletMatrix(0, { largeAlphabet: true });
+  testWaveletMatrix(100, { largeAlphabet: false });
+  testWaveletMatrix(100, { largeAlphabet: true });
+
 }
 
 // Bit vector tests

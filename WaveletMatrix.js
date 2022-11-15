@@ -226,8 +226,8 @@ export class WaveletMatrix {
   }
 
   // Returns the number of occurrences of `symbol` in the range [first, last). Also known as `rank`.
-  countSymbol(first, last, symbol, groupBits) {
-    const indices = this.symbolIndices(first, last, symbol, groupBits);
+  countSymbol(first, last, symbol, opts) {
+    const indices = this.symbolIndices(first, last, symbol, opts);
     return indices.last - indices.first;
   }
 
@@ -257,7 +257,7 @@ export class WaveletMatrix {
 
   // Internal function returning the (first, last] index range covered by this symbol on the virtual bottom level,
   // or on a higher level if groupBits > 0. `last - first` gives the symbol count within the provided range.
-  symbolIndices(first, last, symbol, groupBits = 0) {
+  symbolIndices(first, last, symbol, { groupBits = 0 } = {}) {
     const symbolGroupSize = 1 << groupBits;
     if (symbol % symbolGroupSize !== 0) {
       // note: could be done with bit math (check that low bits are zero)
@@ -332,7 +332,7 @@ export class WaveletMatrix {
     return this.countLessThan(first, last, upper) - this.countLessThan(first, last, lower);
   }
 
-  countSymbolBatch(first, last, sortedSymbols, groupBits = 0) {
+  countSymbolBatch(first, last, sortedSymbols, { groupBits = 0 } = {}) {
     // splitByMsb requires the same sortedSymbol to be searched for in each of the split paths.
     // for now, we'll go with the relatively inefficient route of asking that this be done by
     // supplying a larger set of sortedSymbols, enumerating all MSB variations in the high bits.
@@ -591,8 +591,7 @@ export class WaveletMatrix {
     return { symbol, count: last - first, nRankCalls };
   }
 
-  quantileBatch(first, last, sortedIndices, groupBits = 0) {
-    const symbolGroupSize = 1 << groupBits;
+  quantileBatch(first, last, sortedIndices) {
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
 
@@ -621,7 +620,7 @@ export class WaveletMatrix {
     // note: grouping by LSB computes approximate quantiles where
     // the count of symbols assigned to each range is given by I,
     // and I think the ranges are [symbol, symbol+2^groupBits).
-    const numLevels = this.numLevels - groupBits;
+    const numLevels = this.numLevels;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
@@ -689,8 +688,7 @@ export class WaveletMatrix {
     return { symbols, counts, numSortedIndices, nRankCalls };
   }
 
-  quantiles(first, last, firstIndex, lastIndex, groupBits = 0) {
-    const symbolGroupSize = 1 << groupBits;
+  quantiles(first, last, firstIndex, lastIndex) {
     // todo: for some reason  quantiles(first, last, 0, 0) returns a single value rather than nothing.
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
@@ -708,7 +706,7 @@ export class WaveletMatrix {
     walk.reset(F, L, S, C, C2);
     let nRankCalls = 0;
 
-    const numLevels = this.numLevels - groupBits;
+    const numLevels = this.numLevels
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
