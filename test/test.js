@@ -9,6 +9,9 @@ import { readFileSync } from 'fs';
 const doTestBitVector = true; // ⚠️
 const doTestWaveletMatrix = true; // ⚠️
 
+// const data = [0, 1, 3, 7, 1, 5, 4, 2, 6, 3];
+// const wm = new WaveletMatrix(data, 8);
+
 // Wavelet matrix tests
 // [x] test with sort true/false (check equality of arr.sort())
 // [x] test with construction w/ largeAlphabet / not
@@ -39,9 +42,9 @@ function testWaveletMatrix(alphabetSizePadding, wmOpts) {
       assert.equal(wm.countSymbol(3, wm.length - 1, 5), 1);
 
       // test groupBits:
-      assert.equal(wm.countSymbol(0, wm.length, 0, { groupBits: 3 }), data.length); 
-      assert.equal(wm.countSymbol(0, wm.length, 0, { groupBits: 2 }), 6); 
-      assert.equal(wm.countSymbol(0, wm.length, 4, { groupBits: 2 }), 4); 
+      assert.equal(wm.countSymbol(0, wm.length, 0, { groupBits: 3 }), data.length);
+      assert.equal(wm.countSymbol(0, wm.length, 0, { groupBits: 2 }), 6);
+      assert.equal(wm.countSymbol(0, wm.length, 4, { groupBits: 2 }), 4);
 
       assert.equal(wm.countLessThan(3, wm.length - 1, 5), 3);
       assert.equal(wm.countLessThan(0, wm.length, 8), 10);
@@ -72,7 +75,14 @@ function testWaveletMatrix(alphabetSizePadding, wmOpts) {
         assert.deepStrictEqual(res.symbols, new Uint32Array([0]));
         assert.deepStrictEqual(res.counts, new Uint32Array([6]));
       }
-      
+
+      {
+        // allows duplicate inputs
+        const res = wm.countSymbolBatch(0, wm.length, [1, 1, 1, 2, 3]);
+        assert.deepStrictEqual(res.symbols, new Uint32Array([1, 2, 3]));
+        assert.deepStrictEqual(res.counts, new Uint32Array([2, 1, 2]));
+      }
+
       {
         // test subcode queries
         const wm = new WaveletMatrix([0, 1, 2, 3, 4, 5, 6, 7], 8 + alphabetSizePadding, wmOpts);
@@ -223,7 +233,6 @@ if (doTestWaveletMatrix) {
   testWaveletMatrix(0, { largeAlphabet: true });
   testWaveletMatrix(100, { largeAlphabet: false });
   testWaveletMatrix(100, { largeAlphabet: true });
-
 }
 
 // Bit vector tests

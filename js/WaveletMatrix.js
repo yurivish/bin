@@ -333,7 +333,8 @@ export class WaveletMatrix {
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     const { F, L, C, S } = this;
-    const walk = new ArrayWalker(sortedSymbols.length === 0 ? 0 : 1, sortedSymbols.length);
+    const walkCap = Math.min(this.alphabetSize, sortedSymbols.length) // account for duplicate sorted sybmols
+    const walk = new ArrayWalker(sortedSymbols.length === 0 ? 0 : 1, walkCap);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
@@ -564,7 +565,8 @@ export class WaveletMatrix {
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
 
     const { F, L, S, C } = this; // firsts, lasts, symbols, counts
-    const walk = new ArrayWalker(sortedIndices.length === 0 ? 0 : 1, sortedIndices.length);
+    const walkCap = Math.min(this.alphabetSize, sortedIndices.length) // account for duplicate sorted indices
+    const walk = new ArrayWalker(sortedIndices.length === 0 ? 0 : 1, walkCap);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
