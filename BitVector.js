@@ -15,7 +15,7 @@ export class BitVector {
   }
 
   one(i) {
-    if (i >= this.length) throw new Error('i must be < length')
+    if (i < 0 || i >= this.length) throw new Error('i must be in [0, length)');
     const blockIndex = i >>> 5;
     const bitOffset = i & 31;
     this.blocks[blockIndex] |= 1 << bitOffset;
@@ -24,9 +24,11 @@ export class BitVector {
   }
 
   finish() {
-    this.storedLength = this.maxOneIndex + 1;
-    const numBlocks = Math.ceil(this.storedLength / 32);
-    if (numBlocks < this.blocks.length) {
+    const numBlocks = Math.ceil((this.maxOneIndex + 1) / 32);
+    // If the number of used blocks is less than x% of the
+    // allocated blocks, resize downwards
+    const resizeProportion = 0.9;
+    if (numBlocks < resizeProportion * this.blocks.length) {
       this.blocks = this.blocks.slice(0, numBlocks);
     }
     // compute rank superblocks (cumulative sum of 1 bits per block)
@@ -38,7 +40,7 @@ export class BitVector {
 
   rank1(i) {
     if (i < 0) return 0;
-    if (i >= this.storedLength) return this.numOnes;
+    if (i > this.maxOneIndex) return this.numOnes;
     const blockIndex = i >>> 5;
     const rankSuperbock = this.rankSuperblocks[blockIndex];
     const block = this.blocks[blockIndex];
@@ -49,19 +51,13 @@ export class BitVector {
 
   rank0(i) {
     if (i < 0) return 0;
-    // We check against length here, rather than storedLength,
-    // since we need to count the implicitly-represented zeros.
     if (i >= this.length) return this.length - this.numOnes;
-    // note: the final block is padded with zeros so rank0 will return
-    // incorrect results if called with an out-of-bounds index that is
-    // within the final block. So we do the bounds checks here too.
-    // Can optimize via copy-pasting the rank1 impl in here.
-    return i + 1 - this.rank1(i);
+    return i - this.rank1(i) + 1;
   }
 
   // These select1 and select0 implementations use binary search over the array
   // without a select-based acceleration index, and are thus O(log(length)).
-  // Both support hinted binary search: the search range can be specified through
+  // Both support hinted search: the search range can be specified through
   // input arguments for those cases where the sought-after bit is known to be
   // confined to a particular index range.
   // Sampled select blocks could similarly cut down the search range but are not
@@ -71,12 +67,7 @@ export class BitVector {
   // zero-compressed select. Perform exponential rather than binary search (determine
   // when and why this might be more efficient).
   select1(i, L = 0, R = this.length) {
-    if (i < 1 || i > this.numOnes) return -1; 
-    // if (i < 1) throw new Error('out of bounds: i < 1');
-    // if (i > this.numOnes) {
-    //   throw new Error(`out of bounds: i (${i}) > numOnes (${this.numOnes})`);
-    // }
-    // Search based on the structure of binarySearchBefore
+    if (i < 1 || i > this.numOnes) return -1;
     while (L < R) {
       const m = (L + R) >>> 1;
       if (this.rank1(m) < i) L = m + 1;
@@ -87,8 +78,7 @@ export class BitVector {
 
   select0(i, L = 0, R = this.length) {
     const numZeros = this.length - this.numOnes;
-    if (i < 1 || i > numZeros) return -1; 
-    // Search based on the structure of binarySearchBefore
+    if (i < 1 || i > numZeros) return -1;
     while (L < R) {
       const m = (L + R) >>> 1;
       if (this.rank0(m) < i) L = m + 1;
@@ -98,8 +88,9 @@ export class BitVector {
   }
 
   access(i) {
-    if (i < 0 || i >= this.length) throw new Error('access: out of bounds at index ' + i +' with length '+this.length);
-    if (i >= this.storedLength) return 0;
+    if (i < 0 || i >= this.length)
+      throw new Error('access: out of bounds');
+    if (i > this.maxOneIndex) return 0;
     const blockIndex = i >>> 5;
     const bitOffset = i & 31;
     const block = this.blocks[blockIndex];
@@ -109,8 +100,8 @@ export class BitVector {
 
   approxSizeInBits() {
     // ignores fixed-size fields
-    const blockBits = 8 * this.blocks.length * this.blocks.BYTES_PER_ELEMENT
-    const rankSuperblockBits = 8 * this.rankSuperblocks.length * this.rankSuperblocks.BYTES_PER_ELEMENT
-    return blockBits + rankSuperblockBits
+    const blockBits = 8 * this.blocks.length * this.blocks.BYTES_PER_ELEMENT;
+    const rankSuperblockBits = 8 * this.rankSuperblocks.length * this.rankSuperblocks.BYTES_PER_ELEMENT;
+    return blockBits + rankSuperblockBits;
   }
 }
