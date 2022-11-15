@@ -6,7 +6,7 @@ import { NaiveBitVector } from './NaiveBitVector.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 
-const doTestBitVector = true; // ⚠️
+const doTestBitVector = !true; // ⚠️
 const doTestWaveletMatrix = true; // ⚠️
 
 // Wavelet matrix tests

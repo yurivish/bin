@@ -333,7 +333,7 @@ export class WaveletMatrix {
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     const { F, L, C, S } = this;
-    const walk = new ArrayWalker(sortedSymbols.length === 0 ? 0 : 1, F.length);
+    const walk = new ArrayWalker(sortedSymbols.length === 0 ? 0 : 1, sortedSymbols.length);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
@@ -432,7 +432,7 @@ export class WaveletMatrix {
     const numLevels = this.numLevels - groupBits;
 
     const { F, L, S } = this; // firsts, lasts, symbols
-    const walk = new ArrayWalker(1, F.length);
+    const walk = new ArrayWalker(1, F.length); // tricky to upper-bound due to subcodes...
     const reverse = !sort // walk.reset(reverse, ...)
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
@@ -564,7 +564,7 @@ export class WaveletMatrix {
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
 
     const { F, L, S, C } = this; // firsts, lasts, symbols, counts
-    const walk = new ArrayWalker(sortedIndices.length === 0 ? 0 : 1, F.length);
+    const walk = new ArrayWalker(sortedIndices.length === 0 ? 0 : 1, sortedIndices.length);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
@@ -656,7 +656,7 @@ export class WaveletMatrix {
     if (firstIndex < 0 || lastIndex > last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
     const { F, L, S, C, C2 } = this; // firsts, lasts, symbols, counts
-    const walk = new ArrayWalker(firstIndex === lastIndex ? 0 : 1, F.length);
+    const walk = new ArrayWalker(firstIndex === lastIndex ? 0 : 1, lastIndex - firstIndex);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
