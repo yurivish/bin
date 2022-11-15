@@ -6,7 +6,7 @@ import { NaiveBitVector } from './NaiveBitVector.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 
-const doTestBitVector = !true; // ⚠️
+const doTestBitVector = true; // ⚠️
 const doTestWaveletMatrix = true; // ⚠️
 
 // Wavelet matrix tests
@@ -24,6 +24,9 @@ const doTestWaveletMatrix = true; // ⚠️
 // [x] countSymbolBatch with groupBits
 // [x] subcodeIndicator
 // [x] encodeSubcodes
+// todo
+// - annotate tests with comments stating what they're testing
+// - test sparse alphabet construction (just that it completes successfully)
 
 function testWaveletMatrix(alphabetSizePadding, wmOpts) {
   describe('wavelet matrix', function () {
