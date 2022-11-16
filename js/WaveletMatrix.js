@@ -413,8 +413,10 @@ export class WaveletMatrix {
     // (eg. allow querying code consisting of all maximum subcodes)
     const numLevels = this.numLevels - groupBits;
 
-    // todo: bound this more closely. tricky to upper-bound due to subcodes...
-    const scratchSize = Math.min(2 ** this.numLevels - groupBits, this.alphabetSize);
+    // todo: bound this more closely. slightly involved to upper-bound due to subcodes;
+    // need to compute the product of the subcode ranges since that's the maximum possible
+    // number of unique symbols.
+    const scratchSize = Math.min(2 ** this.numLevels - groupBits, this.alphabetSize, this.length);
     this.scratch.reset();
     const F = this.scratch.alloc(scratchSize);
     const L = this.scratch.alloc(scratchSize);
