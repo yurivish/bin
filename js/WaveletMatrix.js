@@ -103,22 +103,7 @@ export class WaveletMatrix {
     this.numLevels = numLevels;
     this.maxLevel = maxLevel;
     this.length = data.length;
-
-    // scratch spaces for intermediate processing.
-    // todo: don't materialize these until needed - the alphabet might be big
-    // and we can accept scratch space as an input parameter so we can reuse
-    // the same space across wavelet trees
-    // todo: take the min with this.length, though figure out if this interferes
-    // with our tree-walking strategy in the case that we double at every visited node...
-    // i think large alphabets may violate some assumptions I've made... not sure which yet.
-    const sz = Math.min(2 ** this.numLevels, this.alphabetSize);
-    // todo: buffer pool of scratch spaces
-    // todo: these names are also getting quite silly (and inaccurate)
-    this.F = new Uint32Array(sz); // firsts
-    this.L = new Uint32Array(sz); // lasts
-    this.S = new Uint32Array(sz); // symbols
-    this.C = new Uint32Array(sz);
-    this.C2 = new Uint32Array(sz);
+    this.scratch = new ScratchSpace();
   }
 
   // Alternative construction algorithm for the 'sparse' case when the alphabet size
@@ -179,17 +164,7 @@ export class WaveletMatrix {
     this.numLevels = numLevels;
     this.maxLevel = maxLevel;
     this.length = data.length;
-
-    // scratch spaces for intermediate processing.
-    const sz = Math.min(2 ** this.numLevels, this.alphabetSize, 2 * this.length);
-
-    // todo: buffer pool of scratch spaces
-    // todo: these names are also getting quite silly (and inaccurate)
-    this.F = new Uint32Array(sz); // firsts
-    this.L = new Uint32Array(sz); // lasts
-    this.S = new Uint32Array(sz); // symbols
-    this.C = new Uint32Array(sz);
-    this.C2 = new Uint32Array(sz);
+    this.scratch = new ScratchSpace();
   }
 
   access(index) {
@@ -332,9 +307,15 @@ export class WaveletMatrix {
     }
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
-    const { F, L, C, S } = this;
-    const walkCap = Math.min(this.alphabetSize, sortedSymbols.length); // account for duplicate sorted sybmols
-    const walk = new ArrayWalker(sortedSymbols.length === 0 ? 0 : 1, walkCap);
+
+    // account for duplicate sorted symbols and the fact that there cannot be more outputs than elements
+    const scratchSize = Math.min(this.alphabetSize, sortedSymbols.length, last - first);
+    this.scratch.reset();
+    const F = this.scratch.alloc(scratchSize); // firsts
+    const L = this.scratch.alloc(scratchSize); // lasts
+    const S = this.scratch.alloc(scratchSize); // symbols
+    const C = this.scratch.alloc(scratchSize); // counts
+    const walk = new ArrayWalker(sortedSymbols.length === 0 ? 0 : 1, scratchSize);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
@@ -432,8 +413,13 @@ export class WaveletMatrix {
     // (eg. allow querying code consisting of all maximum subcodes)
     const numLevels = this.numLevels - groupBits;
 
-    const { F, L, S } = this; // firsts, lasts, symbols
-    const walk = new ArrayWalker(1, F.length); // tricky to upper-bound due to subcodes...
+    // todo: bound this more closely. tricky to upper-bound due to subcodes...
+    const scratchSize = Math.min(2 ** this.numLevels - groupBits, this.alphabetSize);
+    this.scratch.reset();
+    const F = this.scratch.alloc(scratchSize);
+    const L = this.scratch.alloc(scratchSize);
+    const S = this.scratch.alloc(scratchSize);
+    const walk = new ArrayWalker(1, scratchSize);
     const reverse = !sort; // walk.reset(reverse, ...)
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
@@ -564,9 +550,15 @@ export class WaveletMatrix {
     if (sortedIndices[0] < 0 || sortedIndices[sortedIndices.length - 1] >= last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
 
-    const { F, L, S, C } = this; // firsts, lasts, symbols, counts
-    const walkCap = Math.min(this.alphabetSize, sortedIndices.length); // account for duplicate sorted indices
-    const walk = new ArrayWalker(sortedIndices.length === 0 ? 0 : 1, walkCap);
+    // account for duplicate sorted indices and the fact that there cannot be more outputs than elements
+    const scratchSize = Math.min(this.alphabetSize, sortedIndices.length, last - first);
+    this.scratch.reset();
+    const F = this.scratch.alloc(scratchSize); // firsts
+    const L = this.scratch.alloc(scratchSize); // lasts
+    const S = this.scratch.alloc(scratchSize); // symbols
+    const C = this.scratch.alloc(scratchSize); // counts
+    const I = this.scratch.alloc(sortedIndices.length); // sorted indices
+    const walk = new ArrayWalker(sortedIndices.length === 0 ? 0 : 1, scratchSize);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
@@ -574,7 +566,6 @@ export class WaveletMatrix {
     C[nextIndex] = sortedIndices.length; // number of sortedIndices represented by node 0
     walk.reset(true, F, L, S, C);
     // copy sorted indices into a scratch space since they are mutated as we go
-    const I = this.C2.subarray(0, sortedIndices.length);
     I.set(sortedIndices);
     let nRankCalls = 0;
 
@@ -657,8 +648,15 @@ export class WaveletMatrix {
     if (firstIndex > lastIndex) throw new Error('firstIndex must be <= lastIndex');
     if (firstIndex < 0 || lastIndex > last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
-    const { F, L, S, C, C2 } = this; // firsts, lasts, symbols, counts
-    const walk = new ArrayWalker(firstIndex === lastIndex ? 0 : 1, lastIndex - firstIndex);
+    // firsts, lasts, symbols, counts
+    const scratchSize = lastIndex - firstIndex;
+    this.scratch.reset();
+    const F = this.scratch.alloc(scratchSize); // firsts
+    const L = this.scratch.alloc(scratchSize); // lasts
+    const S = this.scratch.alloc(scratchSize); // symbols
+    const C = this.scratch.alloc(scratchSize); // counts
+    const C2 = this.scratch.alloc(scratchSize);
+    const walk = new ArrayWalker(firstIndex === lastIndex ? 0 : 1, scratchSize);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
@@ -730,7 +728,8 @@ export class WaveletMatrix {
   }
 
   majority(first, last, denominator = 2) {
-    const indices = new Uint32Array(denominator - 1);
+    if (denominator < 1) throw new Error('denominator must be a positive integer');
+    const indices = new Uint32Array(Math.max(1, denominator - 1));
     const total = last - first; // todo: change if inclusive
     for (let i = 1; i < denominator; i++) {
       const pc = i / denominator;
@@ -888,6 +887,29 @@ class ArrayWalker {
     this.length = this.frontIndex + (this.cap - this.backIndex);
     this.frontIndex = 0;
     this.backIndex = this.cap;
+  }
+}
+
+// start scratch with 10kb, then double each time we run out
+// alloc, reset. reset at start, alloc whenever we need.
+// note: one convenient aspect of this design is that the previous buffer subarrays
+// can continue to be used if we are resized during an alloc.
+class ScratchSpace {
+  constructor(initialLength = 10 * 1024) {
+    this.buf = new Uint32Array(initialLength);
+    this.index = 0;
+  }
+  alloc(length) {
+    if (this.index + length > this.buf.length) {
+      this.buf = new Uint32Array(2 * this.buf.length);
+      this.index = 0;
+    }
+    const sub = this.buf.subarray(this.index, this.index + length);
+    this.index += length;
+    return sub;
+  }
+  reset() {
+    this.index = 0;
   }
 }
 
