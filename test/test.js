@@ -167,10 +167,16 @@ function testWaveletMatrix(alphabetSizePadding, wmOpts) {
         assert.deepStrictEqual(ret.counts, new Uint32Array([1, 2, 1]));
       }
       {
-        const ret = wm.quantiles(0, wm.length, 0, 1 + 1); // todo: upper index should be inclusive?
+        const ret = wm.quantiles(0, wm.length, 0, 1 + 1); // todo: should upper index be inclusive?
         assert.deepStrictEqual(ret.symbols, new Uint32Array([0, 1]));
         assert.deepStrictEqual(ret.counts, new Uint32Array([1, 2]));
       }
+      {
+        const ret = wm.quantiles(0, wm.length, 0, 0)
+        assert.deepStrictEqual(ret.symbols, new Uint32Array([]));
+        assert.deepStrictEqual(ret.counts, new Uint32Array([]));
+      }
+
       //
     });
     it('accesses correctly', function () {

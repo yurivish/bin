@@ -1,19 +1,8 @@
 import { BitVector } from './BitVector.js';
 import { ZeroCompressedBitVector } from './ZeroCompressedBitVector.js';
 import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral } from './util.js';
-// todo: range next value, range prev value (though these can be done using quantile), quantiles, majority,
-// intersection and more from "New algorithms on wavelet trees and applications to information retrieval"
 
-// wavelet tree is from 2003, wavelet matrix is from oct. 2012
-// to do: hoist error objects to the top?
-
-// todo
-// - figure out scratch spaces
-//   - the sort option for counts makes it hard to write general code...
-//   - right now it uses nextBackIndex to push both to the back, while iterating from the front.
-//   - this would work better with reverse-order iteration...
-
-// note: implements a binary wavelet matrix that splits on power-of-two alphabet
+// Implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
 export class WaveletMatrix {
   // This implements Algorithm 1 (seq.pc) from the paper "Practical Wavelet Tree Construction".
@@ -91,6 +80,7 @@ export class WaveletMatrix {
       }
     }
 
+    // Compute the number of zeros at each level
     const numZeros = new Uint32Array(numLevels);
     for (let i = 0; i < numLevels; i++) {
       levels[i].finish();
@@ -109,11 +99,8 @@ export class WaveletMatrix {
   // Alternative construction algorithm for the 'sparse' case when the alphabet size
   // is significantly larger than the number of symbols that actually occur in the data.
   constructLargeAlphabet(data, alphabetSize, opts = {}) {
-    // note: could be more efficient without the perm indirection, but it allows us to
-    // create meta-wavelet trees that consist of multiple underlying wavelent trees
-    // in order to increase the symbol space (ie. query 64-bit or larger symbols)
+    data = new Uint32Array(data); // copy data because will be mutated
     let next = new Uint32Array(data.length);
-    data = new Uint32Array(data); // copy because will be mutated
 
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));
@@ -128,6 +115,10 @@ export class WaveletMatrix {
     const numZeros = new Uint32Array(numLevels);
     const walk = new ArrayWalker(0, data.length);
 
+    // For each level, sort the data point by its bit value at that level.
+    // Zero bits get sorted left, one bits get sorted right. This amounts
+    // to a bucket sort with two buckets.
+    // We sort into `next`, then swap `next` and `data`.
     for (let l = 0; l < maxLevel; l++) {
       const level = levels[l];
       const levelBit = maxLevel - l;
@@ -156,6 +147,7 @@ export class WaveletMatrix {
     }
     numZeros[maxLevel] = level.rank0(level.length);
 
+    // Mark the level bitvectors as finished
     for (let l = 0; l < numLevels; l++) levels[l].finish();
 
     this.levels = levels;
@@ -643,14 +635,13 @@ export class WaveletMatrix {
     return { symbols, counts, numSortedIndices, nRankCalls };
   }
 
+  // The approach below is from by "New algorithms on wavelet trees and applications to information retrieval"
   quantiles(first, last, firstIndex, lastIndex) {
-    // todo: for some reason quantiles(first, last, 0, 0) returns a single value rather than nothing.
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     if (firstIndex > lastIndex) throw new Error('firstIndex must be <= lastIndex');
     if (firstIndex < 0 || lastIndex > last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
-    // firsts, lasts, symbols, counts
     const scratchSize = lastIndex - firstIndex;
     this.scratch.reset();
     const F = this.scratch.alloc(scratchSize); // firsts
@@ -870,21 +861,17 @@ class ArrayWalker {
   // the source array from left-to-right, and want to not reverse
   // if we've been iterating right-to-left.
   reset(reverse, ...arrays) {
-    // move the filled-in elements from the end
-    // to the front of the array
-    for (let i = 0; i < arrays.length; i++) {
-      const arr = arrays[i];
-      const sub = arr.subarray(this.backIndex, this.cap);
-      if (reverse) sub.reverse();
-      arr.set(sub, this.frontIndex);
-      // reverse and move right elements following the first element.
-      // explicit loop (in js this is slower):
-      // let n = this.frontIndex;
-      // for (let i = this.cap; i > this.backIndex; ) {
-      //   i--
-      //   arr[n] = arr[i];
-      //   n++;
-      // }
+    if (this.backIndex < this.cap) {
+      // move the filled-in elements from the end
+      // to the front of the array
+      for (let i = 0; i < arrays.length; i++) {
+        const arr = arrays[i];
+        const sub = arr.subarray(this.backIndex, this.cap);
+        // reverse (if needed)
+        if (reverse) sub.reverse();
+        // move right elements to follow the left element directly
+        arr.set(sub, this.frontIndex);
+      }
     }
     // apply the same logical change to the last and length markers
     this.length = this.frontIndex + (this.cap - this.backIndex);
