@@ -47,6 +47,8 @@ export class AccessMultiSet {
   constructor(sortedData) {
     const data = sortedData
     // stores a 1 for every unique value in the universe [0, maximum(data)]
+    // eg 5555 88 99 becomes 0000010011
+    //            at indices 0123456789
     this.occupancy = new ZeroCompressedBitVector(data.length === 0 ? 0 : data[data.length - 1] + 1, { select: true });
     // stores a leading 1 for every unique value in the universe [0, length(data) - 1]
     // e.g. 5555 88 999 becomes 1000 10 100

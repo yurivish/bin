@@ -410,9 +410,9 @@ export class WaveletMatrix {
     // number of unique symbols.
     const scratchSize = Math.min(2 ** this.numLevels - groupBits, this.alphabetSize, this.length);
     this.scratch.reset();
-    const F = this.scratch.alloc(scratchSize);
-    const L = this.scratch.alloc(scratchSize);
-    const S = this.scratch.alloc(scratchSize);
+    const F = this.scratch.alloc(scratchSize); // firsts
+    const L = this.scratch.alloc(scratchSize); // lasts
+    const S = this.scratch.alloc(scratchSize); // symbols
     const walk = new ArrayWalker(1, scratchSize);
     const reverse = !sort; // walk.reset(reverse, ...)
     const nextIndex = walk.nextFrontIndex();
@@ -421,7 +421,6 @@ export class WaveletMatrix {
     S[nextIndex] = 0;
     walk.reset(false, F, L, S);
 
-    // count inner
     let nRankCalls = 0;
     // start with all 'extra' high bits set so that we properly handle an
     // `upper` value above ceil(log2(alphabetSize))
@@ -464,7 +463,7 @@ export class WaveletMatrix {
 
         const rightCount = last1 - first1;
         if (rightCount > 0) {
-          // go right if the right node range [a, b] (inclusive) overlaps [lower, upper) (exclusive)
+          // go right if the right node range [a, b] overlaps [lower, upper]
           const a = (symbol | levelBitMask) & subcodeMask;
           const b = (a | (levelBitMask - 1)) & subcodeMask;
           if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
@@ -477,7 +476,7 @@ export class WaveletMatrix {
 
         const leftCount = last0 - first0;
         if (leftCount > 0) {
-          // go left if the left node range [a, b] (inclusive) overlaps [lower, upper] (inclusive)
+          // go left if the left node range [a, b] overlaps [lower, upper]
           // or if there is no range mask. We use an inclusive symbol range since we allow permit all
           // bit patterns as codes, including the maximum value.
           const a = symbol & subcodeMask;

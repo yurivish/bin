@@ -1,5 +1,5 @@
 // note: top-level await is only for --target = es2022 and above:
-// esbuild bin.js --bundle --loader:.wasm=binary --target=es2022 --format=esm --outfile=bin.bundle.js --watch
+// esbuild js/bin.js --bundle --loader:.wasm=binary --target=es2022 --format=esm --outfile=bin.bundle.js --watch
 //
 // import wasm from './dist/bitvector.wasm';
 // const C = await WebAssembly.instantiate(wasm).then((r) => r.instance.exports);
