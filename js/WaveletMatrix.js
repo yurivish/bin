@@ -882,10 +882,9 @@ class ArrayWalker {
   }
 }
 
-// start scratch with 10kb, then double each time we run out
-// alloc, reset. reset at start, alloc whenever we need.
-// note: one convenient aspect of this design is that the previous buffer subarrays
-// can continue to be used if we are resized during an alloc.
+// start scratch with 10kb, then double each time we run out.
+// A convenient aspect of this design is that the previous buffer
+// subarrays can continue to be used if we are resized during an alloc.
 class ScratchSpace {
   constructor(initialLength = 10 * 1024) {
     this.buf = new Uint32Array(initialLength);
