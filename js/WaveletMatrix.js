@@ -729,6 +729,7 @@ export class WaveletMatrix {
 
   majority(first, last, denominator = 2) {
     if (denominator < 1) throw new Error('denominator must be a positive integer');
+    // if denominator === 1, we sample the first element at index 0
     const indices = new Uint32Array(Math.max(1, denominator - 1));
     const total = last - first; // todo: change if inclusive
     for (let i = 1; i < denominator; i++) {
