@@ -239,7 +239,10 @@ if (doTestWaveletMatrix) {
   testWaveletMatrix(0, { largeAlphabet: true });
   testWaveletMatrix(100, { largeAlphabet: false });
   testWaveletMatrix(100, { largeAlphabet: true });
+} else {
+  console.log('skipping wavelet matrix tests')
 }
+
 
 // Bit vector tests
 
@@ -390,4 +393,6 @@ if (doTestBitVector) {
   testBitVector(BitVector);
   testBitVector(CBitVector);
   testBitVector(ZeroCompressedBitVector);
+} else {
+  console.log('skipping bitvector tests')
 }
