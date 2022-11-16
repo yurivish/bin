@@ -186,25 +186,25 @@ export class WaveletMatrix {
     return indices.last - indices.first;
   }
 
-  // Returns the index of the kth occurrence of `symbol` in the range [first, last).
-  select(first, last, symbol, k) {
+  // Returns the index of the nth occurrence of `symbol` in the range [first, last).
+  select(first, last, symbol, n) {
     if (symbol < 0 || symbol >= this.alphabetSize) return -1;
-    if (k < 1 || symbol > this.length) return -1;
+    if (n < 1 || symbol > this.length) return -1;
     const indices = this.symbolIndices(first, last, symbol, 0);
-    if (indices.last - indices.first < k) return -1; // in analogy with select
-    let index = indices.first + k - 1;
+    if (indices.last - indices.first < n) return -1; // in analogy with select
+    let index = indices.first + n - 1;
     for (let l = this.numLevels; l > 0; ) {
       l -= 1;
       const level = this.levels[l];
       const nz = this.numZeros[l];
       if (index < nz) {
         // this position was mapped from a zero at the previous level
-        const k = index + 1; // this was the nth zero on the that level
-        index = level.select0(k); // locate the corresponding index on the preceding level
+        const n = index + 1; // this was the nth zero on the that level
+        index = level.select0(n); // locate the corresponding index on the preceding level
       } else {
         // this position was mapped from a one at the previous level
-        const k = index - nz + 1; // this was the nth one on the that level
-        index = level.select1(k); // locate the corresponding index on the preceding level
+        const n = index - nz + 1; // this was the nth one on the that level
+        index = level.select1(n); // locate the corresponding index on the preceding level
       }
     }
     return index;
@@ -391,7 +391,7 @@ export class WaveletMatrix {
   // differ only in their lowest `groupBits` bits)
   // Each distinct group is labeled by its lowest element, which represents
   // the group containing symbols in the range [symbol, symbol + 2^groupBits).
-  counts(first, last, lower, upper, { groupBits = 0, subcodeIndicator = 0, sort = true } = {}) {
+  counts(first, last, lower, upper, { groupBits = 0, sort = true, subcodeIndicator = 0 } = {}) {
     const symbolGroupSize = 1 << groupBits;
     // todo: handle lower === upper
     // these error messages could be improved, explaining that ignore bits tells us the power of two
@@ -720,18 +720,20 @@ export class WaveletMatrix {
     return null;
   }
 
-  majority(first, last, denominator = 2) {
-    if (denominator < 1) throw new Error('denominator must be a positive integer');
-    // if denominator === 1, we sample the first element at index 0
-    const indices = new Uint32Array(Math.max(1, denominator - 1));
+  majority(first, last, k = 2) {
+    // Returns the 1/k-majority. Ie. for k = 4, return the elements (if any) with
+    // frequency larger than 1/4th (25%) of the specified index range
+    if (k < 1 || !Number.isInteger(k)) throw new Error('k must be a positive integer');
+    // if k === 1, we sample the first element at index 0
+    const indices = new Uint32Array(Math.max(1, k - 1));
     const total = last - first; // todo: change if inclusive
-    for (let i = 1; i < denominator; i++) {
-      const pc = i / denominator;
+    for (let i = 1; i < k; i++) {
+      const pc = i / k;
       // implicit floor; we consistently round down.
       indices[i - 1] = first + total * pc;
     }
     const res = this.quantileBatch(first, last, indices);
-    const count = Math.floor((last - first) / denominator);
+    const count = Math.floor((last - first) / k);
     let n = 0;
     for (let i = 0; i < res.symbols.length; i++) {
       if (res.counts[i] > count) {
