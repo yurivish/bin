@@ -4,9 +4,9 @@ import { popcount } from './util.js';
 // todo: use the same { rank: true, select: true } constructor to support both ops;
 // though here, select implies rank. and we may want larger rank blocks for select.
 export class BitVector {
+  // todo: allow initializing from blocks/rankSuperblocks; can use select
+  // to determine the true maxOneIndex (pre-init it to length since select uses it)
   constructor(length) {
-    // todo: interleave rank and bits blocks for improved rank performance (access slows down)
-    // todo: make a RankSelectBitVector for noninterleaved noncompressed rank/select
     const n = Math.ceil(length / 32);
     this.blocks = new Uint32Array(n);
     this.numOnes = 0;

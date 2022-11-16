@@ -1,6 +1,9 @@
 import { BitVector } from './BitVector.js';
 import { ZeroCompressedBitVector } from './ZeroCompressedBitVector.js';
 
+// todo: constructor that takes input as sorted (value, multiplicity) arrays
+// rather than a sorted value array with repetitions.
+
 // represents a sorted list of integer elements (must be constructed from a sorted list)
 // todo: describe how it works (it keeps one bitmap of unique elements, and another of repetitions)
 export class RankMultiSet {
