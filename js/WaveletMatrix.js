@@ -3,9 +3,6 @@ import { RLEBitVector } from './RLEBitVector.js';
 import { ZeroCompressedBitVector } from './ZeroCompressedBitVector.js';
 import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral } from './util.js';
 
-// RLE todo
-// - a finish() method to convert Z and ZO to Uint32Arrays?
-
 // Implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
 export class WaveletMatrix {
@@ -17,8 +14,9 @@ export class WaveletMatrix {
   constructor(data, alphabetSize, opts = {}) {
     // As a simple heuristic, by default use the large alphabet constructor when
     // the alphabet sides exceeds the number of data points.
-    const { largeAlphabet = alphabetSize > data.length } = opts;
+    const { largeAlphabet = alphabetSize > data.length, multiplicity } = opts;
     if (largeAlphabet) return this.constructLargeAlphabet(data, alphabetSize, opts);
+    const hasMultiplicity = multiplicity !== undefined
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));
     const maxLevel = numLevels - 1;
@@ -30,7 +28,8 @@ export class WaveletMatrix {
     const levels = new Array(numLevels);
     // Initialize the level bit vectors
     for (let i = 0; i < numLevels; i++) {
-      levels[i] = new BitVector(data.length);
+      if (hasMultiplicity) levels[i] = new RLEBitVector();
+      else levels[i] = new BitVector(data.length);
     }
 
     // Compute the histogram of the data
@@ -41,7 +40,8 @@ export class WaveletMatrix {
       hist[d] += 1;
       // Fill the first bitvector (MSBs in data order)
       if (d & levelBitMask) {
-        level.one(i);
+        if (hasMultiplicity) level.oneRun(i, multiplicity[i])
+        else level.one(i);
       }
     }
 
@@ -80,7 +80,8 @@ export class WaveletMatrix {
         borders[nodeIndex] += 1;
         // Set the bit in the bitvector
         if (d & levelBitMask) {
-          level.one(p);
+          if (hasMultiplicity) level.oneRun(p, multiplicity[p])
+          else level.one(p);
         }
       }
     }

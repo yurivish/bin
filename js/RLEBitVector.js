@@ -106,6 +106,11 @@ class RLEBitVector {
     // Return the index of the (i - numPrecedingOnes)th one in the j-th (0, 1)-block.
     return firstOneIndex + (i - numPrecedingOnes) - 1;
   }
+
+  function finish() {
+    this.Z = new Uint32Array(this.Z)
+    this.ZO = new Uint32Array(this.ZO)
+  }
 }
 
 // Returns the rightmost insertion index for T in A in order to maintain A's sorted order.
