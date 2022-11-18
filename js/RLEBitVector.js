@@ -20,7 +20,7 @@ class RLEBitVector {
     this.length += numZeros + numOnes;
   }
 
-  // Encodes a run of ones starting at at index `i`
+  // Encodes a run of ones of length `length` starting at at index `i`
   oneRun(i, length) {
     if (i < this.length) throw new Error('oneRun cannot overlap any pre-existing runs');
     // Number of zeros preceding this 1-run
