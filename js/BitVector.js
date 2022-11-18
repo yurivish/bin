@@ -42,11 +42,11 @@ export class BitVector {
     if (i < 0) return 0;
     if (i > this.maxOneIndex) return this.numOnes;
     const blockIndex = i >>> 5;
-    const rankSuperbock = this.rankSuperblocks[blockIndex];
+    const rankSuperblock = this.rankSuperblocks[blockIndex];
     const block = this.blocks[blockIndex];
     const lowBitIndex = i & 31;
     const mask = 0xfffffffe << lowBitIndex;
-    return rankSuperbock - popcount(block & mask);
+    return rankSuperblock - popcount(block & mask);
   }
 
   rank0(i) {
