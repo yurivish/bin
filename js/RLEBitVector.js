@@ -1,4 +1,4 @@
-class RLEBitVector {
+export class RLEBitVector {
   constructor() {
     this.Z = [];
     this.ZO = [];
@@ -13,103 +13,122 @@ class RLEBitVector {
     const prevZ = len > 0 ? this.Z[len - 1] : 0;
     this.Z.push(prevZ + numZeros);
 
-    // Append the index of the first one of this run to the ZO array
-    this.ZO.push(this.length + numZeros);
+    // Append the index of the last one of this run to the ZOE array
+    this.ZO.push(this.length + numZeros + numOnes);
 
     // Update the bitvector length
     this.length += numZeros + numOnes;
   }
 
-  // Encodes a run of ones of length `length` starting at at index `i`
-  oneRun(i, length) {
-    if (i < this.length) throw new Error('oneRun cannot overlap any pre-existing runs');
+  // Encodes a run of `numOnes` ones starting at at index `i`
+  oneRun(i, numOnes) {
+    if (i < this.length)
+      throw new Error("oneRun cannot overlap pre-existing runs");
     // Number of zeros preceding this 1-run
     const numZeros = i - this.length;
-    const numOnes = length;
-    this.run(numZeros, numOnes);
+    // Coalesce contiguous 1-runs
+    if (numZeros === 0) this.length += numOnes;
+    else this.run(numZeros, numOnes);
   }
 
-  rank1(i) {
-    if (i < 0) return 0;
-    if (i >= this.length) return this.length - this.Z[this.Z.length - 1];
-
-    // Number of complete zero-runs up to virtual index i
-    const j = sparseRank1(this.ZO, i);
-
-    // Number of zeros preceding the current 1-run
-    let numPrecedingZeros = j === 0 ? 0 : sparseSelect1(this.Z, j);
-
-    // Ensure that `i` does not point beyond the last 1 in the current 1-run
-    if (j < this.Z.length) {
-      // Number of zeros in the next (0, 1)-run
-      const numZerosNextRun = sparseSelect1(this.Z, j + 1) - numPrecedingZeros;
-      // Virtual index of the start of the next 1-run
-      const nextOneRunIndex = sparseSelect1(this.ZO, j + 1);
-      // Virtual index of the end of the current 1-run
-      const lastOneRunIndex = nextOneRunIndex - numZerosNextRun - 1;
-      if (i > lastOneRunIndex) i = lastOneRunIndex;
-    }
-    return i - numPrecedingZeros + 1;
+  finish() {
+    this.Z = new Uint32Array(this.Z);
+    this.ZO = new Uint32Array(this.ZO);
+    this.numZeros = sparseSelect1(this.Z, this.Z.length);
+    this.numOnes = this.length - this.numZeros;
   }
 
   rank0(i) {
     if (i < 0) return 0;
-    if (i >= this.length) return this.Z[this.Z.length - 1];
+    if (i >= this.length) return this.numZeros;
     return i - this.rank1(i) + 1;
   }
 
-  select0(i) {
-    if (i < 1 || i > this.Z[this.Z.length - 1]) return -1;
+  rank1(i) {
+    if (i < 0) return 0;
+    if (i >= this.length) return this.numOnes;
 
-    // The i-th zero is in the j-th (0, 1)-block.
+    // Number of complete 01-runs up to and including virtual index i
+    const j = sparseRank1(this.ZO, i);
+
+    // Number of zeros including the j-th block
+    const numCumulativeZeros = sparseSelect1(this.Z, j + 1);
+
+    // Number of zeros preceding the j-th block
+    const numPrecedingZeros = j === 0 ? 0 : sparseSelect1(this.Z, j);
+
+    // Number of zeros in the j-th block
+    const numZeros = numCumulativeZeros - numPrecedingZeros;
+
+    // Start index of the j-th block
+    const blockStart = j === 0 ? 0 : sparseSelect1(this.ZO, j);
+
+    // Number of ones preceding the j-th block
+    const numPrecedingOnes = blockStart - numPrecedingZeros;
+
+    // Start index of ones in the j-th block
+    const onesStart = blockStart + numZeros;
+
+    return numPrecedingOnes + Math.max(0, i - onesStart + 1);
+  }
+
+  alignedRank0(i) {
+    if (i < 0) return 0;
+    if (i >= this.length) return this.numZeros;
+
+    // Number of complete 01-runs up to virtual index i
+    const j = sparseRank1(this.ZO, i);
+
+    // Number of zeros preceding the (aligned) index i
+    return sparseSelect1(this.Z, j + 1);
+  }
+
+  alignedRank1(i) {
+    if (i < 0) return 0;
+    if (i >= this.length) return this.numOnes;
+    return i - this.alignedRank0(i) + 1;
+  }
+
+  select0(i) {
+    if (i < 1 || i > this.numZeros) return -1;
+
+    // The i-th zero is in the j-th 01-block.
     const j = sparseRank1(this.Z, i - 1);
 
-    // If we're in the first (0, 1)-block, the i-th zero is at index i - 1.
+    // If we're in the first 01-block, the i-th zero is at index i - 1.
     if (j === 0) return i - 1;
 
-    // Number of zeros preceding the jth (0, 1)-block
+    // Start index of the j-th block
+    const blockStart = sparseSelect1(this.ZO, j);
+
+    // Number of zeros preceding the jth block
     const numPrecedingZeros = sparseSelect1(this.Z, j);
 
-    // Number of zeros up to and including the jth (0, 1)-block
-    const cumulativeZeros = sparseSelect1(this.Z, j + 1);
-
-    // Number of zeros in the j-th (0, 1) block
-    const numZeros = cumulativeZeros - numPrecedingZeros;
-
-    // Index of the first 1 in the j-th (0, 1)-block
-    const firstOneIndex = sparseSelect1(this.ZO, j + 1);
-
-    // Index of the first zero of the j-th (0, 1)-block
-    const firstZeroIndex = firstOneIndex - numZeros;
-
-    // Return the index of the (i - numPrecedingZeros)th zero in the j-th (0, 1)-block.
-    return firstZeroIndex + (i - numPrecedingZeros) - 1;
+    // Return the index of the (i - numPrecedingZeros)th zero in the j-th 01-block.
+    return blockStart + (i - numPrecedingZeros) - 1;
   }
 
   select1(i) {
-    if (i < 1 || i > this.length - this.Z[this.Z.length - 1]) return -1;
+    if (i < 1 || i > this.numOnes) return -1;
 
-    // The i-th one is in the j-th (0, 1)-block.
-    const j =
-      binarySearchAfter((k) => sparseSelect1(this.ZO, k + 1) - sparseSelect1(this.Z, k + 1), i - 1, 0, this.Z.length) -
-      1;
+    // The i-th one is in the j-th 01-block.
+    const j = binarySearchAfter(
+      (k) => sparseSelect1(this.ZO, k + 1) - sparseSelect1(this.Z, k + 1),
+      i - 1,
+      0,
+      this.Z.length
+    );
 
-    // Index of the first 1 in the j-th (0, 1)-block
-    const firstOneIndex = sparseSelect1(this.ZO, j + 1);
+    // Start index of the next block
+    const nextBlockStart = sparseSelect1(this.ZO, j + 1);
 
-    // Number of zeros up to and including the jth (0, 1)-block
-    const cumulativeZeros = sparseSelect1(this.Z, j + 1);
+    // Number of zeros up to and including the jth block
+    const numCumulativeZeros = sparseSelect1(this.Z, j + 1);
 
-    // Number of ones in the blocks preceding the j-th block (ZO[j+1] - Z[j+1])
-    const numPrecedingOnes = firstOneIndex - cumulativeZeros;
+    // Number of ones up to and including the j-th block
+    const numCumulativeOnes = nextBlockStart - numCumulativeZeros;
 
-    // Return the index of the (i - numPrecedingOnes)th one in the j-th (0, 1)-block.
-    return firstOneIndex + (i - numPrecedingOnes) - 1;
-  }
-
-  function finish() {
-    this.Z = new Uint32Array(this.Z)
-    this.ZO = new Uint32Array(this.ZO)
+    return nextBlockStart - (numCumulativeOnes - i) - 1;
   }
 }
 
