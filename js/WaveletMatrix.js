@@ -156,7 +156,7 @@ export class WaveletMatrix {
         if (hasMultiplicity) multiplicityOffset += multiplicity[i];
       }
       numZeros[l] = walk.frontIndex;
-      walk.reset(true, nextData);
+      walk.reset(true, nextData, nextMultiplicity);
       {
         // swap data and nextData
         const tmp = data; 
