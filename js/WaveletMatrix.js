@@ -1,6 +1,10 @@
 import { BitVector } from './BitVector.js';
+import { RLEBitVector } from './RLEBitVector.js';
 import { ZeroCompressedBitVector } from './ZeroCompressedBitVector.js';
 import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral } from './util.js';
+
+// RLE todo
+// - a finish() method to convert Z and ZO to Uint32Arrays?
 
 // Implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
@@ -22,14 +26,11 @@ export class WaveletMatrix {
     const hist = new Uint32Array(2 ** numLevels);
     const borders = new Uint32Array(2 ** numLevels);
     // note: if data is sorted, could we use a compressed set data structure for hist/borders?
-    // todo: can we perform better for sparse code sets, eg. [0, 2^32)?
 
     const levels = new Array(numLevels);
     // Initialize the level bit vectors
     for (let i = 0; i < numLevels; i++) {
       levels[i] = new BitVector(data.length);
-      // try this once bits can be added to it out-of-order
-      // levels[i] = new ZeroCompressedBitVector(data.length, { rank: true });
     }
 
     // Compute the histogram of the data
@@ -39,7 +40,9 @@ export class WaveletMatrix {
       const d = data[i];
       hist[d] += 1;
       // Fill the first bitvector (MSBs in data order)
-      if (d & levelBitMask) level.one(i);
+      if (d & levelBitMask) {
+        level.one(i);
+      }
     }
 
     // Construct the other levels bottom-up
@@ -76,7 +79,9 @@ export class WaveletMatrix {
         const p = borders[nodeIndex];
         borders[nodeIndex] += 1;
         // Set the bit in the bitvector
-        if (d & levelBitMask) level.one(p);
+        if (d & levelBitMask) {
+          level.one(p);
+        }
       }
     }
 
