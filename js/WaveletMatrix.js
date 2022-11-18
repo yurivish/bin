@@ -16,7 +16,7 @@ export class WaveletMatrix {
     // the alphabet sides exceeds the number of data points.
     const { largeAlphabet = alphabetSize > data.length, multiplicity } = opts;
     if (largeAlphabet) return this.constructLargeAlphabet(data, alphabetSize, opts);
-    const hasMultiplicity = multiplicity !== undefined
+    const hasMultiplicity = multiplicity !== undefined;
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));
     const maxLevel = numLevels - 1;
