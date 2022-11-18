@@ -3,6 +3,13 @@ import { RLEBitVector } from './RLEBitVector.js';
 import { ZeroCompressedBitVector } from './ZeroCompressedBitVector.js';
 import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral } from './util.js';
 
+// todo
+// - maybe there's a way to do out-of-order construction
+//   by cumulatively summing the multiplicities beforehand.
+//   some of those will correspond to the ZO values.
+//   - we don't want to entangle ourselves too closely with
+//     the specific sparse BV representation, though.
+
 // Implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
 export class WaveletMatrix {
@@ -15,8 +22,7 @@ export class WaveletMatrix {
     // As a simple heuristic, by default use the large alphabet constructor when
     // the alphabet sides exceeds the number of data points.
     const { largeAlphabet = alphabetSize > data.length, multiplicity } = opts;
-    if (largeAlphabet) return this.constructLargeAlphabet(data, alphabetSize, opts);
-    const hasMultiplicity = multiplicity !== undefined;
+    if (largeAlphabet || multiplicity) return this.constructLargeAlphabet(data, alphabetSize, opts);
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));
     const maxLevel = numLevels - 1;
@@ -28,8 +34,7 @@ export class WaveletMatrix {
     const levels = new Array(numLevels);
     // Initialize the level bit vectors
     for (let i = 0; i < numLevels; i++) {
-      if (hasMultiplicity) levels[i] = new RLEBitVector();
-      else levels[i] = new BitVector(data.length);
+      levels[i] = new BitVector(data.length);
     }
 
     // Compute the histogram of the data
@@ -39,10 +44,7 @@ export class WaveletMatrix {
       const d = data[i];
       hist[d] += 1;
       // Fill the first bitvector (MSBs in data order)
-      if (d & levelBitMask) {
-        if (hasMultiplicity) level.oneRun(i, multiplicity[i])
-        else level.one(i);
-      }
+      if (d & levelBitMask) level.one(i);
     }
 
     // Construct the other levels bottom-up
@@ -79,10 +81,7 @@ export class WaveletMatrix {
         const p = borders[nodeIndex];
         borders[nodeIndex] += 1;
         // Set the bit in the bitvector
-        if (d & levelBitMask) {
-          if (hasMultiplicity) level.oneRun(p, multiplicity[p])
-          else level.one(p);
-        }
+        if (d & levelBitMask) level.one(p);
       }
     }
 
@@ -105,8 +104,18 @@ export class WaveletMatrix {
   // Alternative construction algorithm for the 'sparse' case when the alphabet size
   // is significantly larger than the number of symbols that actually occur in the data.
   constructLargeAlphabet(data, alphabetSize, opts = {}) {
-    data = new Uint32Array(data); // copy data because will be mutated
-    let next = new Uint32Array(data.length);
+    const { multiplicity } = opts;
+    const hasMultiplicity = multiplicity !== undefined;
+
+    // copy data and multiplicity because will be mutated
+    data = new Uint32Array(data);
+    let nextData = new Uint32Array(data.length)
+
+    let nextMultiplicity;
+    if (hasMultiplicity) {
+      multiplicity = new Uint32Array(multiplicity);
+      nextMultiplicity = new Uint32Array(data.length);
+    }
 
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));
@@ -124,32 +133,53 @@ export class WaveletMatrix {
     // For each level, sort the data point by its bit value at that level.
     // Zero bits get sorted left, one bits get sorted right. This amounts
     // to a bucket sort with two buckets.
-    // We sort into `next`, then swap `next` and `data`.
+    // We sort into `nextData`, then swap `nextData` and `data`.
     for (let l = 0; l < maxLevel; l++) {
       const level = levels[l];
       const levelBit = maxLevel - l;
       const levelBitMask = 1 << levelBit;
+      let multiplicityOffset = 0;
       for (let i = 0; i < data.length; i++) {
         const d = data[i];
         if (d & levelBitMask) {
-          next[walk.nextBackIndex()] = d;
-          level.one(i);
+          const ni = walk.nextBackIndex()
+          nextData[ni] = d;
+          if (hasMultiplicity) {
+            const m = multiplicity[i]
+            level.oneRun(multiplicityOffset, m)
+            nextMultiplicity[ni] = m
+          } else level.one(i);
         } else {
-          next[walk.nextFrontIndex()] = d;
+          const ni = walk.nextFrontIndex()
+          nextData[ni] = d;
         }
-        numZeros[l] = walk.frontIndex;
+        if (hasMultiplicity) multiplicityOffset += multiplicity[i];
       }
-      walk.reset(true, next);
-      const tmp = data;
-      data = next;
-      next = tmp;
+      numZeros[l] = walk.frontIndex;
+      walk.reset(true, nextData);
+      {
+        // swap data and nextData
+        const tmp = data; 
+        data = nextData;
+        nextData = tmp;
+      }
+      {
+        // swap multiplicity and nextMultiplicity
+        const tmp = multiplicity;
+        multiplicity = nextMultiplicity;
+        nextMultiplicity = tmp;
+      }
     }
 
     // For the last level we don't need to build anything but the bitvector
     const level = levels[maxLevel];
     const levelBitMask = 1 << 0;
     for (let i = 0; i < data.length; i++) {
-      if (data[i] & levelBitMask) level.one(i);
+      if (data[i] & levelBitMask) {
+        if (hasMultiplicity) level.oneRun(multiplicityOffset, multiplicity[i]);
+        else level.one(i);
+        if (hasMultiplicity) multiplicityOffset += multiplicity[i];
+      }
     }
     numZeros[maxLevel] = level.rank0(level.length);
 
