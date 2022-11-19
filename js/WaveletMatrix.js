@@ -973,7 +973,7 @@ class ScratchSpace {
   }
   alloc(length) {
     if (this.index + length > this.buf.length) {
-      this.buf = new Uint32Array(2 * this.buf.length);
+      this.buf = new Uint32Array(Math.max(length, 2 * this.buf.length));
       this.index = 0;
     }
     const sub = this.buf.subarray(this.index, this.index + length);
