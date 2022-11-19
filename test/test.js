@@ -30,6 +30,9 @@ const doTestWaveletMatrix = true; // ⚠️
 // todo
 // - annotate tests with comments stating what they're testing
 // - test sparse alphabet construction (just that it completes successfully)
+// - test that errors are thrown for OOB input indices
+// - test multiplicity construction
+// - test multiplicity functions
 
 function testWaveletMatrix(alphabetSizePadding, wmOpts) {
   describe('wavelet matrix', function () {

@@ -9,6 +9,10 @@ import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral
 //   some of those will correspond to the ZO values.
 //   - we don't want to entangle ourselves too closely with
 //     the specific sparse BV representation, though.
+// - todo use aligned rank when possible (maybe not in quantile)
+// - make whether to query with multiplicity an option? will determine whether we can use aligned rank, though.
+// - give all BVs alignedRank aliases, so we can use it in WM when calls are run-aligned?
+// - constructor should accept maxSymbol = alphabetSize - 1
 
 // Implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
@@ -104,15 +108,16 @@ export class WaveletMatrix {
   // Alternative construction algorithm for the 'sparse' case when the alphabet size
   // is significantly larger than the number of symbols that actually occur in the data.
   constructLargeAlphabet(data, alphabetSize, opts = {}) {
-    const { multiplicity } = opts;
+    let { multiplicity } = opts;
     const hasMultiplicity = multiplicity !== undefined;
 
     // copy data and multiplicity because will be mutated
     data = new Uint32Array(data);
-    let nextData = new Uint32Array(data.length)
+    let nextData = new Uint32Array(data.length);
 
-    let nextMultiplicity;
+    let origMultiplicity, nextMultiplicity;
     if (hasMultiplicity) {
+      origMultiplicity = multiplicity;
       multiplicity = new Uint32Array(multiplicity);
       nextMultiplicity = new Uint32Array(data.length);
     }
@@ -124,7 +129,8 @@ export class WaveletMatrix {
     // Initialize the level bit vectors
     const levels = new Array(numLevels);
     for (let i = 0; i < numLevels; i++) {
-      levels[i] = new BitVector(data.length);
+      if (hasMultiplicity) levels[i] = new RLEBitVector();
+      else levels[i] = new BitVector(data.length);
     }
 
     const numZeros = new Uint32Array(numLevels);
@@ -138,28 +144,28 @@ export class WaveletMatrix {
       const level = levels[l];
       const levelBit = maxLevel - l;
       const levelBitMask = 1 << levelBit;
-      let multiplicityOffset = 0;
       for (let i = 0; i < data.length; i++) {
         const d = data[i];
+        const m = multiplicity[i];
         if (d & levelBitMask) {
-          const ni = walk.nextBackIndex()
+          const ni = walk.nextBackIndex();
           nextData[ni] = d;
           if (hasMultiplicity) {
-            const m = multiplicity[i]
-            level.oneRun(multiplicityOffset, m)
-            nextMultiplicity[ni] = m
+            level.run(0, m);
+            nextMultiplicity[ni] = m;
           } else level.one(i);
         } else {
-          const ni = walk.nextFrontIndex()
+          const ni = walk.nextFrontIndex();
           nextData[ni] = d;
+          level.run(m, 0);
+          nextMultiplicity[ni] = m;
         }
-        if (hasMultiplicity) multiplicityOffset += multiplicity[i];
       }
       numZeros[l] = walk.frontIndex;
       walk.reset(true, nextData, nextMultiplicity);
       {
         // swap data and nextData
-        const tmp = data; 
+        const tmp = data;
         data = nextData;
         nextData = tmp;
       }
@@ -176,9 +182,10 @@ export class WaveletMatrix {
     const levelBitMask = 1 << 0;
     for (let i = 0; i < data.length; i++) {
       if (data[i] & levelBitMask) {
-        if (hasMultiplicity) level.oneRun(multiplicityOffset, multiplicity[i]);
+        if (hasMultiplicity) level.run(0, multiplicity[i]);
         else level.one(i);
-        if (hasMultiplicity) multiplicityOffset += multiplicity[i];
+      } else {
+        if (hasMultiplicity) level.run(multiplicity[i], 0);
       }
     }
     numZeros[maxLevel] = level.rank0(level.length);
@@ -186,13 +193,21 @@ export class WaveletMatrix {
     // Mark the level bitvectors as finished
     for (let l = 0; l < numLevels; l++) levels[l].finish();
 
+    this.scratch = new ScratchSpace();
     this.levels = levels;
     this.alphabetSize = alphabetSize;
     this.numZeros = numZeros;
     this.numLevels = numLevels;
     this.maxLevel = maxLevel;
     this.length = data.length;
-    this.scratch = new ScratchSpace();
+    this.hasMultiplicity = hasMultiplicity;
+    if (hasMultiplicity) {
+      for (let i = 1; i < multiplicity.length; i++) {
+        multiplicity[i] += multiplicity[i - 1];
+      }
+      this.cumulativeMultiplicity = multiplicity;
+      this.length = this.cumulativeMultiplicity[this.cumulativeMultiplicity.length - 1];
+    }
   }
 
   access(index) {
@@ -222,6 +237,23 @@ export class WaveletMatrix {
     return indices.last - indices.first;
   }
 
+  // Perform basic single-index out-of-bounds checks, and return
+  // an index scaled by the appropriate multiplicity in the event
+  // that this wavelet matrix has multiplicities.
+  // note: for most functions, the branch below is executed twice,
+  // once for first, and once for last. This doubles the number of
+  // necessary checks; should optimize this once things are working.
+  multiplicityIndex(index) {
+    if (this.hasMultiplicity) {
+      if (index < 0 || index > this.cumulativeMultiplicity.length) throw new Error('index out of bounds');
+      if (index === 0) return 0;
+      return this.cumulativeMultiplicity[index - 1];
+    } else {
+      if (index < 0 || index > this.length) throw new Error('index out of bounds');
+      return index;
+    }
+  }
+
   // Returns the index of the nth occurrence of `symbol` in the range [first, last).
   select(first, last, symbol, n) {
     if (symbol < 0 || symbol >= this.alphabetSize) return -1;
@@ -249,15 +281,16 @@ export class WaveletMatrix {
   // Internal function returning the (first, last] index range covered by this symbol on the virtual bottom level,
   // or on a higher level if groupBits > 0. `last - first` gives the symbol count within the provided range.
   symbolIndices(first, last, symbol, { groupBits = 0 } = {}) {
+    first = this.multiplicityIndex(first);
+    last = this.multiplicityIndex(last);
     const symbolGroupSize = 1 << groupBits;
     if (symbol % symbolGroupSize !== 0) {
       // note: could be done with bit math (check that low bits are zero)
       throw new Error('symbol must evenly divide the block size implied by groupBits');
     }
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
-    if (first > last) throw new Error('last must be <= first');
+    if (first >= last) throw new Error('last must be < first');
     if (first === last) return 0;
-    if (first > this.length) throw new Error('first must be < wavelet matrix length');
     if (this.numLevels === 0) return 0;
     const numLevels = this.numLevels - groupBits;
     for (let l = 0; l < numLevels; l++) {
@@ -283,9 +316,10 @@ export class WaveletMatrix {
   // This is kind of like a ranged rank operation over a symbol range.
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
   countLessThan(first, last, symbol) {
-    if (first < 0) throw new Error('first must be >= 0');
+    // note: doing this here means that eg. calling `count` doubles the number of checks
+    first = this.multiplicityIndex(first);
+    last = this.multiplicityIndex(last);
     if (first > last) throw new Error('first must be <= last');
-    if (last > this.length) throw new Error('last must be < wavelet matrix length');
     if (symbol <= 0) return 0;
     if (symbol >= this.alphabetSize) return last - first;
     let count = 0;
@@ -324,6 +358,9 @@ export class WaveletMatrix {
   }
 
   countSymbolBatch(first, last, sortedSymbols, { groupBits = 0 } = {}) {
+    first = this.multiplicityIndex(first);
+    last = this.multiplicityIndex(last);
+
     // splitByMsb requires the same sortedSymbol to be searched for in each of the split paths.
     // for now, we'll go with the relatively inefficient route of asking that this be done by
     // supplying a larger set of sortedSymbols, enumerating all MSB variations in the high bits.
@@ -428,6 +465,9 @@ export class WaveletMatrix {
   // Each distinct group is labeled by its lowest element, which represents
   // the group containing symbols in the range [symbol, symbol + 2^groupBits).
   counts(first, last, lower, upper, { groupBits = 0, sort = true, subcodeIndicator = 0 } = {}) {
+    first = this.multiplicityIndex(first);
+    last = this.multiplicityIndex(last);
+
     const symbolGroupSize = 1 << groupBits;
     // todo: handle lower === upper
     // these error messages could be improved, explaining that ignore bits tells us the power of two
@@ -537,7 +577,7 @@ export class WaveletMatrix {
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
   // Range quantile query returning the kth largest symbol in A[i, j).
   quantile(first, last, index) {
-    if (first > last) throw new Error('first must be <= last');
+    if (first >= last) throw new Error('first must be < last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     if (index < 0 || index >= last - first)
       throw new Error('index cannot be less than zero or exceed length of range [first, last)');
@@ -596,6 +636,7 @@ export class WaveletMatrix {
     walk.reset(true, F, L, S, C);
     // copy sorted indices into a scratch space since they are mutated as we go
     I.set(sortedIndices);
+
     let nRankCalls = 0;
 
     // note: grouping by LSB computes approximate quantiles where
@@ -672,8 +713,8 @@ export class WaveletMatrix {
 
   // The approach below is from by "New algorithms on wavelet trees and applications to information retrieval"
   quantiles(first, last, firstIndex, lastIndex) {
-    if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
+    if (first > last) throw new Error('first must be <= last');
     if (firstIndex > lastIndex) throw new Error('firstIndex must be <= lastIndex');
     if (firstIndex < 0 || lastIndex > last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
@@ -747,6 +788,9 @@ export class WaveletMatrix {
   }
 
   simpleMajority(first, last) {
+    first = this.multiplicityIndex(first);
+    last = this.multiplicityIndex(last);
+
     const index = (last + first) >>> 1;
     const q = this.quantile(first, last, index);
     const total = last - first;
@@ -756,6 +800,9 @@ export class WaveletMatrix {
   }
 
   majority(first, last, k = 2) {
+    first = this.multiplicityIndex(first);
+    last = this.multiplicityIndex(last);
+
     // Returns the 1/k-majority. Ie. for k = 4, return the elements (if any) with
     // frequency larger than 1/4th (25%) of the specified index range
     if (k < 1 || !Number.isInteger(k)) throw new Error('k must be a positive integer');
@@ -768,10 +815,10 @@ export class WaveletMatrix {
       indices[i - 1] = first + total * pc;
     }
     const res = this.quantileBatch(first, last, indices);
-    const count = Math.floor((last - first) / k);
+    const targetCount = Math.floor((last - first) / k);
     let n = 0;
     for (let i = 0; i < res.symbols.length; i++) {
-      if (res.counts[i] > count) {
+      if (res.counts[i] > targetCount) {
         res.counts[n] = res.counts[i];
         res.symbols[n] = res.symbols[i];
         n += 1;
