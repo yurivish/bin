@@ -17,6 +17,8 @@ import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral
 // - enforce len(multiplicity) == len(data)
 // - enforce positive multiplicity
 // - check scratch space does not get overlarge due to multiplicity
+// - consider removing multiplicityIndex and cumulativeMultiplicity and doing that all on the outside,
+//   since there may be uses for the run-length encoding that do not involve queries precisely on run boundaries
 
 // api note: super annoying to remember what kind of index is what...
 
