@@ -116,11 +116,15 @@ export class WaveletMatrix {
     data = new Uint32Array(data);
     let nextData = new Uint32Array(data.length);
 
-    let origMultiplicity, nextMultiplicity;
+    let nextMultiplicity;
     if (hasMultiplicity) {
-      origMultiplicity = multiplicity;
+      const c = new Uint32Array(multiplicity)
+      for (let i = 1; i < c.length; i++) {
+        c[i] += c[i - 1];
+      }
+      this.cumulativeMultiplicity = c;
       multiplicity = new Uint32Array(multiplicity);
-      nextMultiplicity = new Uint32Array(data.length);
+      nextMultiplicity = new Uint32Array(multiplicity.length);
     }
 
     // data is an array of integer values in [0, alphabetSize)
@@ -147,22 +151,24 @@ export class WaveletMatrix {
       const levelBitMask = 1 << levelBit;
       for (let i = 0; i < data.length; i++) {
         const d = data[i];
-        const m = multiplicity[i];
         if (d & levelBitMask) {
           const ni = walk.nextBackIndex();
           nextData[ni] = d;
           if (hasMultiplicity) {
-            level.run(0, m);
+            const m = multiplicity[i];
             nextMultiplicity[ni] = m;
+            level.run(0, m);
           } else level.one(i);
         } else {
           const ni = walk.nextFrontIndex();
           nextData[ni] = d;
-          level.run(m, 0);
-          nextMultiplicity[ni] = m;
+          if (hasMultiplicity) {
+            const m = multiplicity[i];
+            nextMultiplicity[ni] = m;
+            level.run(m, 0);
+          }
         }
       }
-      numZeros[l] = walk.frontIndex;
       walk.reset(true, nextData, nextMultiplicity);
       {
         // swap data and nextData
@@ -189,10 +195,13 @@ export class WaveletMatrix {
         if (hasMultiplicity) level.run(multiplicity[i], 0);
       }
     }
-    numZeros[maxLevel] = level.rank0(level.length);
 
     // Mark the level bitvectors as finished
-    for (let l = 0; l < numLevels; l++) levels[l].finish();
+    for (let l = 0; l < numLevels; l++) {
+      const level = levels[l]
+      level.finish();
+      numZeros[l] = level.rank0(level.length);
+    }
 
     this.scratch = new ScratchSpace();
     this.levels = levels;
@@ -200,14 +209,11 @@ export class WaveletMatrix {
     this.numZeros = numZeros;
     this.numLevels = numLevels;
     this.maxLevel = maxLevel;
-    this.length = data.length;
     this.hasMultiplicity = hasMultiplicity;
     if (hasMultiplicity) {
-      for (let i = 1; i < multiplicity.length; i++) {
-        multiplicity[i] += multiplicity[i - 1];
-      }
-      this.cumulativeMultiplicity = multiplicity;
       this.length = this.cumulativeMultiplicity[this.cumulativeMultiplicity.length - 1];
+    } else {
+      this.length = data.length;
     }
   }
 
@@ -468,7 +474,7 @@ export class WaveletMatrix {
   counts(first, last, lower, upper, { groupBits = 0, sort = true, subcodeIndicator = 0 } = {}) {
     first = this.multiplicityIndex(first);
     last = this.multiplicityIndex(last);
-// todo: validate lower/upper bounds wrt alphabet size
+    // todo: validate lower/upper bounds wrt alphabet size
     const symbolGroupSize = 1 << groupBits;
     // todo: handle lower === upper
     // these error messages could be improved, explaining that ignore bits tells us the power of two
