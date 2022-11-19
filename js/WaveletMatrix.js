@@ -1,7 +1,8 @@
 import { BitVector } from './BitVector.js';
 import { RLEBitVector } from './RLEBitVector.js';
-import { ZeroCompressedBitVector } from './ZeroCompressedBitVector.js';
-import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral } from './util.js';
+import { reverseBits, trailing0, popcount } from './util.js';
+import { ScratchSpace } from './ScratchSpace.js';
+import { ArrayWalker } from './ArrayWalker.js';
 
 // todo
 // - maybe there's a way to do out-of-order construction
@@ -31,7 +32,7 @@ export class WaveletMatrix {
   // todo: check that all symbols are < alphabetSize
   // todo: pass in maxSymbol, with alphabetSize = maxSymbol + 1?
   constructor(data, maxSymbol, opts = {}) {
-    const alphabetSize = maxSymbol + 1
+    const alphabetSize = maxSymbol + 1;
     // As a simple heuristic, by default use the large alphabet constructor when
     // the alphabet sides exceeds the number of data points.
     const { largeAlphabet = alphabetSize > data.length, multiplicity } = opts;
@@ -115,7 +116,7 @@ export class WaveletMatrix {
   // Alternative construction algorithm for the 'sparse' case when the alphabet size
   // is significantly larger than the number of symbols that actually occur in the data.
   constructLargeAlphabet(data, maxSymbol, opts = {}) {
-    const alphabetSize = maxSymbol + 1
+    const alphabetSize = maxSymbol + 1;
 
     let { multiplicity } = opts;
     const hasMultiplicity = multiplicity !== undefined;
@@ -126,7 +127,7 @@ export class WaveletMatrix {
 
     let nextMultiplicity;
     if (hasMultiplicity) {
-      const c = new Uint32Array(multiplicity)
+      const c = new Uint32Array(multiplicity);
       for (let i = 1; i < c.length; i++) {
         c[i] += c[i - 1];
       }
@@ -207,7 +208,7 @@ export class WaveletMatrix {
 
     // Mark the level bitvectors as finished
     for (let l = 0; l < numLevels; l++) {
-      const level = levels[l]
+      const level = levels[l];
       level.finish();
       numZeros[l] = level.rank0(level.length);
     }
@@ -905,84 +906,6 @@ function binarySearchBefore(A, T, L, R) {
 // => rank0(i-1) = i-1 - rank1(i-1) + 1
 // => rank0(i-1) = i - rank1(i-1)
 // and vice versa, so i0 = i - i1; (see impl. of rank0)
-
-// helper for turning recursion into iteration, encapsulating the logic
-// of walking an array zero to two outputs for each input.
-// left elements are filled in from the front, while right elements are filled
-// in from the back, and reset() will preserve all left children in order at
-// the front of the array, and move the right children in order immediately
-// after them. to interleave left and right in the order they are generated,
-// use nextBackIndex() for both the left and right outputs (we cannot use nextFrontIndex()
-// for both, since that would overwrite elements as they are being processed
-// in left-to-right order).
-class ArrayWalker {
-  constructor(length, cap) {
-    this.length = length; // length taken up by existing elements
-    this.cap = cap; // capacity for additional elements
-    this.frontIndex = 0;
-    this.backIndex = cap; // nextIndex + 1
-  }
-
-  // Return the next index from the front (left side) of the array
-  // note: ensure that the current value has been retrieved before
-  // writing to the left, since it will overwrite the current value.
-  nextFrontIndex() {
-    const index = this.frontIndex;
-    this.frontIndex += 1;
-    return index;
-  }
-  // Return the next index from the back (right side) of the array
-  nextBackIndex() {
-    // return the next index at which we can append an element
-    // (as we fill the array in backwards from arr[cap - 1])
-    return (this.backIndex -= 1);
-  }
-
-  // `reverse`: Whether to reverse the [backIndex...cap] subarray.
-  // In practice, we want to reverse it if we've been iterating
-  // the source array from left-to-right, and want to not reverse
-  // if we've been iterating right-to-left.
-  reset(reverse, ...arrays) {
-    if (this.backIndex < this.cap) {
-      // move the filled-in elements from the end
-      // to the front of the array
-      for (let i = 0; i < arrays.length; i++) {
-        const arr = arrays[i];
-        const sub = arr.subarray(this.backIndex, this.cap);
-        // reverse (if needed)
-        if (reverse) sub.reverse();
-        // move right elements to follow the left element directly
-        arr.set(sub, this.frontIndex);
-      }
-    }
-    // apply the same logical change to the last and length markers
-    this.length = this.frontIndex + (this.cap - this.backIndex);
-    this.frontIndex = 0;
-    this.backIndex = this.cap;
-  }
-}
-
-// start scratch with 10kb, then double each time we run out.
-// A convenient aspect of this design is that the previous buffer
-// subarrays can continue to be used if we are resized during an alloc.
-class ScratchSpace {
-  constructor(initialLength = 1024) {
-    this.buf = new Uint32Array(initialLength);
-    this.index = 0;
-  }
-  alloc(length) {
-    if (this.index + length > this.buf.length) {
-      this.buf = new Uint32Array(Math.max(length, 2 * this.buf.length));
-      this.index = 0;
-    }
-    const sub = this.buf.subarray(this.index, this.index + length);
-    this.index += length;
-    return sub;
-  }
-  reset() {
-    this.index = 0;
-  }
-}
 
 // Test two intervals for inclusive overlap.
 function intervalsOverlapInclusive(aLo, aHi, bLo, bHi) {
