@@ -38,7 +38,7 @@ const doTestWaveletMatrix = true; // ⚠️
 function testWaveletMatrix(alphabetSizePadding, wmOpts) {
   describe('wavelet matrix', function () {
     const data = [0, 1, 3, 7, 1, 5, 4, 2, 6, 3];
-    const wm = new WaveletMatrix(data, 8 + alphabetSizePadding, wmOpts);
+    const wm = new WaveletMatrix(data, 7 + alphabetSizePadding, wmOpts);
     it('counts correctly', function () {
       assert.equal(wm.countSymbol(0, wm.length, 3), 2);
       assert.equal(wm.countSymbol(0, wm.length - 1, 3), 1);
@@ -89,7 +89,7 @@ function testWaveletMatrix(alphabetSizePadding, wmOpts) {
 
       {
         // test subcode queries
-        const wm = new WaveletMatrix([0, 1, 2, 3, 4, 5, 6, 7], 8 + alphabetSizePadding, wmOpts);
+        const wm = new WaveletMatrix([0, 1, 2, 3, 4, 5, 6, 7], 7 + alphabetSizePadding, wmOpts);
         // 0b00001111
         // 0b00110011 <-- we're querying for elements with a 1 bit at this level
         // 0b01010101

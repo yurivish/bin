@@ -28,11 +28,12 @@ export class WaveletMatrix {
   // a wavelet matrix instead requires changing the borders computation (see section 5.3).
   // todo: check that all symbols are < alphabetSize
   // todo: pass in maxSymbol, with alphabetSize = maxSymbol + 1?
-  constructor(data, alphabetSize, opts = {}) {
+  constructor(data, maxSymbol, opts = {}) {
+    const alphabetSize = maxSymbol + 1
     // As a simple heuristic, by default use the large alphabet constructor when
     // the alphabet sides exceeds the number of data points.
     const { largeAlphabet = alphabetSize > data.length, multiplicity } = opts;
-    if (largeAlphabet || multiplicity) return this.constructLargeAlphabet(data, alphabetSize, opts);
+    if (largeAlphabet || multiplicity) return this.constructLargeAlphabet(data, maxSymbol, opts);
     // data is an array of integer values in [0, alphabetSize)
     const numLevels = Math.ceil(Math.log2(alphabetSize));
     const maxLevel = numLevels - 1;
@@ -113,7 +114,9 @@ export class WaveletMatrix {
 
   // Alternative construction algorithm for the 'sparse' case when the alphabet size
   // is significantly larger than the number of symbols that actually occur in the data.
-  constructLargeAlphabet(data, alphabetSize, opts = {}) {
+  constructLargeAlphabet(data, maxSymbol, opts = {}) {
+    const alphabetSize = maxSymbol + 1
+
     let { multiplicity } = opts;
     const hasMultiplicity = multiplicity !== undefined;
 
