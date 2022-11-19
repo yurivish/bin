@@ -177,7 +177,8 @@ export class WaveletMatrix {
           }
         }
       }
-      walk.reset(true, nextData, nextMultiplicity);
+      if (hasMultiplicity) walk.reset(true, nextData, nextMultiplicity);
+      else walk.reset(true, nextData);
       {
         // swap data and nextData
         const tmp = data;
