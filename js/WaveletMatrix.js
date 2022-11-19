@@ -18,6 +18,8 @@ import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral
 // - enforce positive multiplicity
 // - check scratch space does not get overlarge due to multiplicity
 
+// api note: super annoying to remember what kind of index is what...
+
 // Implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
 export class WaveletMatrix {
