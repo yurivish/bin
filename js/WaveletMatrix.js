@@ -21,8 +21,12 @@ import { ArrayWalker } from './ArrayWalker.js';
 // - consider removing multiplicityIndex and cumulativeMultiplicity and doing that all on the outside,
 //   since there may be uses for the run-length encoding that do not involve queries precisely on run boundaries
 // - check that all symbols are < alphabetSize
-
+// - check that multiplicity is a typed array (has to be, for arraywalker reset)
 // api note: super annoying to remember what kind of index is what...
+
+// later
+// - implement range_next_value, range_intersect, and fingered range quantile from
+//   the paper "New algorithms on wavelet trees and applications to information retrieval".
 
 // Implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
@@ -44,26 +48,33 @@ export class WaveletMatrix {
     // It also requires O(2^numLevels) space. So, if conditions are unfavorable, use the
     // more straightforward construction algorithm that fills in levels from top-to-bottom
     // by iterating and incrementally sorting the data.
+    // Each of the construction algorithms return 
     if (data.length === 0) {
       this.levels = [];
       this.length = 0;
-    } else if (largeAlphabet) {
-      this.constructLargeAlphabet(data);
     } else if (multiplicity) {
-      this.constructLargeAlphabet(data, multiplicity);
+      this.levels = this.constructLargeAlphabetMultiplicity(data, multiplicity);
+    } else if (largeAlphabet) {
+      this.levels = this.constructLargeAlphabet(data);
     } else {
-      this.construct(data);
+      this.levels = this.construct(data);
     }
 
     // Compute the number of zeros at each level
     const { numLevels, levels } = this;
     const numZeros = new Uint32Array(numLevels);
     for (let i = 0; i < numLevels; i++) {
-      levels[i].finish();
       numZeros[i] = levels[i].rank0(levels[i].length);
     }
     this.numZeros = numZeros;
+    // Initialize a scratch space to hold intermediate computations
+    // which lets us reduce the number of allocations during use.
     this.scratch = new ScratchSpace();
+    // The length of the wavelet matrix is the same as the
+    // length of its bitvectors, all of which are the same
+    // length since they represent bits of the same sequence.
+    this.length = levels[0].length;
+
   }
 
   // Implements Algorithm 1 (seq.pc) from the paper "Practical Wavelet Tree Construction".
@@ -124,9 +135,8 @@ export class WaveletMatrix {
         if (d & levelBitMask) level.one(p);
       }
     }
-
-    this.levels = levels;
-    this.length = data.length;
+    for (let i = 0; i < levels.length; i++) levels[i].finish();
+    return levels;
   }
 
   // Alternative construction algorithm for the 'sparse' case when the alphabet size
@@ -173,24 +183,19 @@ export class WaveletMatrix {
     const level = levels[maxLevel];
     const levelBitMask = 1 << 0;
     for (let i = 0; i < len; i++) {
-      if (data[i] & levelBitMask) {
-        level.one(i);
-      }
+      if (data[i] & levelBitMask) level.one(i);
     }
-
-    this.levels = levels;
-    // The length of the wavelet matrix is the same as the
-    // length of its bitvectors, all of which are the same
-    // length (each contains bits of the same data sequence)
-    this.length = level.length;
+    for (let i = 0; i < levels.length; i++) levels[i].finish();
+    return levels;
   }
 
-  // Extended version of the large-alphabet algorithm that also supports element multiplicity.
+  // Extended version of the large-alphabet algorithm supporting element multiplicities.
   constructLargeAlphabetMultiplicity(data, multiplicity) {
     const { numLevels, maxLevel } = this;
     const len = data.length;
 
     data = new Uint32Array(data);
+    multiplicity = new Uint32Array(multiplicity);
     let nextData = new Uint32Array(len);
     let nextMultiplicity = new Uint32Array(len);
     let tmp; // used for swapping current/next values
@@ -241,12 +246,8 @@ export class WaveletMatrix {
         level.run(multiplicity[i], 0);
       }
     }
-
-    this.levels = levels;
-    // The length of the wavelet matrix is the same as the
-    // length of its bitvectors, all of which are the same
-    // length (each contains bits of the same data sequence)
-    this.length = level.length;
+    for (let i = 0; i < levels.length; i++) levels[i].finish();
+    return levels;
   }
 
   access(index) {
@@ -272,7 +273,7 @@ export class WaveletMatrix {
 
   // Returns the number of occurrences of `symbol` in the range [first, last).
   countSymbol(first, last, symbol, opts) {
-    const indices = this.symbolIndices(first, last, symbol, opts);
+    const indices = this.symbolRange(first, last, symbol, opts);
     return indices.last - indices.first;
   }
 
@@ -297,7 +298,7 @@ export class WaveletMatrix {
   select(first, last, symbol, n) {
     if (symbol < 0 || symbol >= this.alphabetSize) return -1;
     if (n < 1 || symbol > this.length) return -1;
-    const indices = this.symbolIndices(first, last, symbol, 0);
+    const indices = this.symbolRange(first, last, symbol, 0);
     if (indices.last - indices.first < n) return -1; // in analogy with select
     let index = indices.first + n - 1;
     for (let l = this.numLevels; l > 0; ) {
@@ -319,7 +320,7 @@ export class WaveletMatrix {
 
   // Internal function returning the (first, last] index range covered by this symbol on the virtual bottom level,
   // or on a higher level if groupBits > 0. `last - first` gives the symbol count within the provided range.
-  symbolIndices(first, last, symbol, { groupBits = 0 } = {}) {
+  symbolRange(first, last, symbol, { groupBits = 0 } = {}) {
     const symbolGroupSize = 1 << groupBits;
     if (symbol % symbolGroupSize !== 0) {
       // note: could be done with bit math (check that low bits are zero)
