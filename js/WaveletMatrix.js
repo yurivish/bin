@@ -14,6 +14,9 @@ import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral
 // - give all BVs alignedRank aliases, so we can use it in WM when calls are run-aligned?
 // - constructor should accept maxSymbol = alphabetSize - 1
 // - might generally be a good idea to use RLE vectors in WM; think about under what conditions this is true.
+// - enforce len(multiplicity) == len(data)
+// - enforce positive multiplicity
+// - check scratch space does not get overlarge due to multiplicity
 
 // Implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
