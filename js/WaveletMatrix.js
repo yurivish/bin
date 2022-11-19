@@ -20,6 +20,7 @@ import { ArrayWalker } from './ArrayWalker.js';
 // - check scratch space does not get overlarge due to multiplicity
 // - consider removing multiplicityIndex and cumulativeMultiplicity and doing that all on the outside,
 //   since there may be uses for the run-length encoding that do not involve queries precisely on run boundaries
+// - check that all symbols are < alphabetSize
 
 // api note: super annoying to remember what kind of index is what...
 
@@ -32,18 +33,44 @@ export class WaveletMatrix {
   // todo: check that all symbols are < alphabetSize
   // todo: pass in maxSymbol, with alphabetSize = maxSymbol + 1?
   constructor(data, maxSymbol, opts = {}) {
-    const alphabetSize = maxSymbol + 1;
-    // As a simple heuristic, by default use the large alphabet constructor when
-    // the alphabet sides exceeds the number of data points.
-    const { largeAlphabet = alphabetSize > data.length, multiplicity } = opts;
-    if (largeAlphabet || multiplicity) return this.constructLargeAlphabet(data, maxSymbol, opts);
     // data is an array of integer values in [0, alphabetSize)
-    const numLevels = Math.ceil(Math.log2(alphabetSize));
-    const maxLevel = numLevels - 1;
-    // todo: can we get away with non-pow2, storing just one entry per symbol?
+    this.alphabetSize = maxSymbol + 1;
+    this.numLevels = Math.ceil(Math.log2(this.alphabetSize));
+    this.maxLevel = this.numLevels - 1;
+
+    const { largeAlphabet = 2 ** this.numLevels > data.length, multiplicity } = opts;
+    // The more efficient construction algorithm does not scale well to large alphabets,
+    // and it cannot handle multiplicities because it constructs the bitvectors out-of-order.
+    // It also requires O(2^numLevels) space. So, if conditions are unfavorable, use the
+    // more straightforward construction algorithm that fills in levels from top-to-bottom
+    // by iterating and incrementally sorting the data.
+    if (data.length === 0) {
+      this.levels = [];
+      this.length = 0;
+    } else if (largeAlphabet) {
+      this.constructLargeAlphabet(data);
+    } else if (multiplicity) {
+      this.constructLargeAlphabet(data, multiplicity);
+    } else {
+      this.construct(data);
+    }
+
+    // Compute the number of zeros at each level
+    const { numLevels, levels } = this;
+    const numZeros = new Uint32Array(numLevels);
+    for (let i = 0; i < numLevels; i++) {
+      levels[i].finish();
+      numZeros[i] = levels[i].rank0(levels[i].length);
+    }
+    this.numZeros = numZeros;
+    this.scratch = new ScratchSpace();
+  }
+
+  // Implements Algorithm 1 (seq.pc) from the paper "Practical Wavelet Tree Construction".
+  construct(data) {
+    const { numLevels, maxLevel } = this;
     const hist = new Uint32Array(2 ** numLevels);
     const borders = new Uint32Array(2 ** numLevels);
-    // note: if data is sorted, could we use a compressed set data structure for hist/borders?
 
     const levels = new Array(numLevels);
     // Initialize the level bit vectors
@@ -64,6 +91,7 @@ export class WaveletMatrix {
     // Construct the other levels bottom-up
     for (let l = maxLevel; l > 0; l--) {
       const m = 2 ** l;
+
       // Compute the histogram based on the previous level's one
       for (let i = 0; i < m; i++) {
         // Update the histogram in-place
@@ -73,7 +101,7 @@ export class WaveletMatrix {
       // Get starting positions of intervals from the new histogram
       borders[0] = 0;
       for (let i = 1; i < m; i++) {
-        // Update the positions in-place (wavelet matrix)
+        // Update the positions in-place
         const prevIndex = reverseBits(i - 1, l);
         borders[reverseBits(i, l)] = borders[prevIndex] + hist[prevIndex];
       }
@@ -97,59 +125,26 @@ export class WaveletMatrix {
       }
     }
 
-    // Compute the number of zeros at each level
-    const numZeros = new Uint32Array(numLevels);
-    for (let i = 0; i < numLevels; i++) {
-      levels[i].finish();
-      numZeros[i] = levels[i].rank0(levels[i].length);
-    }
-
     this.levels = levels;
-    this.alphabetSize = alphabetSize;
-    this.numZeros = numZeros;
-    this.numLevels = numLevels;
-    this.maxLevel = maxLevel;
     this.length = data.length;
-    this.scratch = new ScratchSpace();
   }
 
   // Alternative construction algorithm for the 'sparse' case when the alphabet size
-  // is significantly larger than the number of symbols that actually occur in the data.
-  constructLargeAlphabet(data, maxSymbol, opts = {}) {
-    const alphabetSize = maxSymbol + 1;
+  // is larger than the number of symbols that actually occur in the data.
+  constructLargeAlphabet(data) {
+    const { numLevels, maxLevel } = this;
+    const len = data.length;
 
-    let { multiplicity } = opts;
-    const hasMultiplicity = multiplicity !== undefined;
-
-    // copy data and multiplicity because will be mutated
     data = new Uint32Array(data);
-    let nextData = new Uint32Array(data.length);
-
-    let nextMultiplicity;
-    if (hasMultiplicity) {
-      const c = new Uint32Array(multiplicity);
-      for (let i = 1; i < c.length; i++) {
-        c[i] += c[i - 1];
-      }
-      this.cumulativeMultiplicity = c;
-      multiplicity = new Uint32Array(multiplicity);
-      nextMultiplicity = new Uint32Array(multiplicity.length);
-    }
-
-    // data is an array of integer values in [0, alphabetSize)
-    const numLevels = Math.ceil(Math.log2(alphabetSize));
-    const maxLevel = numLevels - 1;
+    let nextData = new Uint32Array(len);
+    let tmp; // used for swapping current/next values
 
     // Initialize the level bit vectors
     const levels = new Array(numLevels);
     for (let i = 0; i < numLevels; i++) {
-      if (hasMultiplicity) levels[i] = new RLEBitVector();
-      else levels[i] = new BitVector(data.length);
+      levels[i] = new BitVector(len);
     }
-
-    const numZeros = new Uint32Array(numLevels);
-    const walk = new ArrayWalker(0, data.length);
-
+    const walk = new ArrayWalker(0, len);
     // For each level, sort the data point by its bit value at that level.
     // Zero bits get sorted left, one bits get sorted right. This amounts
     // to a bucket sort with two buckets.
@@ -158,73 +153,100 @@ export class WaveletMatrix {
       const level = levels[l];
       const levelBit = maxLevel - l;
       const levelBitMask = 1 << levelBit;
-      for (let i = 0; i < data.length; i++) {
+      for (let i = 0; i < len; i++) {
         const d = data[i];
         if (d & levelBitMask) {
           const ni = walk.nextBackIndex();
           nextData[ni] = d;
-          if (hasMultiplicity) {
-            const m = multiplicity[i];
-            nextMultiplicity[ni] = m;
-            level.run(0, m);
-          } else level.one(i);
+          level.one(i);
         } else {
           const ni = walk.nextFrontIndex();
           nextData[ni] = d;
-          if (hasMultiplicity) {
-            const m = multiplicity[i];
-            nextMultiplicity[ni] = m;
-            level.run(m, 0);
-          }
         }
       }
-      if (hasMultiplicity) walk.reset(true, nextData, nextMultiplicity);
-      else walk.reset(true, nextData);
-      {
-        // swap data and nextData
-        const tmp = data;
-        data = nextData;
-        nextData = tmp;
-      }
-      {
-        // swap multiplicity and nextMultiplicity
-        const tmp = multiplicity;
-        multiplicity = nextMultiplicity;
-        nextMultiplicity = tmp;
-      }
+      walk.reset(true, nextData);
+      // swap data and nextData
+      (tmp = data), (data = nextData), (nextData = tmp);
     }
 
     // For the last level we don't need to build anything but the bitvector
     const level = levels[maxLevel];
     const levelBitMask = 1 << 0;
-    for (let i = 0; i < data.length; i++) {
+    for (let i = 0; i < len; i++) {
       if (data[i] & levelBitMask) {
-        if (hasMultiplicity) level.run(0, multiplicity[i]);
-        else level.one(i);
-      } else {
-        if (hasMultiplicity) level.run(multiplicity[i], 0);
+        level.one(i);
       }
     }
 
-    // Mark the level bitvectors as finished
-    for (let l = 0; l < numLevels; l++) {
+    this.levels = levels;
+    // The length of the wavelet matrix is the same as the
+    // length of its bitvectors, all of which are the same
+    // length (each contains bits of the same data sequence)
+    this.length = level.length;
+  }
+
+  // Extended version of the large-alphabet algorithm that also supports element multiplicity.
+  constructLargeAlphabetMultiplicity(data, multiplicity) {
+    const { numLevels, maxLevel } = this;
+    const len = data.length;
+
+    data = new Uint32Array(data);
+    let nextData = new Uint32Array(len);
+    let nextMultiplicity = new Uint32Array(len);
+    let tmp; // used for swapping current/next values
+
+    // Initialize the level bit vectors
+    const levels = new Array(numLevels);
+    for (let i = 0; i < numLevels; i++) {
+      levels[i] = new RLEBitVector();
+    }
+    const walk = new ArrayWalker(0, len);
+    // For each level, sort the data point by its bit value at that level.
+    // Zero bits get sorted left, one bits get sorted right. This amounts
+    // to a bucket sort with two buckets.
+    // We sort into `nextData`, then swap `nextData` and `data`.
+    for (let l = 0; l < maxLevel; l++) {
       const level = levels[l];
-      level.finish();
-      numZeros[l] = level.rank0(level.length);
+      const levelBit = maxLevel - l;
+      const levelBitMask = 1 << levelBit;
+      for (let i = 0; i < len; i++) {
+        const d = data[i];
+        const m = multiplicity[i];
+        if (d & levelBitMask) {
+          const ni = walk.nextBackIndex();
+          nextData[ni] = d;
+          nextMultiplicity[ni] = m;
+          level.run(0, m);
+        } else {
+          const ni = walk.nextFrontIndex();
+          nextData[ni] = d;
+          nextMultiplicity[ni] = m;
+          level.run(m, 0);
+        }
+      }
+      walk.reset(true, nextData, nextMultiplicity);
+      // swap data and nextData
+      (tmp = data), (data = nextData), (nextData = tmp);
+      // swap multiplicity and nextMultiplicity
+      (tmp = multiplicity), (multiplicity = nextMultiplicity), (nextMultiplicity = tmp);
     }
 
-    this.scratch = new ScratchSpace();
-    this.levels = levels;
-    this.alphabetSize = alphabetSize;
-    this.numZeros = numZeros;
-    this.numLevels = numLevels;
-    this.maxLevel = maxLevel;
-    this.hasMultiplicity = hasMultiplicity;
-    if (hasMultiplicity) {
-      this.length = this.cumulativeMultiplicity[this.cumulativeMultiplicity.length - 1];
-    } else {
-      this.length = data.length;
+    // For the last level we don't need to build anything but the bitvector
+    const level = levels[maxLevel];
+    const levelBitMask = 1 << 0;
+    for (let i = 0; i < len; i++) {
+      if (data[i] & levelBitMask) {
+        level.run(0, multiplicity[i]);
+      } else {
+        level.run(multiplicity[i], 0);
+      }
     }
+
+    this.levels = levels;
+    // The length of the wavelet matrix is the same as the
+    // length of its bitvectors, all of which are the same
+    // length (each contains bits of the same data sequence)
+    this.length = level.length;
   }
 
   access(index) {
