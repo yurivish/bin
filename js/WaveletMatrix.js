@@ -26,8 +26,8 @@ import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral
 // boundaries, rather than splitting based on the true alphabet midpoint.
 export class WaveletMatrix {
   // This implements Algorithm 1 (seq.pc) from the paper "Practical Wavelet Tree Construction".
-  // The return value is the array of wavelet tree levels. Adapting the algorithm to construct
-  // a wavelet matrix instead requires changing the borders computation (see section 5.3).
+  // The return value is the array of wavelet matrix levels. Adapting the algorithm to construct
+  // a wavelet tree instead requires changing the borders computation (see section 5.3).
   // todo: check that all symbols are < alphabetSize
   // todo: pass in maxSymbol, with alphabetSize = maxSymbol + 1?
   constructor(data, maxSymbol, opts = {}) {
@@ -75,8 +75,6 @@ export class WaveletMatrix {
         // Update the positions in-place (wavelet matrix)
         const prevIndex = reverseBits(i - 1, l);
         borders[reverseBits(i, l)] = borders[prevIndex] + hist[prevIndex];
-        // To compute a wavelet tree, do this instead:
-        // borders[i] = borders[i - 1] + hist[i - 1];
       }
 
       // Fill the bit vector of the current level
