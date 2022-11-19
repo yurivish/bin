@@ -27,7 +27,6 @@ export class RLEBitVector {
       // No coalescing is possible; create a new block of runs.
       // Append the cumulative number of zeros to the Z array
       this.Z.push(this.numZeros);
-
       // Append the index of the last one of this run to the ZOE array
       this.ZO.push(this.length);
     }
@@ -126,7 +125,7 @@ export class RLEBitVector {
       (k) => sparseSelect1(this.ZO, k + 1) - sparseSelect1(this.Z, k + 1),
       i - 1,
       0,
-      this.Z.length
+      this.Z.length,
     );
 
     // Start index of the next block
