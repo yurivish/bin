@@ -293,8 +293,6 @@ export class WaveletMatrix {
   // Internal function returning the (first, last] index range covered by this symbol on the virtual bottom level,
   // or on a higher level if groupBits > 0. `last - first` gives the symbol count within the provided range.
   symbolIndices(first, last, symbol, { groupBits = 0 } = {}) {
-    first = this.multiplicityIndex(first);
-    last = this.multiplicityIndex(last);
     const symbolGroupSize = 1 << groupBits;
     if (symbol % symbolGroupSize !== 0) {
       // note: could be done with bit math (check that low bits are zero)
@@ -328,9 +326,6 @@ export class WaveletMatrix {
   // This is kind of like a ranged rank operation over a symbol range.
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
   countLessThan(first, last, symbol) {
-    // note: doing this here means that eg. calling `count` doubles the number of checks
-    first = this.multiplicityIndex(first);
-    last = this.multiplicityIndex(last);
     if (first > last) throw new Error('first must be <= last');
     if (symbol <= 0) return 0;
     if (symbol >= this.alphabetSize) return last - first;
@@ -370,9 +365,6 @@ export class WaveletMatrix {
   }
 
   countSymbolBatch(first, last, sortedSymbols, { groupBits = 0 } = {}) {
-    first = this.multiplicityIndex(first);
-    last = this.multiplicityIndex(last);
-
     // splitByMsb requires the same sortedSymbol to be searched for in each of the split paths.
     // for now, we'll go with the relatively inefficient route of asking that this be done by
     // supplying a larger set of sortedSymbols, enumerating all MSB variations in the high bits.
@@ -477,8 +469,6 @@ export class WaveletMatrix {
   // Each distinct group is labeled by its lowest element, which represents
   // the group containing symbols in the range [symbol, symbol + 2^groupBits).
   counts(first, last, lower, upper, { groupBits = 0, sort = true, subcodeIndicator = 0 } = {}) {
-    first = this.multiplicityIndex(first);
-    last = this.multiplicityIndex(last);
     // todo: validate lower/upper bounds wrt alphabet size
     const symbolGroupSize = 1 << groupBits;
     // todo: handle lower === upper
@@ -800,9 +790,6 @@ export class WaveletMatrix {
   }
 
   simpleMajority(first, last) {
-    first = this.multiplicityIndex(first);
-    last = this.multiplicityIndex(last);
-
     const index = (last + first) >>> 1;
     const q = this.quantile(first, last, index);
     const total = last - first;
@@ -812,9 +799,6 @@ export class WaveletMatrix {
   }
 
   majority(first, last, k = 2) {
-    first = this.multiplicityIndex(first);
-    last = this.multiplicityIndex(last);
-
     // Returns the 1/k-majority. Ie. for k = 4, return the elements (if any) with
     // frequency larger than 1/4th (25%) of the specified index range
     if (k < 1 || !Number.isInteger(k)) throw new Error('k must be a positive integer');
