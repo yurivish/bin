@@ -22,8 +22,7 @@ export class RLEBitVector {
 
   // Encodes a run of `numOnes` ones starting at at index `i`
   oneRun(i, numOnes) {
-    if (i < this.length)
-      throw new Error("oneRun cannot overlap pre-existing runs");
+    if (i < this.length) throw new Error('oneRun cannot overlap pre-existing runs');
     // Number of zeros preceding this 1-run
     const numZeros = i - this.length;
     // Coalesce contiguous 1-runs
@@ -116,7 +115,7 @@ export class RLEBitVector {
       (k) => sparseSelect1(this.ZO, k + 1) - sparseSelect1(this.Z, k + 1),
       i - 1,
       0,
-      this.Z.length
+      this.Z.length,
     );
 
     // Start index of the next block
