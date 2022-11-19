@@ -33,6 +33,7 @@ const doTestWaveletMatrix = true; // ⚠️
 // - test that errors are thrown for OOB input indices
 // - test multiplicity construction
 // - test multiplicity functions
+// - test error behavior for invalid or OOB first/last/lower/upper
 
 function testWaveletMatrix(alphabetSizePadding, wmOpts) {
   describe('wavelet matrix', function () {

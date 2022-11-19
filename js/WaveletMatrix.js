@@ -13,6 +13,7 @@ import { reverseBits, reverseBits32, clamp, trailing0, popcount, isObjectLiteral
 // - make whether to query with multiplicity an option? will determine whether we can use aligned rank, though.
 // - give all BVs alignedRank aliases, so we can use it in WM when calls are run-aligned?
 // - constructor should accept maxSymbol = alphabetSize - 1
+// - might generally be a good idea to use RLE vectors in WM; think about under what conditions this is true.
 
 // Implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
@@ -467,7 +468,7 @@ export class WaveletMatrix {
   counts(first, last, lower, upper, { groupBits = 0, sort = true, subcodeIndicator = 0 } = {}) {
     first = this.multiplicityIndex(first);
     last = this.multiplicityIndex(last);
-
+// todo: validate lower/upper bounds wrt alphabet size
     const symbolGroupSize = 1 << groupBits;
     // todo: handle lower === upper
     // these error messages could be improved, explaining that ignore bits tells us the power of two
@@ -718,7 +719,7 @@ export class WaveletMatrix {
     if (firstIndex > lastIndex) throw new Error('firstIndex must be <= lastIndex');
     if (firstIndex < 0 || lastIndex > last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
-    const scratchSize = lastIndex - firstIndex;
+    const scratchSize = Math.min(this.alphabetSize, lastIndex - firstIndex);
     this.scratch.reset();
     const F = this.scratch.alloc(scratchSize); // firsts
     const L = this.scratch.alloc(scratchSize); // lasts
@@ -966,7 +967,7 @@ class ArrayWalker {
 // A convenient aspect of this design is that the previous buffer
 // subarrays can continue to be used if we are resized during an alloc.
 class ScratchSpace {
-  constructor(initialLength = 10 * 1024) {
+  constructor(initialLength = 1024) {
     this.buf = new Uint32Array(initialLength);
     this.index = 0;
   }
