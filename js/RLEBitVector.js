@@ -3,38 +3,49 @@ export class RLEBitVector {
     this.Z = [];
     this.ZO = [];
     this.length = 0;
+    this.numZeros = 0;
+    this.numOnes = 0;
   }
 
   // Encodes a run of `numZeros` zeros followed by `numOnes` ones
   run(numZeros, numOnes) {
+    if (numZeros === 0 && numOnes === 0) return;
     const len = this.Z.length;
-
-    // Append the cumulative number of zeros to the Z array
-    const prevZ = len > 0 ? this.Z[len - 1] : 0;
-    this.Z.push(prevZ + numZeros);
-
-    // Append the index of the last one of this run to the ZOE array
-    this.ZO.push(this.length + numZeros + numOnes);
-
-    // Update the bitvector length
+    this.numZeros += numZeros;
+    this.numOnes += numOnes;
     this.length += numZeros + numOnes;
+    if (numZeros === 0 && len > 0) {
+      // This run consists of only ones; coalesce it with the
+      // previous run (since all runs contain ones at their end).
+      this.ZO[len - 1] += numOnes;
+    } else if (numOnes === 0 && this.lastBlockContainsOnlyZeros()) {
+      // This run consists of only zeros; coalesce it with the
+      // previous run (since it turns out to consist of only zeros).
+      this.Z[len - 1] += numZeros;
+      this.ZO[len - 1] += numZeros;
+    } else {
+      // No coalescing is possible; create a new block of runs.
+      // Append the cumulative number of zeros to the Z array
+      this.Z.push(this.numZeros);
+
+      // Append the index of the last one of this run to the ZOE array
+      this.ZO.push(this.length);
+    }
   }
 
-  // Encodes a run of `numOnes` ones starting at at index `i`
-  oneRun(i, numOnes) {
-    if (i < this.length) throw new Error('oneRun cannot overlap pre-existing runs');
-    // Number of zeros preceding this 1-run
-    const numZeros = i - this.length;
-    // Coalesce contiguous 1-runs
-    if (numZeros === 0) this.length += numOnes;
-    else this.run(numZeros, numOnes);
+  lastBlockContainsOnlyZeros() {
+    const len = this.Z.length;
+    if (len === 0) return false;
+    if (len === 1) return this.Z[0] === this.ZO[0];
+    const lastBlockLength = this.ZO[len - 1] - this.ZO[len - 2];
+    const lastBlockNumZeros = this.Z[len - 1] - this.Z[len - 2];
+    return lastBlockLength === lastBlockNumZeros;
   }
 
   finish() {
+    // todo: only convert to typed arrays if their value is < 2^32
     this.Z = new Uint32Array(this.Z);
     this.ZO = new Uint32Array(this.ZO);
-    this.numZeros = sparseSelect1(this.Z, this.Z.length);
-    this.numOnes = this.length - this.numZeros;
   }
 
   rank0(i) {
@@ -115,7 +126,7 @@ export class RLEBitVector {
       (k) => sparseSelect1(this.ZO, k + 1) - sparseSelect1(this.Z, k + 1),
       i - 1,
       0,
-      this.Z.length,
+      this.Z.length
     );
 
     // Start index of the next block
