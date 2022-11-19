@@ -1,4 +1,3 @@
-
 // helper for turning recursion into iteration, encapsulating the logic
 // of walking an array zero to two outputs for each input.
 // left elements are filled in from the front, while right elements are filled
@@ -8,7 +7,7 @@
 // use nextBackIndex() for both the left and right outputs (we cannot use nextFrontIndex()
 // for both, since that would overwrite elements as they are being processed
 // in left-to-right order).
-class ArrayWalker {
+export class ArrayWalker {
   constructor(length, cap) {
     this.length = length; // length taken up by existing elements
     this.cap = cap; // capacity for additional elements
