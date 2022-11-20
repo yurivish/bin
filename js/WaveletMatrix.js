@@ -277,23 +277,6 @@ export class WaveletMatrix {
     return indices.last - indices.first;
   }
 
-  // Perform basic single-index out-of-bounds checks, and return
-  // an index scaled by the appropriate multiplicity in the event
-  // that this wavelet matrix has multiplicities.
-  // note: for most functions, the branch below is executed twice,
-  // once for first, and once for last. This doubles the number of
-  // necessary checks; should optimize this once things are working.
-  multiplicityIndex(index) {
-    if (this.hasMultiplicity) {
-      if (index < 0 || index > this.cumulativeMultiplicity.length) throw new Error('index out of bounds');
-      if (index === 0) return 0;
-      return this.cumulativeMultiplicity[index - 1];
-    } else {
-      if (index < 0 || index > this.length) throw new Error('index out of bounds');
-      return index;
-    }
-  }
-
   // Returns the index of the nth occurrence of `symbol` in the range [first, last).
   select(first, last, symbol, n) {
     if (symbol < 0 || symbol >= this.alphabetSize) return -1;
