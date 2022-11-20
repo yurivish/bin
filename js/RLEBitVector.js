@@ -128,16 +128,10 @@ export class RLEBitVector {
       this.Z.length,
     );
 
-    // Start index of the next block
-    const nextBlockStart = sparseSelect1(this.ZO, j + 1);
-
     // Number of zeros up to and including the jth block
     const numCumulativeZeros = sparseSelect1(this.Z, j + 1);
 
-    // Number of ones up to and including the j-th block
-    const numCumulativeOnes = nextBlockStart - numCumulativeZeros;
-
-    return nextBlockStart - (numCumulativeOnes - i) - 1;
+    return numCumulativeZeros + i - 1;
   }
 }
 
