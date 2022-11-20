@@ -365,12 +365,9 @@ export class WaveletMatrix {
   // Returns the number of occurrences of symbols [lower, upper)
   // in the index range [first, last). It is possible to implement
   // this function roughly twice as efficiently in terms of number
-  // of rank calls, but this comes at a cost of implementation complexity.
+  // of rank calls but at the cost of increased implementation complexity.
   // See the paper "New algorithms on wavelet trees and applications to
-  // information retrieval" for details. Another approach is to modify the
-  // implementation of countLessThan to perform two interleaved calls. The
-  // subtlety there is that, as written, the algorithm does not work when
-  // symbol >= alphabetSize (the one-symbol impl. can return early in this case).
+  // information retrieval" for details.
   count(first, last, lower, upper) {
     return this.countLessThan(first, last, upper) - this.countLessThan(first, last, lower);
   }
