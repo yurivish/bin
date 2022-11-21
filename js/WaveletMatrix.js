@@ -38,11 +38,12 @@ export class WaveletMatrix {
   // todo: pass in maxSymbol, with alphabetSize = maxSymbol + 1?
   constructor(data, maxSymbol, opts = {}) {
     // data is an array of integer values in [0, alphabetSize)
+    this.maxSymbol = maxSymbol;
     this.alphabetSize = maxSymbol + 1;
     this.numLevels = Math.ceil(Math.log2(this.alphabetSize));
     this.maxLevel = this.numLevels - 1;
 
-    const { largeAlphabet = 2 ** this.numLevels > data.length, multiplicity } = opts;
+    const { largeAlphabet = 2 ** this.numLevels > data.length, counts } = opts;
     // The more efficient construction algorithm does not scale well to large alphabets,
     // and it cannot handle multiplicities because it constructs the bitvectors out-of-order.
     // It also requires O(2^numLevels) space. So, if conditions are unfavorable, use the
@@ -52,8 +53,8 @@ export class WaveletMatrix {
     if (data.length === 0) {
       this.levels = [];
       this.length = 0;
-    } else if (multiplicity) {
-      this.levels = this.constructLargeAlphabetMultiplicity(data, multiplicity);
+    } else if (counts) {
+      this.levels = this.constructLargeAlphabetWithMultiplicity(data, counts);
     } else if (largeAlphabet) {
       this.levels = this.constructLargeAlphabet(data);
     } else {
@@ -190,14 +191,14 @@ export class WaveletMatrix {
   }
 
   // Extended version of the large-alphabet algorithm supporting element multiplicities.
-  constructLargeAlphabetMultiplicity(data, multiplicity) {
+  constructLargeAlphabetWithMultiplicity(data, counts) {
     const { numLevels, maxLevel } = this;
     const len = data.length;
 
     data = new Uint32Array(data);
-    multiplicity = new Uint32Array(multiplicity);
+    counts = new Uint32Array(counts);
     let nextData = new Uint32Array(len);
-    let nextMultiplicity = new Uint32Array(len);
+    let nextCounts = new Uint32Array(len);
     let tmp; // used for swapping current/next values
 
     // Initialize the level bit vectors
@@ -216,24 +217,24 @@ export class WaveletMatrix {
       const levelBitMask = 1 << levelBit;
       for (let i = 0; i < len; i++) {
         const d = data[i];
-        const m = multiplicity[i];
+        const m = counts[i];
         if (d & levelBitMask) {
           const ni = walk.nextBackIndex();
           nextData[ni] = d;
-          nextMultiplicity[ni] = m;
+          nextCounts[ni] = m;
           level.run(0, m);
         } else {
           const ni = walk.nextFrontIndex();
           nextData[ni] = d;
-          nextMultiplicity[ni] = m;
+          nextCounts[ni] = m;
           level.run(m, 0);
         }
       }
-      walk.reset(true, nextData, nextMultiplicity);
+      walk.reset(true, nextData, nextCounts);
       // swap data and nextData
       (tmp = data), (data = nextData), (nextData = tmp);
-      // swap multiplicity and nextMultiplicity
-      (tmp = multiplicity), (multiplicity = nextMultiplicity), (nextMultiplicity = tmp);
+      // swap counts and nextCounts
+      (tmp = counts), (counts = nextCounts), (nextCounts = tmp);
     }
 
     // For the last level we don't need to build anything but the bitvector
@@ -241,9 +242,9 @@ export class WaveletMatrix {
     const levelBitMask = 1 << 0;
     for (let i = 0; i < len; i++) {
       if (data[i] & levelBitMask) {
-        level.run(0, multiplicity[i]);
+        level.run(0, counts[i]);
       } else {
-        level.run(multiplicity[i], 0);
+        level.run(counts[i], 0);
       }
     }
     for (let i = 0; i < levels.length; i++) levels[i].finish();
@@ -368,7 +369,7 @@ export class WaveletMatrix {
   // of rank calls but at the cost of increased implementation complexity.
   // See the paper "New algorithms on wavelet trees and applications to
   // information retrieval" for details.
-  count(first, last, lower, upper) {
+  count(first, last, lower = 0, upper = this.maxSymbol) {
     return this.countLessThan(first, last, upper) - this.countLessThan(first, last, lower);
   }
 
@@ -476,7 +477,7 @@ export class WaveletMatrix {
   // differ only in their lowest `groupBits` bits)
   // Each distinct group is labeled by its lowest element, which represents
   // the group containing symbols in the range [symbol, symbol + 2^groupBits).
-  counts(first, last, lower, upper, { groupBits = 0, sort = true, subcodeIndicator = 0 } = {}) {
+  counts(first, last, lower = 0, upper = this.maxSymbol, { groupBits = 0, sort = true, subcodeIndicator = 0 } = {}) {
     // todo: validate lower/upper bounds wrt alphabet size
     const symbolGroupSize = 1 << groupBits;
     // todo: handle lower === upper
@@ -722,7 +723,7 @@ export class WaveletMatrix {
   }
 
   // The approach below is from by "New algorithms on wavelet trees and applications to information retrieval"
-  quantiles(first, last, firstIndex, lastIndex) {
+  quantiles(first, last, firstIndex = 0, lastIndex = last - first) {
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
     if (first > last) throw new Error('first must be <= last');
     if (firstIndex > lastIndex) throw new Error('firstIndex must be <= lastIndex');
