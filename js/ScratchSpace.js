@@ -1,5 +1,9 @@
 // A convenient aspect of this design is that the previous buffer
 // subarrays can continue to be used if we are resized during an alloc.
+// note: could have a resetAndAlloc function like we did with the wasm allocator;
+// that would match better to a C implementation since we could free the previous
+// alloc, and allocate all currently-needed buffers from the new allocation, whereas
+// the current design relies on the GC to keep the previous buffers around.
 export class ScratchSpace {
   constructor(initialLength = 1024) {
     this.buf = new Uint32Array(initialLength);

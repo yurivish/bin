@@ -81,6 +81,11 @@ export class RLEBitVector {
     return numPrecedingOnes + Math.max(0, i - onesStart + 1);
   }
 
+  access(i) {
+    // Quick hack. Can do better.
+    return this.rank1(i) - this.rank1(i - 1)
+  }
+
   alignedRank0(i) {
     if (i < 0) return 0;
     if (i >= this.length) return this.numZeros;
@@ -133,6 +138,14 @@ export class RLEBitVector {
 
     return numCumulativeZeros + i - 1;
   }
+
+  approxSizeInBits() {
+    // ignores fixed-size fields
+    const zBits = 8 * this.Z.length * this.Z.BYTES_PER_ELEMENT;
+    const zoBits = 8 * this.ZO.length * this.ZO.BYTES_PER_ELEMENT;
+    return zBits + zoBits;
+  }
+
 }
 
 // Returns the rightmost insertion index for T in A in order to maintain A's sorted order.

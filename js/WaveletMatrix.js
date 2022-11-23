@@ -22,7 +22,10 @@ import { ArrayWalker } from './ArrayWalker.js';
 //   since there may be uses for the run-length encoding that do not involve queries precisely on run boundaries
 // - check that all symbols are < alphabetSize
 // - check that multiplicity is a typed array (has to be, for arraywalker reset)
-// api note: super annoying to remember what kind of index is what...
+// - idea: do not use bitwise operations if we can avoid them inside eg. counts; that way can scale to values up to 2^53!
+//   - might not be possible (eg. we do | and &); could try a bigint64...
+// - implement SparseBitVector?
+// -  explore the idea of storing the complement whenever 1 density exceeds 50%; then rank0 is rank1 and same for select. 
 
 // later
 // - implement range_next_value, range_intersect, and fingered range quantile from
@@ -281,7 +284,7 @@ export class WaveletMatrix {
   // Returns the index of the nth occurrence of `symbol` in the range [first, last).
   select(first, last, symbol, n) {
     if (symbol < 0 || symbol >= this.alphabetSize) return -1;
-    if (n < 1 || symbol > this.length) return -1;
+    if (n < 1 || n > this.length) return -1;
     const indices = this.symbolRange(first, last, symbol, 0);
     if (indices.last - indices.first < n) return -1; // in analogy with select
     let index = indices.first + n - 1;
@@ -313,6 +316,9 @@ export class WaveletMatrix {
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
     if (first >= last) throw new Error('last must be < first');
     if (first === last) return 0;
+    if (first < 0) throw new Error('first must be >= 0');
+    if (last > this.length) throw new Error('last must be <= length');
+
     if (this.numLevels === 0) return 0;
     const numLevels = this.numLevels - groupBits;
     for (let l = 0; l < numLevels; l++) {
@@ -339,6 +345,8 @@ export class WaveletMatrix {
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
   countLessThan(first, last, symbol) {
     if (first > last) throw new Error('first must be <= last');
+    if (first < 0) throw new Error('first must be >= 0');
+    if (last > this.length) throw new Error('last must be <= length');
     if (symbol <= 0) return 0;
     if (symbol >= this.alphabetSize) return last - first;
     let count = 0;
@@ -487,6 +495,10 @@ export class WaveletMatrix {
       throw new Error('lower must evenly divide the symbol block size implied by groupBits');
     if ((upper + 1) % symbolGroupSize !== 0)
       throw new Error('(upper + 1) must evenly divide the symbol block size implied by groupBits');
+    if (first >= last) throw new Error('first must be < last');
+    if (first < 0) throw new Error('first must be >= 0');
+    if (last > this.length) throw new Error('last must be <= length');
+
     // if (upper >= this.alphabetSize) throw new Error('upper must be < alphabetSize ([lower, upper] is inclusive)');
     // ^ we now allow this so that subcode stuff works without us having to be unrealistic about the true alphabet size
     // (eg. allow querying code consisting of all maximum subcodes)
