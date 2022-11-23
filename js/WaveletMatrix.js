@@ -853,36 +853,36 @@ export class WaveletMatrix {
   }
 
   subcodeSeparator(subcodeSizesInBits) {
-    let indicator = 0;
+    let separator = 0;
     let offset = 0;
     for (const sz of subcodeSizesInBits) {
       if (sz === 0) throw 'cannot have zero-sized field';
-      indicator |= 1 << (sz - 1 + offset);
+      separator |= 1 << (sz - 1 + offset);
       offset += sz;
     }
-    return indicator >>> 0;
+    return separator >>> 0;
   }
 
-  encodeSubcodes(indicator, values) {
-    if (indicator === 0) {
+  encodeSubcodes(separator, values) {
+    if (separator === 0) {
       if (values.length !== 1) {
-        throw new Error('number of values must be one if the indicator is zero');
+        throw new Error('number of values must be one if the separator is zero');
       }
       return values[0];
     }
-    if (popcount(indicator) !== values.length) {
-      throw new Error('number of values must be equal to the number of 1 bits in the indicator');
+    if (popcount(separator) !== values.length) {
+      throw new Error('number of values must be equal to the number of 1 bits in the separator');
     }
     let code = 0;
     let offset = 0;
     let i = 0;
-    while (indicator > 0) {
+    while (separator > 0) {
       // todo: validate that values[i] is 0 <= v < 2^subcodeSize
-      const subcodeSize = trailing0(indicator) + 1;
+      const subcodeSize = trailing0(separator) + 1;
       code |= values[i] << offset;
       i += 1;
       offset += subcodeSize;
-      indicator >>>= subcodeSize; // shift off this subcode
+      separator >>>= subcodeSize; // shift off this subcode
     }
     return code >>> 0;
   }
