@@ -33,6 +33,7 @@ import { ArrayWalker } from './ArrayWalker.js';
 // api design
 // - mistakenly used count instead of countSymbol; really wanted a rank; maybe rename countSymbol to rank and countSymbolBatch to rankBatch??
 // - document that the top of the highest subcode need not be marked; this is why, as a special case, the default value 0 works.
+// - make first/last also kwargs?
 
 // Implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
