@@ -29,8 +29,11 @@ import { ArrayWalker } from './ArrayWalker.js';
 // later
 // - implement range_next_value, range_intersect, and fingered range quantile from
 //   the paper "New algorithms on wavelet trees and applications to information retrieval".
+// - use flatqueue; keep a single queue around and use .shrink() between calls for top frequent
 // api design
 // - mistakenly used count instead of countSymbol; really wanted a rank; maybe rename countSymbol to rank and countSymbolBatch to rankBatch??
+// - document that the top of the highest subcode need not be marked; this is why, as a special case, the default value 0 works.
+
 // Implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
 export class WaveletMatrix {
@@ -376,14 +379,12 @@ export class WaveletMatrix {
   // of rank calls but at the cost of increased implementation complexity.
   // See the paper "New algorithms on wavelet trees and applications to
   // information retrieval" for details.
-  count(first, last, lower = 0, upper = this.maxSymbol) {
+  // 🌶 NOTE: Upper is currently exclusive, since that's how countLessThan works...
+  count(first, last, lower = 0, upper = this.alphabetSize) {
     return this.countLessThan(first, last, upper) - this.countLessThan(first, last, lower);
   }
 
   rankBatch(first, last, sortedSymbols, { groupBits = 0 } = {}) {
-    // splitByMsb requires the same sortedSymbol to be searched for in each of the split paths.
-    // for now, we'll go with the relatively inefficient route of asking that this be done by
-    // supplying a larger set of sortedSymbols, enumerating all MSB variations in the high bits.
     const symbolGroupSize = 1 << groupBits;
     for (const symbol of sortedSymbols) {
       if (symbol % symbolGroupSize !== 0)
@@ -484,7 +485,8 @@ export class WaveletMatrix {
   // differ only in their lowest `groupBits` bits)
   // Each distinct group is labeled by its lowest element, which represents
   // the group containing symbols in the range [symbol, symbol + 2^groupBits).
-  counts(first, last, lower = 0, upper = this.maxSymbol, { groupBits = 0, sort = true, subcodeIndicator = 0 } = {}) {
+  // todo: call this ranks??
+  counts(first, last, {  lower = 0, upper = this.maxSymbol, groupBits = 0, sort = true, subcodeIndicator = 0 } = {}) {
     // todo: validate lower/upper bounds wrt alphabet size
     const symbolGroupSize = 1 << groupBits;
     // todo: handle lower === upper
