@@ -385,6 +385,9 @@ export class WaveletMatrix {
   }
 
   rankBatch(first, last, sortedSymbols, { groupBits = 0 } = {}) {
+    for (let i = 1; i < sortedSymbols.length; i++) {
+      if (!(sortedSymbols[i - 1] <= sortedSymbols[i])) throw new Error('sortedSymbols must be sorted');
+    }
     const symbolGroupSize = 1 << groupBits;
     for (const symbol of sortedSymbols) {
       if (symbol % symbolGroupSize !== 0)
@@ -486,7 +489,7 @@ export class WaveletMatrix {
   // Each distinct group is labeled by its lowest element, which represents
   // the group containing symbols in the range [symbol, symbol + 2^groupBits).
   // todo: call this ranks??
-  counts(first, last, {  lower = 0, upper = this.maxSymbol, groupBits = 0, sort = true, subcodeIndicator = 0 } = {}) {
+  counts(first, last, {  lower = 0, upper = this.maxSymbol, groupBits = 0, sort = true, subcodeSeparator = 0 } = {}) {
     // todo: validate lower/upper bounds wrt alphabet size
     const symbolGroupSize = 1 << groupBits;
     // todo: handle lower === upper
@@ -532,14 +535,14 @@ export class WaveletMatrix {
       const levelBitMask = 1 << levelBit;
       // Usually, the entire code is treated as a single integer, and the [lower, upper] range
       // limits the range of returned codes.
-      // It can be useful to instead treat the code as representing a concatenation of subcodeIndicator,
+      // It can be useful to instead treat the code as representing a concatenation of subcodeSeparator,
       // and the [lower, upper] values as representing a concatenation of the ranges of those
-      // subcodeIndicator. This behavior can be specified by the `subcodeIndicator` argument, which is a
+      // subcodeSeparator. This behavior can be specified by the `subcodeSeparator` argument, which is a
       // bitmask in which a 1 bit indicates the onset of a new subcode and a 0 implies the continuation
       // of the current subcode. All range comparisons are done within a subcode, and the default
-      // subcodeIndicator of 0 gives us the default behavior in which the full code is treated as
+      // subcodeSeparator of 0 gives us the default behavior in which the full code is treated as
       // a single subcode.
-      if ((subcodeIndicator & levelBitMask) === 0) subcodeMask |= levelBitMask;
+      if ((subcodeSeparator & levelBitMask) === 0) subcodeMask |= levelBitMask;
       else subcodeMask = levelBitMask;
       const subcodeLower = lower & subcodeMask;
       const subcodeUpper = upper & subcodeMask;
@@ -639,7 +642,7 @@ export class WaveletMatrix {
     if (sortedIndices[0] < 0 || sortedIndices[sortedIndices.length - 1] >= last - first)
       throw new Error('sorted indices out of range for [first, last); should be in the range [0, first - last)');
     for (let i = 1; i < sortedIndices.length; i++) {
-      if (!(sortedIndices[i - 1] <= sortedIndices[i])) throw new Error('sorted indices must be sorted');
+      if (!(sortedIndices[i - 1] <= sortedIndices[i])) throw new Error('sortedIndices must be sorted');
     }
     // todo: error if there are more sortedindices than last-first, since we copy them into a scratch space (or ensure the space can hold the size we need)
     if (sortedIndices[0] < 0 || sortedIndices[sortedIndices.length - 1] >= last)
@@ -849,7 +852,7 @@ export class WaveletMatrix {
     return { symbols: res.symbols.subarray(0, n), counts: res.counts.subarray(0, n) };
   }
 
-  subcodeIndicator(subcodeSizesInBits) {
+  subcodeSeparator(subcodeSizesInBits) {
     let indicator = 0;
     let offset = 0;
     for (const sz of subcodeSizesInBits) {
