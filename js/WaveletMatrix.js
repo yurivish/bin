@@ -25,12 +25,12 @@ import { ArrayWalker } from './ArrayWalker.js';
 // - idea: do not use bitwise operations if we can avoid them inside eg. counts; that way can scale to values up to 2^53!
 //   - might not be possible (eg. we do | and &); could try a bigint64...
 // - implement SparseBitVector?
-// -  explore the idea of storing the complement whenever 1 density exceeds 50%; then rank0 is rank1 and same for select. 
-
+// -  explore the idea of storing the complement whenever 1 density exceeds 50%; then rank0 is rank1 and same for select.
 // later
 // - implement range_next_value, range_intersect, and fingered range quantile from
 //   the paper "New algorithms on wavelet trees and applications to information retrieval".
-
+// api design
+// - mistakenly used count instead of countSymbol; really wanted a rank; maybe rename countSymbol to rank and countSymbolBatch to rankBatch??
 // Implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
 export class WaveletMatrix {
@@ -52,7 +52,7 @@ export class WaveletMatrix {
     // It also requires O(2^numLevels) space. So, if conditions are unfavorable, use the
     // more straightforward construction algorithm that fills in levels from top-to-bottom
     // by iterating and incrementally sorting the data.
-    // Each of the construction algorithms return 
+    // Each of the construction algorithms return
     if (data.length === 0) {
       this.levels = [];
       this.length = 0;
@@ -78,7 +78,6 @@ export class WaveletMatrix {
     // length of its bitvectors, all of which are the same
     // length since they represent bits of the same sequence.
     this.length = levels[0].length;
-
   }
 
   // Implements Algorithm 1 (seq.pc) from the paper "Practical Wavelet Tree Construction".
@@ -276,7 +275,7 @@ export class WaveletMatrix {
   }
 
   // Returns the number of occurrences of `symbol` in the range [first, last).
-  countSymbol(first, last, symbol, opts) {
+  rank(first, last, symbol, opts) {
     const indices = this.symbolRange(first, last, symbol, opts);
     return indices.last - indices.first;
   }
@@ -285,7 +284,7 @@ export class WaveletMatrix {
   select(first, last, symbol, n) {
     if (symbol < 0 || symbol >= this.alphabetSize) return -1;
     if (n < 1 || n > this.length) return -1;
-    const indices = this.symbolRange(first, last, symbol, 0);
+    const indices = this.symbolRange(first, last, symbol);
     if (indices.last - indices.first < n) return -1; // in analogy with select
     let index = indices.first + n - 1;
     for (let l = this.numLevels; l > 0; ) {
@@ -381,7 +380,7 @@ export class WaveletMatrix {
     return this.countLessThan(first, last, upper) - this.countLessThan(first, last, lower);
   }
 
-  countSymbolBatch(first, last, sortedSymbols, { groupBits = 0 } = {}) {
+  rankBatch(first, last, sortedSymbols, { groupBits = 0 } = {}) {
     // splitByMsb requires the same sortedSymbol to be searched for in each of the split paths.
     // for now, we'll go with the relatively inefficient route of asking that this be done by
     // supplying a larger set of sortedSymbols, enumerating all MSB variations in the high bits.
@@ -635,11 +634,13 @@ export class WaveletMatrix {
     // that lower and upper need to be multiples of.
     if (first > last) throw new Error('first must be <= last');
     if (last > this.length) throw new Error('last must be < wavelet matrix length');
+    if (sortedIndices[0] < 0 || sortedIndices[sortedIndices.length - 1] >= last - first)
+      throw new Error('sorted indices out of range for [first, last); should be in the range [0, first - last)');
     for (let i = 1; i < sortedIndices.length; i++) {
       if (!(sortedIndices[i - 1] <= sortedIndices[i])) throw new Error('sorted indices must be sorted');
     }
     // todo: error if there are more sortedindices than last-first, since we copy them into a scratch space (or ensure the space can hold the size we need)
-    if (sortedIndices[0] < 0 || sortedIndices[sortedIndices.length - 1] >= last - first)
+    if (sortedIndices[0] < 0 || sortedIndices[sortedIndices.length - 1] >= last)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
 
     // account for duplicate sorted indices and the fact that there cannot be more outputs than elements
@@ -697,7 +698,6 @@ export class WaveletMatrix {
         const numGoLeft = splitIndex - lo;
         const numGoRight = sortedIndexCount - numGoLeft;
         k = lo;
-
         // adjust count for quantiles mapped to the right child based on the left count,
         // so that we look only for the remaining count of elements in the child node.
         for (let n = splitIndex; n < hi; n++) I[n] -= leftChildCount;
@@ -823,13 +823,16 @@ export class WaveletMatrix {
     // Returns the 1/k-majority. Ie. for k = 4, return the elements (if any) with
     // frequency larger than 1/4th (25%) of the specified index range
     if (k < 1 || !Number.isInteger(k)) throw new Error('k must be a positive integer');
+    const total = last - first; // todo: change if inclusive
+    // note: can oversample, eg. if k > total.
+    // note that total includes multiplicity, so the numbers can be quite large...
     // if k === 1, we sample the first element at index 0
     const indices = new Uint32Array(Math.max(1, k - 1));
-    const total = last - first; // todo: change if inclusive
     for (let i = 1; i < k; i++) {
       const pc = i / k;
       // implicit floor; we consistently round down.
-      indices[i - 1] = first + total * pc;
+      // quantileBatch indices are in the range [0, last - first).
+      indices[i - 1] = total * pc;
     }
     const res = this.quantileBatch(first, last, indices);
     const targetCount = Math.floor((last - first) / k);
