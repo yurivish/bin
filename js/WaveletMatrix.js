@@ -35,7 +35,7 @@ import { ArrayWalker } from './ArrayWalker.js';
 // - mistakenly used count instead of countSymbol; really wanted a rank; maybe rename countSymbol to rank and countSymbolBatch to rankBatch??
 // - document that the top of the highest subcode need not be marked; this is why, as a special case, the default value 0 works.
 // - make first/last also kwargs?
-
+// - we sometimes accept last == first, but other times not. I think it would be good to support empty ranges if we can; but we need to verify the results are correct.
 // Implements a binary wavelet matrix that splits on power-of-two alphabet
 // boundaries, rather than splitting based on the true alphabet midpoint.
 export class WaveletMatrix {
@@ -45,6 +45,9 @@ export class WaveletMatrix {
   // todo: check that all symbols are < alphabetSize
   // todo: pass in maxSymbol, with alphabetSize = maxSymbol + 1?
   constructor(data /* call this symbols? */, maxSymbol, opts = {}) {
+    if (maxSymbol > 2 ** 32 - 1) {
+      throw new Error('cannot represent integers greater than 2^32 - 1 at the moment');
+    }
     // data is an array of integer values in [0, alphabetSize)
     // maxSymbol is the maximum *actual* symbol in this WM;
     // not the maximum *possible* symbol, which is 2**numLevels - 1
@@ -52,7 +55,7 @@ export class WaveletMatrix {
     this.alphabetSize = maxSymbol + 1;
     this.numLevels = Math.ceil(Math.log2(this.alphabetSize));
     this.maxLevel = this.numLevels - 1;
-    this.allOnes = 2 ** this.numLevels - 1;
+    // this.allOnes = 2 ** this.numLevels - 1; // was thinking this could be useful as a selector...
     const { largeAlphabet = 2 ** this.numLevels > data.length, counts } = opts;
     // The more efficient construction algorithm does not scale well to large alphabets,
     // and it cannot handle multiplicities because it constructs the bitvectors out-of-order.
@@ -315,25 +318,26 @@ export class WaveletMatrix {
 
   // Internal function returning the (first, last] index range covered by this symbol on the virtual bottom level,
   // or on a higher level if groupBits > 0. `last - first` gives the symbol count within the provided range.
-  symbolRange(symbol, {  first = 0, last = this.length, groupBits = 0 } = {}) {
+  symbolRange(symbol, { first = 0, last = this.length, groupBits = 0 } = {}) {
     const symbolGroupSize = 1 << groupBits;
     if (symbol % symbolGroupSize !== 0) {
       // note: could be done with bit math (check that low bits are zero)
       throw new Error('symbol must evenly divide the block size implied by groupBits');
     }
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
-    if (first >= last) throw new Error('last must be < first');
+    if (first >= last) return this.emptyResult();
     if (first === last) return 0;
     if (first < 0) throw new Error('first must be >= 0');
     if (last > this.length) throw new Error('last must be <= length');
+    if (this.numLevels > 0 && first - last > 0) return { first, last };
 
-    if (this.numLevels === 0) return 0;
     const numLevels = this.numLevels - groupBits;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const first1 = level.rank1(first - 1);
       const last1 = level.rank1(last - 1);
       const levelBitMask = 1 << (this.maxLevel - l);
+
       if ((symbol & levelBitMask) === 0) {
         // go left
         first = first - first1; // = first0
@@ -352,7 +356,7 @@ export class WaveletMatrix {
   // This is kind of like a ranged rank operation over a symbol range.
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L25
   countLessThan(symbol, { first = 0, last = this.length } = {}) {
-    if (first > last) throw new Error('first must be <= last');
+    if (first >= last) return 0;
     if (first < 0) throw new Error('first must be >= 0');
     if (last > this.length) throw new Error('last must be <= length');
     if (symbol <= 0) return 0;
@@ -387,12 +391,12 @@ export class WaveletMatrix {
   // information retrieval" for details.
   // 🌶 NOTE: Upper is currently exclusive, since that's how countLessThan works...
   count({ first = 0, last = this.length, lower = 0, upper = this.alphabetSize } = {}) {
-    // todo: check and error if options or subcodeSeparator or sort are specified
+    // todo: check and error if options or separator or sort are specified
     return this.countLessThan(upper, { first, last }) - this.countLessThan(lower, { first, last });
   }
 
   rankBatch(sortedSymbols, { first = 0, last = this.length, groupBits = 0 } = {}) {
-    // todo: check and error if subcodeSeparator or sort are specified
+    // todo: check and error if separator or sort are specified
     for (let i = 1; i < sortedSymbols.length; i++) {
       if (!(sortedSymbols[i - 1] <= sortedSymbols[i])) throw new Error('sortedSymbols must be sorted');
     }
@@ -402,8 +406,8 @@ export class WaveletMatrix {
         // note: could be done with bit math (check that low bits are zero)
         throw new Error('symbol must evenly divide the block size implied by groupBits');
     }
-    if (first > last) throw new Error('first must be <= last');
-    if (last > this.length) throw new Error('last must be < wavelet matrix length');
+    if (first >= last) return this.emptyResult();
+    if (last > this.length) throw new Error('last must be <= wavelet matrix length');
 
     // account for duplicate sorted symbols and the fact that there cannot be more outputs than elements
     const scratchSize = Math.min(this.alphabetSize, sortedSymbols.length, last - first);
@@ -503,8 +507,8 @@ export class WaveletMatrix {
     lower = 0,
     upper = this.maxSymbol,
     groupBits = 0,
-    sort = true,
-    subcodeSeparator = 0,
+    sort = false,
+    separator = 0,
   } = {}) {
     // todo: validate lower/upper bounds wrt alphabet size
     const symbolGroupSize = 1 << groupBits;
@@ -515,7 +519,7 @@ export class WaveletMatrix {
       throw new Error('lower must evenly divide the symbol block size implied by groupBits');
     if ((upper + 1) % symbolGroupSize !== 0)
       throw new Error('(upper + 1) must evenly divide the symbol block size implied by groupBits');
-    if (first >= last) throw new Error('first must be < last');
+    if (first >= last) return this.emptyResult();
     if (first < 0) throw new Error('first must be >= 0');
     if (last > this.length) throw new Error('last must be <= length');
 
@@ -527,18 +531,18 @@ export class WaveletMatrix {
     // todo: bound this more closely. slightly involved to upper-bound due to subcodes;
     // need to compute the product of the subcode ranges since that's the maximum possible
     // number of unique symbols.
-    const scratchSize = Math.min(2 ** this.numLevels - groupBits, this.alphabetSize, this.length);
+    const scratchSize = Math.min(2 ** this.numLevels - groupBits, upper - lower + 1, this.length);
     this.scratch.reset();
     const F = this.scratch.alloc(scratchSize); // firsts
     const L = this.scratch.alloc(scratchSize); // lasts
     const S = this.scratch.alloc(scratchSize); // symbols
     const walk = new ArrayWalker(1, scratchSize);
-    const reverse = !sort; // walk.reset(reverse, ...)
+    const reverse = !sort; // for walk.reset(reverse, ...)
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
     S[nextIndex] = 0;
-    walk.reset(false, F, L, S);
+    walk.reset(reverse, F, L, S);
 
     let nRankCalls = 0;
     // start with all 'extra' high bits set so that we properly handle an
@@ -553,12 +557,12 @@ export class WaveletMatrix {
       // limits the range of returned codes.
       // It can be useful to instead treat the code as representing a concatenation of subcodes,
       // and the [lower, upper] values as representing a concatenation of the ranges of those
-      // subcodes. This behavior can be specified by the `subcodeSeparator` argument, which is a
+      // subcodes. This behavior can be specified by the `separator` argument, which is a
       // bitmask in which a 1 bit indicates the onset of a new subcode and a 0 implies the continuation
       // of the current subcode. All range comparisons are done within a subcode, and the default
-      // subcodeSeparator of 0 gives us the default behavior in which the full code is treated as
+      // separator of 0 gives us the default behavior in which the full code is treated as
       // a single subcode.
-      if ((subcodeSeparator & levelBitMask) === 0) subcodeMask |= levelBitMask;
+      if ((separator & levelBitMask) === 0) subcodeMask |= levelBitMask;
       else subcodeMask = levelBitMask;
       const subcodeLower = lower & subcodeMask;
       const subcodeUpper = upper & subcodeMask;
@@ -617,11 +621,15 @@ export class WaveletMatrix {
     return { symbols, counts, nRankCalls };
   }
 
+  emptyResult() {
+    return { symbols: new Uint32Array(), counts: new Uint32Array(), nRankCalls: 0 };
+  }
+
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
   // Range quantile query returning the kth largest symbol in A[i, j).
   quantile(index, { first = 0, last = this.length } = {}) {
-    if (first >= last) throw new Error('first must be < last');
-    if (last > this.length) throw new Error('last must be < wavelet matrix length');
+    if (first >= last) return this.emptyResult();
+    if (last > this.length) throw new Error('last must be <= wavelet matrix length');
     if (index < 0 || index >= last - first)
       throw new Error('index cannot be less than zero or exceed length of range [first, last)');
     let symbol = 0;
@@ -653,8 +661,8 @@ export class WaveletMatrix {
   quantileBatch(sortedIndices, { first = 0, last = this.length } = {}) {
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
-    if (first > last) throw new Error('first must be <= last');
-    if (last > this.length) throw new Error('last must be < wavelet matrix length');
+    if (first >= last) return Object.assign(this.emptyResult(), { numSortedIndices: new Uint32Array() });
+    if (last > this.length) throw new Error('last must be <= wavelet matrix length');
     if (sortedIndices[0] < 0 || sortedIndices[sortedIndices.length - 1] >= last - first)
       throw new Error('sorted indices out of range for [first, last); should be in the range [0, first - last)');
     for (let i = 1; i < sortedIndices.length; i++) {
@@ -757,8 +765,8 @@ export class WaveletMatrix {
 
   // The approach below is from by "New algorithms on wavelet trees and applications to information retrieval"
   quantiles({ first = 0, last = this.length, firstIndex = 0, lastIndex = last - first } = {}) {
-    if (last > this.length) throw new Error('last must be < wavelet matrix length');
-    if (first > last) throw new Error('first must be <= last');
+    if (last > this.length) throw new Error('last must be <= wavelet matrix length');
+    if (first >= last) return this.emptyResult();
     if (firstIndex > lastIndex) throw new Error('firstIndex must be <= lastIndex');
     if (firstIndex < 0 || lastIndex > last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
@@ -868,12 +876,125 @@ export class WaveletMatrix {
     return { symbols: res.symbols.subarray(0, n), counts: res.counts.subarray(0, n) };
   }
 
+  // Range intersection. Supports the same arguments as `count`, plus first2 and last2. Draft implementation.
+  // The idea is to traverse the tree as usual, but only recourse if both of the intervals are non-empty.
+  intersect({ first, last, first2, last2, lower = 0, upper = this.maxSymbol, separator = 0, sort = false } = {}) {
+    if (first === undefined || last === undefined || first2 === undefined || last2 === undefined) {
+      throw new Error('first, last, first2, and last2 must all be specified');
+    }
+    if (lower > upper) throw new Error('lower must be < upper');
+    if (last > this.length) throw new Error('last must be <= wavelet matrix length');
+    if (first >= last) return Object.assign(this.emptyResult(), { counts2: new Uint32Array() });
+    if (last2 > this.length) throw new Error('last2 must be < wavelet matrix length');
+    if (first2 > last2) throw new Error('first2 must be <= last2');
+
+    const scratchSize = Math.min(upper - lower + 1, last - first, last2 - first2);
+    this.scratch.reset();
+    const F = this.scratch.alloc(scratchSize); // firsts
+    const L = this.scratch.alloc(scratchSize); // lasts
+    const F2 = this.scratch.alloc(scratchSize); // firsts2
+    const L2 = this.scratch.alloc(scratchSize); // lasts2
+    const S = this.scratch.alloc(scratchSize); // symbols
+    const walk = new ArrayWalker(1, scratchSize);
+    const reverse = !sort; // for walk.reset(reverse, ...)
+    const nextIndex = walk.nextFrontIndex();
+    F[nextIndex] = first;
+    L[nextIndex] = last;
+    F2[nextIndex] = first2;
+    L2[nextIndex] = last2;
+    S[nextIndex] = 0;
+    walk.reset(reverse, F, L, F2, L2, S);
+    let nRankCalls = 0;
+
+    const numLevels = this.numLevels;
+    // see `counts` for subcode-related comments.
+    let subcodeMask = 0xffffffff << numLevels;
+
+    for (let l = 0; l < numLevels; l++) {
+      const level = this.levels[l];
+      const nz = this.numZeros[l];
+      const levelBitMask = 1 << (this.maxLevel - l);
+
+      if ((separator & levelBitMask) === 0) subcodeMask |= levelBitMask;
+      else subcodeMask = levelBitMask;
+      const subcodeLower = lower & subcodeMask;
+      const subcodeUpper = upper & subcodeMask;
+
+      for (let i = walk.length; i > 0; ) {
+        i--;
+        const first = F[i];
+        const first1 = level.rank1(first - 1);
+        const first0 = first - first1;
+
+        const last = L[i];
+        const last1 = level.rank1(last - 1);
+        const last0 = last - last1;
+
+        const first2 = F2[i];
+        const first1_2 = level.rank1(first2 - 1);
+        const first0_2 = first2 - first1_2;
+
+        const last2 = L2[i];
+        const last1_2 = level.rank1(last2 - 1);
+        const last0_2 = last2 - last1_2;
+
+        const rightCount = last1 - first1;
+        const leftCount = last0 - first0;
+        const rightCount2 = last1_2 - first1_2;
+        const leftCount2 = last0_2 - first0_2;
+
+        const symbol = S[i];
+
+        nRankCalls += 4;
+
+        console.log(rightCount, rightCount2, leftCount, leftCount2);
+        if (rightCount > 0 && rightCount2 > 0) {
+          // go right [if symbol ranges overlap each other and the target range]
+          const a = (symbol | levelBitMask) & subcodeMask;
+          const b = (a | (levelBitMask - 1)) & subcodeMask;
+          if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
+            const nextIndex = walk.nextBackIndex();
+            F[nextIndex] = nz + (first - first0); // = nz + first1
+            L[nextIndex] = nz + (last - last0); // = nz + last1
+            F2[nextIndex] = nz + (first2 - first0_2); // = nz + first1
+            L2[nextIndex] = nz + (last2 - last0_2); // = nz + last1
+            S[nextIndex] = symbol | levelBitMask;
+          }
+        }
+
+        if (leftCount > 0 && leftCount2 > 0) {
+          // go left
+          const a = symbol & subcodeMask;
+          const b = (a | (levelBitMask - 1)) & subcodeMask;
+          if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
+            const nextIndex = sort ? walk.nextBackIndex() : walk.nextFrontIndex();
+            F[nextIndex] = first0;
+            L[nextIndex] = last0;
+            F2[nextIndex] = first0_2;
+            L2[nextIndex] = last0_2;
+            S[nextIndex] = symbol;
+          }
+        }
+      }
+      walk.reset(reverse, F, L, F2, L2, S);
+    }
+
+    for (let i = 0; i < walk.length; i++) {
+      L[i] -= F[i];
+      L2[i] -= F2[i];
+    }
+    const counts = L.subarray(0, walk.length).slice();
+    const counts2 = L2.subarray(0, walk.length).slice();
+    const symbols = S.subarray(0, walk.length).slice();
+    return { symbols, counts, counts2, nRankCalls };
+  }
+
   // status: initial draft.
   // note: will usually return more than required, since that is what was
   // retrieved.
   // note: does not return them in sorted order. we have a 'topK' function for that instead.
   // figure out how to make this less confusing.
-  mostFrequent(k, { first = 0, last = this.length } = {}) {
+  mostFrequentUnsorted(k, { first = 0, last = this.length } = {}) {
     // todo: have some heuristic about when it might make sense to jump straight to querying counts,
     // or having a different strategy than doubing (when k is small, eg. 10).
     let ret = this.majority(k, { first, last });
@@ -897,7 +1018,7 @@ export class WaveletMatrix {
   // this is all hard to use... maybe encodeSubcodes should take a list of subcode sizes
   // as integers
 
-  subcodeSeparator(subcodeSizesInBits) {
+  separator(subcodeSizesInBits) {
     let separator = 0;
     let offset = 0;
     for (const sz of subcodeSizesInBits) {
