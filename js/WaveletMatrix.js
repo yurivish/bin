@@ -318,6 +318,7 @@ export class WaveletMatrix {
 
   // Internal function returning the (first, last] index range covered by this symbol on the virtual bottom level,
   // or on a higher level if groupBits > 0. `last - first` gives the symbol count within the provided range.
+  // If the symbol does not appear in the range, an arbitrary empty range will be returned.
   symbolRange(symbol, { first = 0, last = this.length, groupBits = 0 } = {}) {
     const symbolGroupSize = 1 << groupBits;
     if (symbol % symbolGroupSize !== 0) {
@@ -325,7 +326,7 @@ export class WaveletMatrix {
       throw new Error('symbol must evenly divide the block size implied by groupBits');
     }
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
-    if (first >= last) return this.emptyResult();
+    if (first >= last) return { first, first };
     if (first === last) return 0;
     if (first < 0) throw new Error('first must be >= 0');
     if (last > this.length) throw new Error('last must be <= length');
