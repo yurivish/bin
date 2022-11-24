@@ -879,6 +879,8 @@ export class WaveletMatrix {
 
   // Range intersection. Supports the same arguments as `count`, plus first2 and last2. Draft implementation.
   // The idea is to traverse the tree as usual, but only recourse if both of the intervals are non-empty.
+  // it would be useful to generalize this to intersect more ranges, accepting `firsts` and `lasts`.
+  // i think we would need even more scratch space for the intermediate rank computations, though...
   intersect({ first, last, first2, last2, lower = 0, upper = this.maxSymbol, separator = 0, sort = false } = {}) {
     if (first === undefined || last === undefined || first2 === undefined || last2 === undefined) {
       throw new Error('first, last, first2, and last2 must all be specified');
@@ -931,6 +933,9 @@ export class WaveletMatrix {
         const last1 = level.rank1(last - 1);
         const last0 = last - last1;
 
+        const rightCount = last1 - first1;
+        const leftCount = last0 - first0;
+
         const first2 = F2[i];
         const first1_2 = level.rank1(first2 - 1);
         const first0_2 = first2 - first1_2;
@@ -939,8 +944,6 @@ export class WaveletMatrix {
         const last1_2 = level.rank1(last2 - 1);
         const last0_2 = last2 - last1_2;
 
-        const rightCount = last1 - first1;
-        const leftCount = last0 - first0;
         const rightCount2 = last1_2 - first1_2;
         const leftCount2 = last0_2 - first0_2;
 
@@ -948,7 +951,6 @@ export class WaveletMatrix {
 
         nRankCalls += 4;
 
-        console.log(rightCount, rightCount2, leftCount, leftCount2);
         if (rightCount > 0 && rightCount2 > 0) {
           // go right [if symbol ranges overlap each other and the target range]
           const a = (symbol | levelBitMask) & subcodeMask;
