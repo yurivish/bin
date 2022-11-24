@@ -290,7 +290,7 @@ export class WaveletMatrix {
   }
 
   // Returns the index of the nth occurrence of `symbol` in the range [first, last).
-  select(symbol, n, { first = 0, last = this.length } = {}) {
+  select(symbol, n = 1, { first = 0, last = this.length } = {}) {
     if (symbol < 0 || symbol >= this.alphabetSize) return -1;
     if (n < 1 || n > this.length) return -1;
     const indices = this.symbolRange(symbol, { first, last });
