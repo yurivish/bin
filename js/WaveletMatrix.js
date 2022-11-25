@@ -326,7 +326,7 @@ export class WaveletMatrix {
     return indices.last - indices.first;
   }
 
-  // Returns the index of the nth occurrence of `symbol` in the range [first, last).
+  // Returns the index in this wavelet matrix of the nth occurrence of `symbol` in the range [first, last).
   select(symbol, n = 1, { first = 0, last = this.length, ignoreBits = 0 } = {}) {
     if (symbol < 0 || symbol >= this.alphabetSize) return -1;
     if (n < 1 || n > this.length) return -1;
@@ -496,7 +496,7 @@ export class WaveletMatrix {
         // space for the binary search calls to those symbols corresponding to this node.
         // This means that we have to use `walk.nextBackIndex()` for both left and right children,
         // since that's what gives rise to the sorted order of `S` its sorted order.
-        // [lo, hi) is the range of sorted indices covered by this node
+        // [lo, hi) is the range of sorted offsets covered by this node
         const lo = k - symbolCount;
         const hi = k;
         const splitIndex = binarySearchAfter(sortedSymbols, m, lo, hi);
@@ -664,11 +664,14 @@ export class WaveletMatrix {
 
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
   // Range quantile query returning the kth largest symbol in A[i, j).
-  quantile(sortedIndex, { first = 0, last = this.length } = {}) {
+  // offset is a "sorted index" within the provided index range. If we take all of
+  // the elements in [first, last) and sort them, the minimum element lies at offset 0
+  // and the maximum element lies at offset last - first - 1.
+  quantile(offset, { first = 0, last = this.length } = {}) {
     if (first >= last) return this.emptyResult();
     if (last > this.length) throw new Error('last must be <= wavelet matrix length');
-    if (sortedIndex < 0 || sortedIndex >= last - first)
-      throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
+    if (offset < 0 || offset >= last - first)
+      throw new Error('offset cannot be less than zero or exceed length of range [first, last)');
     let symbol = 0;
     let nRankCalls = 0;
     for (let l = 0; l < this.numLevels; l++) {
@@ -677,7 +680,7 @@ export class WaveletMatrix {
       const last0 = level.rank0(last - 1);
       const count = last0 - first0;
       nRankCalls += 2;
-      if (sortedIndex < count) {
+      if (offset < count) {
         // go left
         first = first0;
         last = last0;
@@ -686,48 +689,53 @@ export class WaveletMatrix {
         const nz = this.numZeros[l];
         first = nz + (first - first0); // = nz + first1
         last = nz + (last - last0); // = nz + last1
-        // update symbol and new target sortedIndex in the child node
+        // update symbol and new target offset in the child node
         const levelBitMask = 1 << (this.maxLevel - l);
         symbol |= levelBitMask;
-        sortedIndex -= count;
+        offset -= count;
       }
     }
     return { symbol, count: last - first, nRankCalls };
   }
 
+  // todo: make a minMax function that is like quantile/batchQuantile, but finds specifically 
+  // the first and last sorted index. right now quantile batch is slow, so this can be used to
+  // speed up the enumeration of all symbols in a range together with their counts. though when
+  // i put it that way, hold up... why not counts?
+
   // todo: investigate performance of this and other batch functions.
   // quickly comparing quantileBatch([index]) to quantile(index) seemed to show a possile >2x overhead.
-  quantileBatch(sortedIndices, { first = 0, last = this.length } = {}) {
+  quantileBatch(sortedOffsets, { first = 0, last = this.length } = {}) {
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
-    if (first >= last) return Object.assign(this.emptyResult(), { numSortedIndices: new Uint32Array() });
+    if (first >= last) return Object.assign(this.emptyResult(), { numSortedOffsets: new Uint32Array() });
     if (last > this.length) throw new Error('last must be <= wavelet matrix length');
-    if (sortedIndices[0] < 0 || sortedIndices[sortedIndices.length - 1] >= last - first)
-      throw new Error('sorted indices out of range for [first, last); should be in the range [0, first - last)');
-    for (let i = 1; i < sortedIndices.length; i++) {
-      if (!(sortedIndices[i - 1] <= sortedIndices[i])) throw new Error('sortedIndices must be sorted');
+    if (sortedOffsets[0] < 0 || sortedOffsets[sortedOffsets.length - 1] >= last - first)
+      throw new Error('sorted offsets out of range for [first, last); should be in the range [0, first - last)');
+    for (let i = 1; i < sortedOffsets.length; i++) {
+      if (!(sortedOffsets[i - 1] <= sortedOffsets[i])) throw new Error('sortedOffsets must be sorted');
     }
-    // todo: error if there are more sortedindices than last-first, since we copy them into a scratch space (or ensure the space can hold the size we need)
-    if (sortedIndices[0] < 0 || sortedIndices[sortedIndices.length - 1] >= last)
+    // todo: error if there are more sortedOffsets than last-first, since we copy them into a scratch space (or ensure the space can hold the size we need)
+    if (sortedOffsets[0] < 0 || sortedOffsets[sortedOffsets.length - 1] >= last)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
 
-    // account for duplicate sorted indices and the fact that there cannot be more outputs than elements
-    const scratchSize = Math.min(this.alphabetSize, sortedIndices.length, last - first);
+    // account for duplicate sorted offsets and the fact that there cannot be more outputs than elements
+    const scratchSize = Math.min(this.alphabetSize, sortedOffsets.length, last - first);
     this.scratch.reset();
     const F = this.scratch.alloc(scratchSize); // firsts
     const L = this.scratch.alloc(scratchSize); // lasts
     const S = this.scratch.alloc(scratchSize); // symbols
     const C = this.scratch.alloc(scratchSize); // counts
-    const I = this.scratch.alloc(sortedIndices.length); // sorted indices
-    const walk = new ArrayWalker(sortedIndices.length === 0 ? 0 : 1, scratchSize);
+    const I = this.scratch.alloc(sortedOffsets.length); // sorted offsets
+    const walk = new ArrayWalker(sortedOffsets.length === 0 ? 0 : 1, scratchSize);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
     S[nextIndex] = 0;
-    C[nextIndex] = sortedIndices.length; // number of sortedIndices represented by node 0
+    C[nextIndex] = sortedOffsets.length; // number of sortedOffsets represented by node 0
     walk.reset(true, F, L, S, C);
-    // copy sorted indices into a scratch space since they are mutated as we go
-    I.set(sortedIndices);
+    // copy sorted offsets into a scratch space since they are mutated as we go
+    I.set(sortedOffsets);
 
     let nRankCalls = 0;
 
@@ -739,7 +747,7 @@ export class WaveletMatrix {
       const level = this.levels[l];
       const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l);
-      let k = sortedIndices.length; // march k over the sorted indices array
+      let k = sortedOffsets.length; // march k over the sorted offsets array
       for (let i = walk.length; i > 0; ) {
         i--;
         const first = F[i];
@@ -752,19 +760,19 @@ export class WaveletMatrix {
         const leftChildCount = last0 - first0; // left child count
 
         const symbol = S[i];
-        const sortedIndexCount = C[i]; // number of sorted indices inside this node
+        const sortedOffsetCount = C[i]; // number of sorted offsets inside this node
         nRankCalls += 2;
 
         // Determine the number of nodes that wants to be mapped to the right child of this node,
         // then subtract the count of left children from all of the nodes matched to the right child,
         // to account for the elements counted in the left counted.
         // [lo, hi) is the range of sorted symbols covered by this node
-        const lo = k - sortedIndexCount;
+        const lo = k - sortedOffsetCount;
         const hi = k;
 
         const splitIndex = binarySearchBefore(I, leftChildCount, lo, hi);
         const numGoLeft = splitIndex - lo;
-        const numGoRight = sortedIndexCount - numGoLeft;
+        const numGoRight = sortedOffsetCount - numGoLeft;
         k = lo;
         // adjust count for quantiles mapped to the right child based on the left count,
         // so that we look only for the remaining count of elements in the child node.
@@ -795,34 +803,34 @@ export class WaveletMatrix {
     for (let i = 0; i < walk.length; i++) L[i] -= F[i];
     const counts = L.subarray(0, walk.length).slice();
     const symbols = S.subarray(0, walk.length).slice();
-    // numSortedIndices indicates how many entries in sortedIndices are assigned
+    // numSortedOffsets indicates how many entries in sortedOffsets are assigned
     // to each symbol. this is a more economical representation than a dense array of
-    // length sortedIndices when multiple sortedIndices point to the same symbol.
-    const numSortedIndices = C.subarray(0, walk.length).slice();
-    return { symbols, counts, numSortedIndices, nRankCalls };
+    // length sortedOffsets when multiple sortedOffsets point to the same symbol.
+    const numSortedOffsets = C.subarray(0, walk.length).slice();
+    return { symbols, counts, numSortedOffsets, nRankCalls };
   }
 
   // The approach below is from by "New algorithms on wavelet trees and applications to information retrieval"
-  quantiles({ first = 0, last = this.length, firstIndex = 0, lastIndex = last - first } = {}) {
+  quantiles({ first = 0, last = this.length, firstOffset = 0, lastOffset = last - first } = {}) {
     if (last > this.length) throw new Error('last must be <= wavelet matrix length');
     if (first >= last) return this.emptyResult();
-    if (firstIndex > lastIndex) throw new Error('firstIndex must be <= lastIndex');
-    if (firstIndex < 0 || lastIndex > last - first)
+    if (firstOffset > lastOffset) throw new Error('firstOffset must be <= lastOffset');
+    if (firstOffset < 0 || lastOffset > last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
-    const scratchSize = Math.min(this.alphabetSize, lastIndex - firstIndex);
+    const scratchSize = Math.min(this.alphabetSize, lastOffset - firstOffset);
     this.scratch.reset();
     const F = this.scratch.alloc(scratchSize); // firsts
     const L = this.scratch.alloc(scratchSize); // lasts
     const S = this.scratch.alloc(scratchSize); // symbols
-    const C = this.scratch.alloc(scratchSize); // counts
-    const C2 = this.scratch.alloc(scratchSize);
-    const walk = new ArrayWalker(firstIndex === lastIndex ? 0 : 1, scratchSize);
+    const C = this.scratch.alloc(scratchSize); // counts up to the first offset
+    const C2 = this.scratch.alloc(scratchSize); // counts up to the last offset
+    const walk = new ArrayWalker(firstOffset === lastOffset ? 0 : 1, scratchSize);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
     S[nextIndex] = 0;
-    C[nextIndex] = firstIndex;
-    C2[nextIndex] = lastIndex;
+    C[nextIndex] = firstOffset;
+    C2[nextIndex] = lastOffset;
     walk.reset(true, F, L, S, C, C2);
     let nRankCalls = 0;
 
