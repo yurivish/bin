@@ -1,6 +1,9 @@
 export class RLEBitVector {
   constructor() {
     this.Z = [];
+    // idea: if instead of storing the number of zeros we store the number zeros minus one,
+    // then in the finish method we can notice that the Z and ZO arrays are equal, and store
+    // only one underlying copy, getting sparse bitvectors for free.
     this.ZO = [];
     this.length = 0;
     this.numZeros = 0;

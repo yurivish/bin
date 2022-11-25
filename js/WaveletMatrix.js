@@ -112,7 +112,7 @@ export class WaveletMatrix {
       // Fill the first bitvector (MSBs in data order)
       if (d & levelBitMask) level.one(i);
     }
-    level.finish()
+    level.finish();
 
     // Construct the other levels bottom-up
     for (let l = maxLevel; l > 0; l--) {
@@ -149,7 +149,7 @@ export class WaveletMatrix {
         // Set the bit in the bitvector
         if (d & levelBitMask) level.one(p);
       }
-      level.finish()
+      level.finish();
     }
     return levels;
   }
@@ -192,7 +192,7 @@ export class WaveletMatrix {
       walk.reset(true, nextData);
       // swap data and nextData
       (tmp = data), (data = nextData), (nextData = tmp);
-      level.finish()
+      level.finish();
     }
 
     // For the last level we don't need to build anything but the bitvector
@@ -201,7 +201,7 @@ export class WaveletMatrix {
     for (let i = 0; i < len; i++) {
       if (data[i] & levelBitMask) level.one(i);
     }
-    level.finish()
+    level.finish();
     return levels;
   }
 
@@ -250,10 +250,10 @@ export class WaveletMatrix {
       (tmp = data), (data = nextData), (nextData = tmp);
       // swap counts and nextCounts
       (tmp = counts), (counts = nextCounts), (nextCounts = tmp);
-            // finish levels as we're done with them, since this can sometimes
+      // finish levels as we're done with them, since this can sometimes
       // give us memory savings (eg. with the optimizations in RLEBitVector
       // for vectors with all length-1 one-runs)
-      level.finish()
+      level.finish();
     }
 
     // For the last level we don't need to build anything but the bitvector
@@ -266,7 +266,7 @@ export class WaveletMatrix {
         level.run(counts[i], 0);
       }
     }
-    level.finish()
+    level.finish();
     return levels;
   }
 
@@ -300,7 +300,7 @@ export class WaveletMatrix {
       if (index < 0 || index > this.length) throw new Error('access: out of bounds');
     }
     // indices get mutated as we go, so make a copy
-    indices = new Uint32Array(indices); 
+    indices = new Uint32Array(indices);
     // allocate space for the output symbols
     const symbols = new Uint32Array(indices.length);
     for (let l = 0; l < this.numLevels; l++) {
@@ -704,7 +704,7 @@ export class WaveletMatrix {
     return { symbol, count: last - first, nRankCalls };
   }
 
-  // todo: make a minMax function that is like quantile/batchQuantile, but finds specifically 
+  // todo: make a minMax function that is like quantile/batchQuantile, but finds specifically
   // the first and last sorted index. right now quantile batch is slow, so this can be used to
   // speed up the enumeration of all symbols in a range together with their counts. though when
   // i put it that way, hold up... why not counts?
@@ -937,7 +937,16 @@ export class WaveletMatrix {
   // i think we would need even more scratch space for the intermediate rank computations, though...
   // We could also support finding elements that appear only in the first range, by recursing only when
   // leftCount > 0 && leftCount2 == 0 for left, and rightCount > 0 && rightCount2 == 0 for right
-  intersect({ first, last, first2, last2, lower = 0, upper = this.maxSymbol, subcodeSeparator = 0, sort = false } = {}) {
+  intersect({
+    first,
+    last,
+    first2,
+    last2,
+    lower = 0,
+    upper = this.maxSymbol,
+    subcodeSeparator = 0,
+    sort = false,
+  } = {}) {
     if (first === undefined || last === undefined || first2 === undefined || last2 === undefined) {
       throw new Error('first, last, first2, and last2 must all be specified');
     }
