@@ -26,6 +26,7 @@ import { ArrayWalker } from './ArrayWalker.js';
 //   - might not be possible (eg. we do | and &); could try a bigint64...
 // - implement SparseBitVector?
 // -  explore the idea of storing the complement whenever 1 density exceeds 50%; then rank0 is rank1 and same for select.
+// error if ignoreBits > numLevels
 // later
 // - implement range_next_value, range_intersect, and fingered range quantile from
 //   the paper "New algorithms on wavelet trees and applications to information retrieval".
@@ -286,17 +287,50 @@ export class WaveletMatrix {
     return symbol;
   }
 
+  accessBatch(indices) {
+    for (let i = 0; i < indices.length; i++) {
+      const index = indices[i];
+      if (typeof index !== 'number') throw new Error('index must be a number');
+      if (index < 0 || index > this.length) throw new Error('access: out of bounds');
+    }
+    // indices get mutated as we go, so make a copy
+    indices = new Uint32Array(indices); 
+    // allocate space for the output symbols
+    const symbols = new Uint32Array(indices.length);
+    for (let l = 0; l < this.numLevels; l++) {
+      const level = this.levels[l];
+      for (let i = 0; i < indices.length; i++) {
+        const index = indices[i];
+        const symbol = symbols[i];
+        // todo: combine rank and access queries since they likely access the same block
+        const index1 = level.rank1(index - 1);
+        if (level.access(index) === 0) {
+          // go left
+          indices[i] = index - index1; // = index0
+        } else {
+          // go right
+          const nz = this.numZeros[l];
+          indices[i] = nz + index1;
+          // update symbol
+          const levelBitMask = 1 << (this.maxLevel - l);
+          symbols[i] |= levelBitMask;
+        }
+      }
+    }
+    return symbols;
+  }
+
   // Returns the number of occurrences of `symbol` in the range [first, last).
-  rank(symbol, { first = 0, last = this.length, groupBits = 0 }) {
-    const indices = this.symbolRange(symbol, { first, last, groupBits });
+  rank(symbol, { first = 0, last = this.length, ignoreBits = 0 } = {}) {
+    const indices = this.symbolRange(symbol, { first, last, ignoreBits });
     return indices.last - indices.first;
   }
 
   // Returns the index of the nth occurrence of `symbol` in the range [first, last).
-  select(symbol, n = 1, { first = 0, last = this.length } = {}) {
+  select(symbol, n = 1, { first = 0, last = this.length, ignoreBits = 0 } = {}) {
     if (symbol < 0 || symbol >= this.alphabetSize) return -1;
     if (n < 1 || n > this.length) return -1;
-    const indices = this.symbolRange(symbol, { first, last });
+    const indices = this.symbolRange(symbol, { first, last, ignoreBits });
     if (indices.last - indices.first < n) return -1; // in analogy with select
     let index = indices.first + n - 1;
     for (let l = this.numLevels; l > 0; ) {
@@ -317,22 +351,22 @@ export class WaveletMatrix {
   }
 
   // Internal function returning the (first, last] index range covered by this symbol on the virtual bottom level,
-  // or on a higher level if groupBits > 0. `last - first` gives the symbol count within the provided range.
+  // or on a higher level if ignoreBits > 0. `last - first` gives the symbol count within the provided range.
   // If the symbol does not appear in the range, an arbitrary empty range will be returned.
-  symbolRange(symbol, { first = 0, last = this.length, groupBits = 0 } = {}) {
-    const symbolGroupSize = 1 << groupBits;
-    if (symbol % symbolGroupSize !== 0) {
-      // note: could be done with bit math (check that low bits are zero)
-      throw new Error('symbol must evenly divide the block size implied by groupBits');
-    }
+  symbolRange(symbol, { first = 0, last = this.length, ignoreBits = 0 } = {}) {
+    const symbolGroupSize = 1 << ignoreBits;
+    // actually, this is useful when the bottom bits represent something, ie. the code is a concatenation of subcods
+    // if (symbol % symbolGroupSize !== 0) {
+    //   // note: could be done with bit math (check that low bits are zero)
+    //   throw new Error('symbol must evenly divide the block size implied by ignoreBits');
+    // }
     if (symbol >= this.alphabetSize) throw new Error('symbol must be < alphabetSize');
-    if (first >= last) return { first, first };
-    if (first === last) return 0;
+    if (first >= last) return { first, last: first };
     if (first < 0) throw new Error('first must be >= 0');
     if (last > this.length) throw new Error('last must be <= length');
     if (this.numLevels > 0 && first - last > 0) return { first, last };
 
-    const numLevels = this.numLevels - groupBits;
+    const numLevels = this.numLevels - ignoreBits;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const first1 = level.rank1(first - 1);
@@ -396,17 +430,17 @@ export class WaveletMatrix {
     return this.countLessThan(upper, { first, last }) - this.countLessThan(lower, { first, last });
   }
 
-  rankBatch(sortedSymbols, { first = 0, last = this.length, groupBits = 0 } = {}) {
+  rankBatch(sortedSymbols, { first = 0, last = this.length, ignoreBits = 0 } = {}) {
     // todo: check and error if separator or sort are specified
     for (let i = 1; i < sortedSymbols.length; i++) {
       if (!(sortedSymbols[i - 1] <= sortedSymbols[i])) throw new Error('sortedSymbols must be sorted');
     }
-    const symbolGroupSize = 1 << groupBits;
-    for (const symbol of sortedSymbols) {
-      if (symbol % symbolGroupSize !== 0)
-        // note: could be done with bit math (check that low bits are zero)
-        throw new Error('symbol must evenly divide the block size implied by groupBits');
-    }
+    const symbolGroupSize = 1 << ignoreBits;
+    // for (const symbol of sortedSymbols) {
+    //   if (symbol % symbolGroupSize !== 0)
+    //     // note: could be done with bit math (check that low bits are zero)
+    //     throw new Error('symbol must evenly divide the block size implied by ignoreBits');
+    // }
     if (first >= last) return this.emptyResult();
     if (last > this.length) throw new Error('last must be <= wavelet matrix length');
 
@@ -426,7 +460,7 @@ export class WaveletMatrix {
     walk.reset(false, F, L, C, S);
     let nRankCalls = 0;
 
-    const numLevels = this.numLevels - groupBits;
+    const numLevels = this.numLevels - ignoreBits;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
@@ -497,29 +531,29 @@ export class WaveletMatrix {
 
   // Returns all  distinct symbols [lower, upper] (inclusive) in the range [first, last)
   // together with their number of occurrences. Symbols are grouped and processed
-  // in groups of size 2^groupBits (symbols are grouped together when they
-  // differ only in their lowest `groupBits` bits)
+  // in groups of size 2^ignoreBits (symbols are grouped together when they
+  // differ only in their lowest `ignoreBits` bits)
   // Each distinct group is labeled by its lowest element, which represents
-  // the group containing symbols in the range [symbol, symbol + 2^groupBits).
+  // the group containing symbols in the range [symbol, symbol + 2^ignoreBits).
   // todo: call this ranks??
   counts({
     first = 0,
     last = this.length,
     lower = 0,
     upper = this.maxSymbol,
-    groupBits = 0,
+    ignoreBits = 0,
     sort = false,
     separator = 0,
   } = {}) {
     // todo: validate lower/upper bounds wrt alphabet size
-    const symbolGroupSize = 1 << groupBits;
+    const symbolGroupSize = 1 << ignoreBits;
     // todo: handle lower === upper
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
-    if (lower % symbolGroupSize !== 0)
-      throw new Error('lower must evenly divide the symbol block size implied by groupBits');
-    if ((upper + 1) % symbolGroupSize !== 0)
-      throw new Error('(upper + 1) must evenly divide the symbol block size implied by groupBits');
+    // if (lower % symbolGroupSize !== 0)
+    //   throw new Error('lower must evenly divide the symbol block size implied by ignoreBits');
+    // if ((upper + 1) % symbolGroupSize !== 0)
+    //   throw new Error('(upper + 1) must evenly divide the symbol block size implied by ignoreBits');
     if (first >= last) return this.emptyResult();
     if (first < 0) throw new Error('first must be >= 0');
     if (last > this.length) throw new Error('last must be <= length');
@@ -527,12 +561,12 @@ export class WaveletMatrix {
     // if (upper >= this.alphabetSize) throw new Error('upper must be < alphabetSize ([lower, upper] is inclusive)');
     // ^ we now allow this so that subcode stuff works without us having to be unrealistic about the true alphabet size
     // (eg. allow querying code consisting of all maximum subcodes)
-    const numLevels = this.numLevels - groupBits;
+    const numLevels = this.numLevels - ignoreBits;
 
     // todo: bound this more closely. slightly involved to upper-bound due to subcodes;
     // need to compute the product of the subcode ranges since that's the maximum possible
     // number of unique symbols.
-    const scratchSize = Math.min(2 ** this.numLevels - groupBits, upper - lower + 1, this.length);
+    const scratchSize = Math.min(2 ** this.numLevels - ignoreBits, upper - lower + 1, this.length);
     this.scratch.reset();
     const F = this.scratch.alloc(scratchSize); // firsts
     const L = this.scratch.alloc(scratchSize); // lasts
@@ -628,11 +662,11 @@ export class WaveletMatrix {
 
   // Adapted from https://github.com/noshi91/Library/blob/0db552066eaf8655e0f3a4ae523dbf8c9af5299a/data_structure/wavelet_matrix.cpp#L76
   // Range quantile query returning the kth largest symbol in A[i, j).
-  quantile(index, { first = 0, last = this.length } = {}) {
+  quantile(sortedIndex, { first = 0, last = this.length } = {}) {
     if (first >= last) return this.emptyResult();
     if (last > this.length) throw new Error('last must be <= wavelet matrix length');
-    if (index < 0 || index >= last - first)
-      throw new Error('index cannot be less than zero or exceed length of range [first, last)');
+    if (sortedIndex < 0 || sortedIndex >= last - first)
+      throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
     let symbol = 0;
     let nRankCalls = 0;
     for (let l = 0; l < this.numLevels; l++) {
@@ -641,7 +675,7 @@ export class WaveletMatrix {
       const last0 = level.rank0(last - 1);
       const count = last0 - first0;
       nRankCalls += 2;
-      if (index < count) {
+      if (sortedIndex < count) {
         // go left
         first = first0;
         last = last0;
@@ -650,10 +684,10 @@ export class WaveletMatrix {
         const nz = this.numZeros[l];
         first = nz + (first - first0); // = nz + first1
         last = nz + (last - last0); // = nz + last1
-        // update symbol and new target sorted index in the child node
+        // update symbol and new target sorted sortedIndex in the child node
         const levelBitMask = 1 << (this.maxLevel - l);
         symbol |= levelBitMask;
-        index -= count;
+        sortedIndex -= count;
       }
     }
     return { symbol, count: last - first, nRankCalls };
@@ -695,7 +729,7 @@ export class WaveletMatrix {
 
     // note: grouping by LSB computes approximate quantiles where
     // the count of symbols assigned to each range is given by I,
-    // and I think the ranges are [symbol, symbol+2^groupBits).
+    // and I think the ranges are [symbol, symbol+2^ignoreBits).
     const numLevels = this.numLevels;
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
@@ -881,6 +915,8 @@ export class WaveletMatrix {
   // The idea is to traverse the tree as usual, but only recourse if both of the intervals are non-empty.
   // it would be useful to generalize this to intersect more ranges, accepting `firsts` and `lasts`.
   // i think we would need even more scratch space for the intermediate rank computations, though...
+  // We could also support finding elements that appear only in the first range, by recursing only when
+  // leftCount > 0 && leftCount2 == 0 for left, and rightCount > 0 && rightCount2 == 0 for right
   intersect({ first, last, first2, last2, lower = 0, upper = this.maxSymbol, separator = 0, sort = false } = {}) {
     if (first === undefined || last === undefined || first2 === undefined || last2 === undefined) {
       throw new Error('first, last, first2, and last2 must all be specified');
