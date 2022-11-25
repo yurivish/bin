@@ -1122,32 +1122,6 @@ export class WaveletMatrix {
   }
 }
 
-// Returns the rightmost insertion index for T in A in order to maintain A's sorted order.
-// Searches the index range [L, R).
-function binarySearchAfter(A, T, L, R) {
-  while (L < R) {
-    // Note: This midpoint calculation will return incorrect results for arrays with length > 2^30
-    // Correct (but slow) alternative: Math.floor(L + (R - L) / 2)
-    const m = (L + R) >>> 1;
-    if (A[m] > T) R = m;
-    else L = m + 1;
-  }
-  return R;
-}
-
-// Returns the leftmost insertion index for T in A in order to maintain A's sorted order.
-// Searches the index range [L, R).
-function binarySearchBefore(A, T, L, R) {
-  while (L < R) {
-    // Note: This midpoint calculation will return incorrect results for arrays with length > 2^30
-    // Correct (but slow) alternative: Math.floor(L + (R - L) / 2)
-    const m = (L + R) >>> 1;
-    if (A[m] < T) L = m + 1;
-    else R = m;
-  }
-  return L;
-}
-
 // note:
 // we can express rank1 in terms of rank0
 // when i and j are both in bounds:
