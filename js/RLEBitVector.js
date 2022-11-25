@@ -161,12 +161,26 @@ function binarySearchAfter(access, T, L, R) {
   return R;
 }
 
+// Returns the rightmost insertion index for T in A in order to maintain A's sorted order.
+// Searches the index range [L, R).
+function binarySearchAfterArray(A, T, L, R) {
+  while (L < R) {
+    // Note: This midpoint calculation will return incorrect results for arrays with length > 2^30
+    // Correct (but slow) alternative: Math.floor(L + (R - L) / 2)
+    const m = (L + R) >>> 1;
+    if (A[m] > T) R = m;
+    else L = m + 1;
+  }
+  return R;
+}
+
+
 // Rank1 on a sparse bitvector represented by an array of 1-bit positions
 function sparseRank1(bv, i) {
   return binarySearchAfter((i) => bv[i], i, 0, bv.length);
 }
 
 // Select on a sparse bitvector represented by an array of 1-bit positions
-function sparseSelect1(bv, i) {
-  return bv[i - 1];
+function sparseSelect1(bv, n) {
+  return n < 1 || n > bv.length ? -1 : bv[n - 1];
 }

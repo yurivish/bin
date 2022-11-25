@@ -1,6 +1,6 @@
 import { BitVector } from './BitVector.js';
 import { RLEBitVector } from './RLEBitVector.js';
-import { reverseBits, trailing0, popcount } from './util.js';
+import { reverseBits, trailing0, popcount, binarySearchAfter, binarySearchBefore } from './util.js';
 import { ScratchSpace } from './ScratchSpace.js';
 import { ArrayWalker } from './ArrayWalker.js';
 
