@@ -112,6 +112,7 @@ export class WaveletMatrix {
       // Fill the first bitvector (MSBs in data order)
       if (d & levelBitMask) level.one(i);
     }
+    level.finish()
 
     // Construct the other levels bottom-up
     for (let l = maxLevel; l > 0; l--) {
@@ -148,8 +149,8 @@ export class WaveletMatrix {
         // Set the bit in the bitvector
         if (d & levelBitMask) level.one(p);
       }
+      level.finish()
     }
-    for (let i = 0; i < levels.length; i++) levels[i].finish();
     return levels;
   }
 
@@ -191,6 +192,7 @@ export class WaveletMatrix {
       walk.reset(true, nextData);
       // swap data and nextData
       (tmp = data), (data = nextData), (nextData = tmp);
+      level.finish()
     }
 
     // For the last level we don't need to build anything but the bitvector
@@ -199,7 +201,7 @@ export class WaveletMatrix {
     for (let i = 0; i < len; i++) {
       if (data[i] & levelBitMask) level.one(i);
     }
-    for (let i = 0; i < levels.length; i++) levels[i].finish();
+    level.finish()
     return levels;
   }
 
@@ -248,6 +250,10 @@ export class WaveletMatrix {
       (tmp = data), (data = nextData), (nextData = tmp);
       // swap counts and nextCounts
       (tmp = counts), (counts = nextCounts), (nextCounts = tmp);
+            // finish levels as we're done with them, since this can sometimes
+      // give us memory savings (eg. with the optimizations in RLEBitVector
+      // for vectors with all length-1 one-runs)
+      level.finish()
     }
 
     // For the last level we don't need to build anything but the bitvector
@@ -260,7 +266,7 @@ export class WaveletMatrix {
         level.run(counts[i], 0);
       }
     }
-    for (let i = 0; i < levels.length; i++) levels[i].finish();
+    level.finish()
     return levels;
   }
 
