@@ -957,6 +957,11 @@ export class WaveletMatrix {
     //       and doing rank calls for them. Is there a way to avoid that without separately implementing
     //       each set op (only compute rank if first!=last or something)
     //       [update: implemented a prototype via the empty check.]
+    //       maybe if we prune nodes rather than their children based on the set op.
+    //       we can switch this to taking firsts and lasts as args, then 
+    //       compute the counts of all last minus first into C, then run op on C.
+    //       we might be able to simply seed F and L with firsts and lasts, as a way to accept multiple ranges!
+    //       [] does this trick work for other functions??
     // operation taking (count, count2) node counts and returning true or false – whether to recurse
     // into subnodes with those counts.
     op,
