@@ -40,6 +40,9 @@ export class SparseOneBitVector {
 
     this.numZeros = this.length - this.ones.length;
     this.numOnes = this.length - this.numZeros;
+
+    // preallocate the closure used in the select binary search
+    this._selectAccess = (i) => this.ones[i] - i
     return this;
   }
 
@@ -60,7 +63,7 @@ export class SparseOneBitVector {
   select0(n) {
     if (n < 1 || n > this.numZeros) return -1;
     if (this.ones.length === 0) return n - 1;
-    const i = binarySearchAfterAccess((i) => this.ones[i] - i, n - 1, 0, this.ones.length);
+    const i = binarySearchAfterAccess(this._selectAccess, n - 1, 0, this.ones.length);
     // i is the index of the block containing the i-th zero (it's in the run preceding the 1).
     // There are i ones before it.
     return n + i - 1;
