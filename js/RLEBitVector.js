@@ -16,7 +16,8 @@ export class RLEBitVector {
     this.length = 0;
     this.numZeros = 0;
     this.numOnes = 0;
-    this.z = this.zo = this.sparseOnes = this.sparseZeros = null;
+    this.z = this.zo = this.sparse = null;
+    this.flip = false; // invert the meaning of the bits of the sparse bitvector
   }
 
   // Encodes a run of `numZeros` zeros followed by `numOnes` ones
@@ -96,7 +97,7 @@ export class RLEBitVector {
       const lastIndex = ZO.length - 1 - hasTrailingZeros;
       let data = new (typedArrayType(ZO[lastIndex]))(this.ZO);
       if (hasTrailingZeros) data = data.subarray(0, -1);
-      this.sparseOnes = new SparseBitVector(data, length);
+      this.sparse = new SparseBitVector(data, length);
     } else if (zeroSparse) {
       // All 0-runs are length one, so we can use a single sparse bitvector to represent them.
       const leadingZero = length > 0 && Z[0] > 0;
@@ -110,18 +111,19 @@ export class RLEBitVector {
       } else {
         data = data.subarray(0, -1);
       }
-      this.sparseZeros = new SparseBitVector(data, length);
+      this.sparse = new SparseBitVector(data, length);
+      this.flip = true;
     } else {
       // Turn each of Z and ZO into a u32 or f64 array depending on the maximum value
       // and construct sparse bitvectors for both.
       const lastIndex = Z.length - 1;
       this.z = new SparseBitVector(
         new (typedArrayType(Z[lastIndex]))(this.Z),
-        this.Z.length
+        this.length
       );
       this.zo = new SparseBitVector(
         new (typedArrayType(ZO[lastIndex]))(this.ZO),
-        this.ZO.length
+        this.length
       );
     }
     this.Z = this.ZO = null; // drop references to the original buffers
@@ -137,8 +139,8 @@ export class RLEBitVector {
   rank1(i) {
     if (i < 0) return 0;
     if (i >= this.length) return this.numOnes;
-    if (this.sparseOnes) return this.sparseOnes.rank1(i);
-    if (this.sparseZeros) return this.sparseZeros.rank0(i);
+    const sparse = this.sparse;
+    if (sparse) return this.flip ? sparse.rank0(i) : sparse.rank1(i);
     // Number of complete 01-runs up to and including virtual index i
     const j = this.zo.rank1(i);
 
@@ -169,8 +171,8 @@ export class RLEBitVector {
   alignedRank0(i) {
     if (i < 0) return 0;
     if (i >= this.length) return this.numZeros;
-    if (this.sparseOnes) return this.sparseOnes.rank0(i);
-    if (this.sparseZeros) return this.sparseZeros.rank1(i);
+    const sparse = this.sparse;
+    if (sparse) return this.flip ? sparse.rank1(i) : sparse.rank0(i);
 
     // Number of complete 01-runs up to virtual index i
     const j = this.zo.rank1(i);
@@ -192,8 +194,8 @@ export class RLEBitVector {
 
   select0(n) {
     if (n < 1 || n > this.numZeros) return -1;
-    if (this.sparseOnes) return this.sparseOnes.select0(n);
-    if (this.sparseZeros) return this.sparseZeros.select1(n);
+    const sparse = this.sparse;
+    if (sparse) return this.flip ? sparse.select1(n) : sparse.select0(n);
 
     // The i-th zero is in the j-th 01-block.
     const j = this.z.rank1(n - 1);
@@ -213,15 +215,15 @@ export class RLEBitVector {
 
   select1(n) {
     if (n < 1 || n > this.numOnes) return -1;
-    if (this.sparseOnes) return this.sparseOnes.select1(n);
-    if (this.sparseZeros) return this.sparseZeros.select0(n);
+    const sparse = this.sparse;
+    if (sparse) return this.flip ? sparse.select0(n) : sparse.select1(n);
 
     // The n-th one is in the j-th 01-block.
     const j = binarySearchAfterAccess(
       (i) => this.zo.select1(i + 1) - this.z.select1(i + 1),
       n - 1,
       0,
-      this.z.length
+      this.z.numOnes
     );
 
     // Number of zeros up to and including the jth blocka
@@ -233,8 +235,7 @@ export class RLEBitVector {
   approxSizeInBits() {
     // ignores fixed-size fields
     if (this.z) return this.z.approxSizeInBits() + this.zo.approxSizeInBits();
-    if (this.sparseOnes) return this.sparseOnes.approxSizeInBits();
-    return this.sparseZeros.approxSizeInBits();
+    return this.sparse.approxSizeInBits();
   }
 }
 
