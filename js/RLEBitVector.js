@@ -1,6 +1,14 @@
 import { binarySearchAfter, binarySearchAfterAccess } from './util.js';
 import { SparseBitVector } from './SparseBitVector.js';
 
+// Note: Right now we switch to a single sparse vector representation if and only if
+// all 0- or 1-runs are of length one, but I suspect there are more situations where
+// this would be beneficial in terms of memory usage or runtime performance.
+//
+// Perhaps the check should be whether we can reduce memory usage by switching representations.
+// There would be an additional construction cost to create the sparse vector, but we're optimizing
+// for runtime memory/perf.
+
 export class RLEBitVector {
   constructor() {
     this.Z = [];
