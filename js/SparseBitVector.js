@@ -77,7 +77,7 @@ export class SparseOneBitVector {
 }
 
 // TODO: Can we remove the indirection associated with inheritance?
-// Maybe make a standard pre-class constructor function with a `flip` argument.
+// Maybe make a standard old-style constructor function with a `flip` argument.
 export class SparseZeroBitVector extends SparseOneBitVector {
   zero(i) {
     return super.one(i);
