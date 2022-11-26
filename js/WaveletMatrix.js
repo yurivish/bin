@@ -545,8 +545,8 @@ export class WaveletMatrix {
     lower = 0,
     upper = this.maxSymbol,
     ignoreBits = 0,
-    sort = false,
     subcodeSeparator = 0,
+    sort = false,
   } = {}) {
     // todo: validate lower/upper bounds wrt alphabet size
     const symbolGroupSize = 1 << ignoreBits;
@@ -605,7 +605,7 @@ export class WaveletMatrix {
       const subcodeLower = lower & subcodeMask;
       const subcodeUpper = upper & subcodeMask;
 
-      // note: if we want sorted outputs, iterate in reverse to ensure that we don't
+      // if we want sorted outputs, iterate in reverse to ensure that we don't
       // overwrite unprocessed elements when writing from the back of the array.
       const start = sort ? walk.length - 1 : 0;
       const step = sort ? -1 : 1;
@@ -927,13 +927,39 @@ export class WaveletMatrix {
     return { symbols: res.symbols.subarray(0, n), counts: res.counts.subarray(0, n) };
   }
 
+  // set-union the symbols in two index ranges
+  union(opts) {
+    return this.setOp({
+      ...opts,
+      // recuse if the desired symbols appear in either index range
+      op: (a, b) => a > 0 || b > 0,
+    });
+  }
+
+  // set-intersect the symbols in two index ranges
+  intersect(opts) {
+    return this.setOp({
+      ...opts,
+      // recuse if the desired symbols appear in both index ranges
+      op: (a, b) => a > 0 && b > 0,
+    });
+  }
+
   // Range intersection. Supports the same arguments as `count`, plus first2 and last2. Draft implementation.
-  // The idea is to traverse the tree as usual, but only recourse if both of the intervals are non-empty.
+  // The idea is to traverse the tree as usual, but only recurse if both of the intervals are non-empty.
   // it would be useful to generalize this to intersect more ranges, accepting `firsts` and `lasts`.
   // i think we would need even more scratch space for the intermediate rank computations, though...
   // We could also support finding elements that appear only in the first range, by recursing only when
   // leftCount > 0 && leftCount2 == 0 for left, and rightCount > 0 && rightCount2 == 0 for right
-  intersect({
+  setOp({
+    // todo: ignorebits
+    // todo: for union, we currently keep recursing down nodes that are zero count,
+    //       and doing rank calls for them. Is there a way to avoid that without separately implementing
+    //       each set op (only compute rank if first!=last or something)
+    //       [update: implemented a prototype via the empty check.]
+    // operation taking (count, count2) node counts and returning true or false – whether to recurse
+    // into subnodes with those counts.
+    op,
     first,
     last,
     first2,
@@ -952,7 +978,11 @@ export class WaveletMatrix {
     if (last2 > this.length) throw new Error('last2 must be < wavelet matrix length');
     if (first2 > last2) throw new Error('first2 must be <= last2');
 
-    const scratchLength = Math.min(upper - lower + 1, last - first, last2 - first2);
+    // for intersect
+    // const scratchLength = Math.min(upper - lower + 1, last - first, last2 - first2);
+    // could pass this in to be smaller for different kinds of set ops, eg. when constrained
+    // by the smallest set like in union
+    const scratchLength = Math.min(upper - lower + 1);
     this.scratch.reset();
     const F = this.scratch.allocU32(scratchLength); // firsts
     const L = this.scratch.allocU32(scratchLength); // lasts
@@ -977,32 +1007,41 @@ export class WaveletMatrix {
     for (let l = 0; l < numLevels; l++) {
       const level = this.levels[l];
       const nz = this.numZeros[l];
-      const levelBitMask = 1 << (this.maxLevel - l);
+      const levelBit = this.maxLevel - l;
+      const levelBitMask = 1 << levelBit;
 
       if ((subcodeSeparator & levelBitMask) === 0) subcodeMask |= levelBitMask;
       else subcodeMask = levelBitMask;
       const subcodeLower = lower & subcodeMask;
       const subcodeUpper = upper & subcodeMask;
 
-      for (let i = walk.length; i > 0; ) {
-        i--;
+      // if we want sorted outputs, iterate in reverse to ensure that we don't
+      // overwrite unprocessed elements when writing from the back of the array.
+      const start = sort ? walk.length - 1 : 0;
+      const step = sort ? -1 : 1;
+      const end = sort ? -1 : walk.length;
+      for (let i = start; i != end; i += step) {
         const first = F[i];
-        const first1 = level.rank1(first - 1);
+        const last = L[i];
+        const empty = first === last; // node count == 0
+
+        const first1 = empty ? first : level.rank1(first - 1);
         const first0 = first - first1;
 
-        const last = L[i];
-        const last1 = level.rank1(last - 1);
+        const last1 = empty ? last : level.rank1(last - 1);
         const last0 = last - last1;
 
         const rightCount = last1 - first1;
         const leftCount = last0 - first0;
 
         const first2 = F2[i];
-        const first1_2 = level.rank1(first2 - 1);
+        const last2 = L2[i];
+        const empty2 = first2 === last2; // node count == 0
+
+        const first1_2 = empty ? first1 : level.rank1(first2 - 1);
         const first0_2 = first2 - first1_2;
 
-        const last2 = L2[i];
-        const last1_2 = level.rank1(last2 - 1);
+        const last1_2 = empty ? last1 : level.rank1(last2 - 1);
         const last0_2 = last2 - last1_2;
 
         const rightCount2 = last1_2 - first1_2;
@@ -1012,21 +1051,21 @@ export class WaveletMatrix {
 
         nRankCalls += 4;
 
-        if (rightCount > 0 && rightCount2 > 0) {
+        if (op(rightCount, rightCount2)) {
           // go right [if symbol ranges overlap each other and the target range]
           const a = (symbol | levelBitMask) & subcodeMask;
           const b = (a | (levelBitMask - 1)) & subcodeMask;
           if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
             const nextIndex = walk.nextBackIndex();
-            F[nextIndex] = nz + (first - first0); // = nz + first1
-            L[nextIndex] = nz + (last - last0); // = nz + last1
-            F2[nextIndex] = nz + (first2 - first0_2); // = nz + first1
-            L2[nextIndex] = nz + (last2 - last0_2); // = nz + last1
+            F[nextIndex] = nz + first1;
+            L[nextIndex] = nz + last1;
+            F2[nextIndex] = nz + first1_2;
+            L2[nextIndex] = nz + last1_2;
             S[nextIndex] = symbol | levelBitMask;
           }
         }
 
-        if (leftCount > 0 && leftCount2 > 0) {
+        if (op(leftCount, leftCount2)) {
           // go left
           const a = symbol & subcodeMask;
           const b = (a | (levelBitMask - 1)) & subcodeMask;

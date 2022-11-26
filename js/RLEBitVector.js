@@ -3,12 +3,12 @@ import { SparseOneBitVector } from './SparseBitVector.js';
 
 export class RLEBitVector {
   constructor() {
+    this.z = this.zo = null;
     this.Z = [];
     this.ZO = [];
     this.length = 0;
     this.numZeros = 0;
     this.numOnes = 0;
-    this.z = this.zo = null;
   }
 
   // Encodes a run of `numZeros` zeros followed by `numOnes` ones

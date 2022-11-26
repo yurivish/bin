@@ -6,6 +6,7 @@ export class SparseOneBitVector {
     if (length === undefined) throw new Error('length must be specified explicitly');
     this.length = length
     this.ones = ones ?? [];
+    this.selectBlocks = new Uint32Array(16)
   }
 
   one(i) {
@@ -16,6 +17,7 @@ export class SparseOneBitVector {
     const ones = this.ones;
     const len = this.ones.length;
 
+    // const spacing
     if (len > 0) {
       // check for errors
       const max = ones[len - 1] 
@@ -45,6 +47,7 @@ export class SparseOneBitVector {
   }
 
   rank1(i) {
+    // todo: select blocks for hinted search
     return binarySearchAfter(this.ones, i, 0, this.ones.length);
   }
 
