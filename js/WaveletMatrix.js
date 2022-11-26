@@ -5,16 +5,7 @@ import { ScratchSpace } from './ScratchSpace.js';
 import { ArrayWalker } from './ArrayWalker.js';
 
 // todo
-// - maybe there's a way to do out-of-order construction
-//   by cumulatively summing the multiplicities beforehand.
-//   some of those will correspond to the ZO values.
-//   - we don't want to entangle ourselves too closely with
-//     the specific sparse BV representation, though.
-// - todo use aligned rank when possible (maybe not in quantile)
-// - make whether to query with multiplicity an option? will determine whether we can use aligned rank, though.
-// - give all BVs alignedRank aliases, so we can use it in WM when calls are run-aligned?
-// - constructor should accept maxSymbol = alphabetSize - 1
-// - might generally be a good idea to use RLE vectors in WM; think about under what conditions this is true.
+// - perform index size checks when allocating scratch space, and use float 64 buffers when last >= 2**32
 // - enforce len(multiplicity) == len(data)
 // - enforce positive multiplicity
 // - check scratch space does not get overlarge due to multiplicity
