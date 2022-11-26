@@ -9,15 +9,23 @@ export class ScratchSpace {
     this.buf = new Uint32Array(initialLength);
     this.index = 0;
   }
-  alloc(length) {
+  allocU32(length) {
     if (this.index + length > this.buf.length) {
       // Ensure we at least double every time we're resized
       this.buf = new Uint32Array(Math.max(length, 2 * this.buf.length));
       this.index = 0;
     }
-    const sub = this.buf.subarray(this.index, this.index + length);
+    const subarray = this.buf.subarray(this.index, this.index + length);
     this.index += length;
-    return sub;
+    return subarray;
+  }
+  allocF64(length) {
+    // quick hack version; we could instead have this.buf be a Buffer
+    // and not need to allocate the intermediate Uint32Array object
+    // here, using an allocBytes method that uses/resizes the buffer.
+    const u32 = this.allocU32(2 * length)
+    return new Float64Array(u32.buffer, 0, length)
+
   }
   reset() {
     this.index = 0;

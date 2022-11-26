@@ -51,7 +51,7 @@ export function clamp(x, lo, hi) {
 
 // unused in this library right now, but convenient
 export function enumerateOnes(block, callback) {
-  block = block >>> 0
+  block = block >>> 0;
   while (block != 0) {
     callback(trailing0(block));
     const t = block & -block;
@@ -73,27 +73,22 @@ export function isObjectLiteral(value) {
 
 // Returns the rightmost insertion index for T in A in order to maintain A's sorted order.
 // Searches the index range [L, R).
-// This variant takes an access function instead of an array.
-function binarySearchAfterAccess(access, T, L, R) {
+export function binarySearchAfter(A, T, L, R) {
   while (L < R) {
-    // Note: This midpoint calculation will return incorrect results for arrays with length > 2^30
-    // Correct (but slow) alternative: Math.floor(L + (R - L) / 2)
-    const m = (L + R) >>> 1;
-    if (access(m) > T) R = m;
+    // Note: This midpoint calculation is correct up to Number.MAX_SAFE_INTEGER.
+    // A faster alternative if (R - L) is known to be less than 2^32: L + (R - L) >>> 1
+    const m = L + Math.trunc((R - L) / 2);
+    if (A[m] > T) R = m;
     else L = m + 1;
   }
   return R;
 }
 
-
-// Returns the rightmost insertion index for T in A in order to maintain A's sorted order.
-// Searches the index range [L, R).
-function binarySearchAfter(A, T, L, R) {
+// This variant takes an access function instead of an array.
+export function binarySearchAfterAccess(access, T, L, R) {
   while (L < R) {
-    // Note: This midpoint calculation will return incorrect results for arrays with length > 2^30
-    // Correct (but slow) alternative: Math.floor(L + (R - L) / 2)
-    const m = (L + R) >>> 1;
-    if (A[m] > T) R = m;
+    const m = L + Math.trunc((R - L) / 2);
+    if (access(m) > T) R = m;
     else L = m + 1;
   }
   return R;
@@ -101,12 +96,20 @@ function binarySearchAfter(A, T, L, R) {
 
 // Returns the leftmost insertion index for T in A in order to maintain A's sorted order.
 // Searches the index range [L, R).
-function binarySearchBefore(A, T, L, R) {
+export function binarySearchBefore(A, T, L, R) {
   while (L < R) {
-    // Note: This midpoint calculation will return incorrect results for arrays with length > 2^30
-    // Correct (but slow) alternative: Math.floor(L + (R - L) / 2)
-    const m = (L + R) >>> 1;
+    const m = L + Math.trunc((R - L) / 2);
     if (A[m] < T) L = m + 1;
+    else R = m;
+  }
+  return L;
+}
+
+// This variant takes an access function instead of an array.
+export function binarySearchBeforeAccess(access, T, L, R) {
+  while (L < R) {
+    const m = L + Math.trunc((R - L) / 2);
+    if (access(m) < T) L = m + 1;
     else R = m;
   }
   return L;

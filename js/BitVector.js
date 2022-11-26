@@ -36,6 +36,7 @@ export class BitVector {
     this.rankSuperblocks[0] = popcount(this.blocks[0]);
     for (let i = 1; i < numBlocks; i++)
       this.rankSuperblocks[i] = this.rankSuperblocks[i - 1] + popcount(this.blocks[i]);
+    return this
   }
 
   rank1(i) {

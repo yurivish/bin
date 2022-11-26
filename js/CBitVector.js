@@ -25,7 +25,7 @@ export class CBitVector {
   finish() {
     const ret = this.C.bitvector_finish(this.v);
     if (ret === -1) throw new Error('c_error: bitvector_finish');
-    return ret;
+    return this;
   }
   rank1(i) {
     // this.C.add1(i); // testing the effects of wasm call overhead

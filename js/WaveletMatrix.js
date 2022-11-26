@@ -69,7 +69,7 @@ export class WaveletMatrix {
       this.length = 0;
     } else if (counts) {
       this.levels = this.constructLargeAlphabetWithMultiplicity(data, counts);
-    } else if (largeAlphabet) {
+    } else if (largeAlphabet || data.length >= 2 ** 32) {
       this.levels = this.constructLargeAlphabet(data);
     } else {
       this.levels = this.construct(data);
@@ -93,6 +93,7 @@ export class WaveletMatrix {
 
   // Implements Algorithm 1 (seq.pc) from the paper "Practical Wavelet Tree Construction".
   construct(data) {
+    console.assert(data.length < 2 ** 32);
     const { numLevels, maxLevel } = this;
     const hist = new Uint32Array(2 ** numLevels);
     const borders = new Uint32Array(2 ** numLevels);
@@ -143,6 +144,8 @@ export class WaveletMatrix {
         // Get and update position for bit by computing its bit prefix,
         // which encodes the path from the root to the node at level l
         // containing this bit
+        // Note: This shift operation is why we can't handle arrays with
+        // more than 2^32 elements using this approach.
         const nodeIndex = (d & bitPrefixMask) >>> bitPrefixShift;
         const p = borders[nodeIndex];
         borders[nodeIndex] += 1;
@@ -440,6 +443,7 @@ export class WaveletMatrix {
   }
 
   rankBatch(sortedSymbols, { first = 0, last = this.length, ignoreBits = 0 } = {}) {
+    // todo: error if sortedsymbols.length >= 2^32 (binary search)
     // todo: check and error if separator or sort are specified
     for (let i = 1; i < sortedSymbols.length; i++) {
       if (!(sortedSymbols[i - 1] <= sortedSymbols[i])) throw new Error('sortedSymbols must be sorted');
@@ -454,13 +458,13 @@ export class WaveletMatrix {
     if (last > this.length) throw new Error('last must be <= wavelet matrix length');
 
     // account for duplicate sorted symbols and the fact that there cannot be more outputs than elements
-    const scratchSize = Math.min(this.alphabetSize, sortedSymbols.length, last - first);
+    const scratchLength = Math.min(this.alphabetSize, sortedSymbols.length, last - first);
     this.scratch.reset();
-    const F = this.scratch.alloc(scratchSize); // firsts
-    const L = this.scratch.alloc(scratchSize); // lasts
-    const S = this.scratch.alloc(scratchSize); // symbols
-    const C = this.scratch.alloc(scratchSize); // counts
-    const walk = new ArrayWalker(sortedSymbols.length === 0 ? 0 : 1, scratchSize);
+    const F = this.scratch.allocU32(scratchLength); // firsts
+    const L = this.scratch.allocU32(scratchLength); // lasts
+    const S = this.scratch.allocU32(scratchLength); // symbols
+    const C = this.scratch.allocU32(scratchLength); // counts
+    const walk = new ArrayWalker(sortedSymbols.length === 0 ? 0 : 1, scratchLength);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
@@ -574,12 +578,12 @@ export class WaveletMatrix {
     // todo: bound this more closely. slightly involved to upper-bound due to subcodes;
     // need to compute the product of the subcode ranges since that's the maximum possible
     // number of unique symbols.
-    const scratchSize = Math.min(2 ** this.numLevels - ignoreBits, upper - lower + 1, this.length);
+    const scratchLength = Math.min(2 ** this.numLevels - ignoreBits, upper - lower + 1, this.length);
     this.scratch.reset();
-    const F = this.scratch.alloc(scratchSize); // firsts
-    const L = this.scratch.alloc(scratchSize); // lasts
-    const S = this.scratch.alloc(scratchSize); // symbols
-    const walk = new ArrayWalker(1, scratchSize);
+    const F = this.scratch.allocU32(scratchLength); // firsts
+    const L = this.scratch.allocU32(scratchLength); // lasts
+    const S = this.scratch.allocU32(scratchLength); // symbols
+    const walk = new ArrayWalker(1, scratchLength);
     const reverse = !sort; // for walk.reset(reverse, ...)
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
@@ -712,6 +716,7 @@ export class WaveletMatrix {
   // todo: investigate performance of this and other batch functions.
   // quickly comparing quantileBatch([index]) to quantile(index) seemed to show a possile >2x overhead.
   quantileBatch(sortedOffsets, { first = 0, last = this.length } = {}) {
+    // todo: error if sortedoffsets.length >= 2^32 (binary search)
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
     if (first >= last) return Object.assign(this.emptyResult(), { numSortedOffsets: new Uint32Array() });
@@ -726,14 +731,14 @@ export class WaveletMatrix {
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
 
     // account for duplicate sorted offsets and the fact that there cannot be more outputs than elements
-    const scratchSize = Math.min(this.alphabetSize, sortedOffsets.length, last - first);
+    const scratchLength = Math.min(this.alphabetSize, sortedOffsets.length, last - first);
     this.scratch.reset();
-    const F = this.scratch.alloc(scratchSize); // firsts
-    const L = this.scratch.alloc(scratchSize); // lasts
-    const S = this.scratch.alloc(scratchSize); // symbols
-    const C = this.scratch.alloc(scratchSize); // counts
-    const I = this.scratch.alloc(sortedOffsets.length); // sorted offsets
-    const walk = new ArrayWalker(sortedOffsets.length === 0 ? 0 : 1, scratchSize);
+    const F = this.scratch.allocU32(scratchLength); // firsts
+    const L = this.scratch.allocU32(scratchLength); // lasts
+    const S = this.scratch.allocU32(scratchLength); // symbols
+    const C = this.scratch.allocU32(scratchLength); // counts
+    const I = this.scratch.allocU32(sortedOffsets.length); // sorted offsets
+    const walk = new ArrayWalker(sortedOffsets.length === 0 ? 0 : 1, scratchLength);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
@@ -823,14 +828,14 @@ export class WaveletMatrix {
     if (firstOffset > lastOffset) throw new Error('firstOffset must be <= lastOffset');
     if (firstOffset < 0 || lastOffset > last - first)
       throw new Error('sortedIndex cannot be less than zero or exceed length of range [first, last)');
-    const scratchSize = Math.min(this.alphabetSize, lastOffset - firstOffset);
+    const scratchLength = Math.min(this.alphabetSize, lastOffset - firstOffset);
     this.scratch.reset();
-    const F = this.scratch.alloc(scratchSize); // firsts
-    const L = this.scratch.alloc(scratchSize); // lasts
-    const S = this.scratch.alloc(scratchSize); // symbols
-    const C = this.scratch.alloc(scratchSize); // counts up to the first offset
-    const C2 = this.scratch.alloc(scratchSize); // counts up to the last offset
-    const walk = new ArrayWalker(firstOffset === lastOffset ? 0 : 1, scratchSize);
+    const F = this.scratch.allocU32(scratchLength); // firsts
+    const L = this.scratch.allocU32(scratchLength); // lasts
+    const S = this.scratch.allocU32(scratchLength); // symbols
+    const C = this.scratch.allocU32(scratchLength); // counts up to the first offset
+    const C2 = this.scratch.allocU32(scratchLength); // counts up to the last offset
+    const walk = new ArrayWalker(firstOffset === lastOffset ? 0 : 1, scratchLength);
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
     L[nextIndex] = last;
@@ -893,10 +898,10 @@ export class WaveletMatrix {
   }
 
   simpleMajority({ first = 0, last = this.length } = {}) {
-    const index = (last + first) >>> 1;
+    const index = first + Math.trunc((last - first) / 2);
     const q = this.quantile(index, { first, last });
     const total = last - first;
-    const half = total >>> 1;
+    const half = Math.trunc(total / 2);
     if (q.count > half) return q;
     return null;
   }
@@ -956,14 +961,14 @@ export class WaveletMatrix {
     if (last2 > this.length) throw new Error('last2 must be < wavelet matrix length');
     if (first2 > last2) throw new Error('first2 must be <= last2');
 
-    const scratchSize = Math.min(upper - lower + 1, last - first, last2 - first2);
+    const scratchLength = Math.min(upper - lower + 1, last - first, last2 - first2);
     this.scratch.reset();
-    const F = this.scratch.alloc(scratchSize); // firsts
-    const L = this.scratch.alloc(scratchSize); // lasts
-    const F2 = this.scratch.alloc(scratchSize); // firsts2
-    const L2 = this.scratch.alloc(scratchSize); // lasts2
-    const S = this.scratch.alloc(scratchSize); // symbols
-    const walk = new ArrayWalker(1, scratchSize);
+    const F = this.scratch.allocU32(scratchLength); // firsts
+    const L = this.scratch.allocU32(scratchLength); // lasts
+    const F2 = this.scratch.allocU32(scratchLength); // firsts2
+    const L2 = this.scratch.allocU32(scratchLength); // lasts2
+    const S = this.scratch.allocU32(scratchLength); // symbols
+    const walk = new ArrayWalker(1, scratchLength);
     const reverse = !sort; // for walk.reset(reverse, ...)
     const nextIndex = walk.nextFrontIndex();
     F[nextIndex] = first;
