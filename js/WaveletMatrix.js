@@ -988,22 +988,28 @@ export class WaveletMatrix {
     // const scratchLength = Math.min(upper - lower + 1, last - first, last2 - first2);
     // could pass this in to be smaller for different kinds of set ops, eg. when constrained
     // by the smallest set like in union
+    const k = 2
     const scratchLength = Math.min(upper - lower + 1);
     this.scratch.reset();
-    const F = this.scratch.allocU32(scratchLength); // firsts
-    const L = this.scratch.allocU32(scratchLength); // lasts
-    const F2 = this.scratch.allocU32(scratchLength); // firsts2
-    const L2 = this.scratch.allocU32(scratchLength); // lasts2
+    const F = Array.from({length: k }, () => this.scratch.allocU32(scratchLength)); // firsts
+    const L = Array.from({length: k }, () => this.scratch.allocU32(scratchLength)); // lasts
     const S = this.scratch.allocU32(scratchLength); // symbols
+    const C = this.scratch.allocU32(scratchLength); // symbols
     const walk = new ArrayWalker(1, scratchLength);
     const reverse = !sort; // for walk.reset(reverse, ...)
     const nextIndex = walk.nextFrontIndex();
-    F[nextIndex] = first;
-    L[nextIndex] = last;
-    F2[nextIndex] = first2;
-    L2[nextIndex] = last2;
+    // for (let j = 0; j < k; j++) {
+    //   F[j][nextIndex] = first;
+    //   L[j][nextIndex] = last;
+    // }
+      F[0][nextIndex] = first;
+      L[0][nextIndex] = last;
+      F[1][nextIndex] = first2;
+
+      L[1][nextIndex] = last2;
+
     S[nextIndex] = 0;
-    walk.reset(reverse, F, L, F2, L2, S);
+    walk.reset(reverse, ...F, ...L, ...S);
     let nRankCalls = 0;
 
     const numLevels = this.numLevels;
@@ -1027,8 +1033,10 @@ export class WaveletMatrix {
       const step = sort ? -1 : 1;
       const end = sort ? -1 : walk.length;
       for (let i = start; i != end; i += step) {
-        const first = F[i];
-        const last = L[i];
+        // const half = walk.length
+        
+        const first = F[0][i];
+        const last = L[0][i];
         const empty = first === last; // node count == 0
 
         const first1 = empty ? first : level.rank1(first - 1);
@@ -1040,8 +1048,8 @@ export class WaveletMatrix {
         const rightCount = last1 - first1;
         const leftCount = last0 - first0;
 
-        const first2 = F2[i];
-        const last2 = L2[i];
+        const first2 = F[1][i];
+        const last2 = L[1][i];
         const empty2 = first2 === last2; // node count == 0
 
         const first1_2 = empty ? first1 : level.rank1(first2 - 1);
@@ -1063,10 +1071,10 @@ export class WaveletMatrix {
           const b = (a | (levelBitMask - 1)) & subcodeMask;
           if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
             const nextIndex = walk.nextBackIndex();
-            F[nextIndex] = nz + first1;
-            L[nextIndex] = nz + last1;
-            F2[nextIndex] = nz + first1_2;
-            L2[nextIndex] = nz + last1_2;
+            F[0][nextIndex] = nz + first1;
+            L[0][nextIndex] = nz + last1;
+            F[1][nextIndex] = nz + first1_2;
+            L[1][nextIndex] = nz + last1_2;
             S[nextIndex] = symbol | levelBitMask;
           }
         }
@@ -1077,25 +1085,27 @@ export class WaveletMatrix {
           const b = (a | (levelBitMask - 1)) & subcodeMask;
           if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
             const nextIndex = sort ? walk.nextBackIndex() : walk.nextFrontIndex();
-            F[nextIndex] = first0;
-            L[nextIndex] = last0;
-            F2[nextIndex] = first0_2;
-            L2[nextIndex] = last0_2;
+            F[0][nextIndex] = first0;
+            L[0][nextIndex] = last0;
+            F[1][nextIndex] = first0_2;
+            L[1][nextIndex] = last0_2;
             S[nextIndex] = symbol;
           }
         }
       }
-      walk.reset(reverse, F, L, F2, L2, S);
+      walk.reset(reverse, ...F, ...L, S);
     }
 
     for (let i = 0; i < walk.length; i++) {
-      L[i] -= F[i];
-      L2[i] -= F2[i];
+      L[0][i] -= F[0][i];
+      L[1][i] -= F[1][i];
+      // L2[i] -= F2[i];
     }
-    const counts = L.subarray(0, walk.length).slice();
-    const counts2 = L2.subarray(0, walk.length).slice();
+    // const counts = L.subarray(0, walk.length).slice();
+    // const counts2 = L2.subarray(0, walk.length).slice();
     const symbols = S.subarray(0, walk.length).slice();
-    return { symbols, counts, counts2, nRankCalls };
+    //  symbols,, counts, counts2,
+    return { symbols, F, L, len:walk.length, nRankCalls };
   }
 
   // status: initial draft.
