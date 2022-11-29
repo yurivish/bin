@@ -5,6 +5,7 @@ import { ScratchSpace } from './ScratchSpace.js';
 import { ArrayWalker } from './ArrayWalker.js';
 
 // todo
+// - use an FL array storing first and last contiguous in memory?
 // - perform index size checks when allocating scratch space, and use float 64 buffers when last >= 2**32
 // - enforce len(multiplicity) == len(data)
 // - enforce positive multiplicity
