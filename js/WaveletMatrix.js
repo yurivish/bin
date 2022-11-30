@@ -1117,16 +1117,20 @@ export class WaveletMatrix {
       }
       walk.reset(reverse, ...F, ...L, S);
     }
+    const counts = new Uint32Array(walk.length)
     for (let j = 0; j < k; j++) {
       const f = F[j];
       const l = L[j];
+      // since we're walking the arrays here, compute the total count for each symbol as we go
+      // so we don't need to re-iterate later.
       for (let i = 0; i < walk.length; i++) {
-        l[i] -= f[i];
+        const count = l[i] -= f[i];
+        counts[i] += count
       }
     }
     const symbols = S.subarray(0, walk.length).slice();
-    const counts = L.map((l) => l.subarray(0, walk.length).slice());
-    return { symbols, counts, nRankCalls };
+    const individualCounts = L.map((l) => l.subarray(0, walk.length).slice());
+    return { symbols, counts, individualCounts, nRankCalls };
   }
 
   // status: initial draft.
