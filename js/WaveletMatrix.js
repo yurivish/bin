@@ -932,8 +932,11 @@ export class WaveletMatrix {
   union(opts) {
     return this.setOp({
       ...opts,
-      // recuse if the desired symbols appear in either index range
-      op: (a, b) => a > 0 || b > 0,
+      op: (L, R) => {
+        // return true if any count is greater than zero
+        for (let i = 0; i < L.length; i++) if (R[i] - L[i] > 0) return true
+        return false
+      },
     });
   }
 
@@ -941,8 +944,11 @@ export class WaveletMatrix {
   intersect(opts) {
     return this.setOp({
       ...opts,
-      // recuse if the desired symbols appear in both index ranges
-      op: (a, b) => a > 0 && b > 0,
+      op: (L, R) => {
+        // return true if all counts are greater than zero
+        for (let i = 0; i < L.length; i++) if (R[i] - L[i] === 0) return false
+        return true
+      },
     });
   }
 
@@ -959,7 +965,7 @@ export class WaveletMatrix {
     //       each set op (only compute rank if first!=last or something)
     //       [update: implemented a prototype via the empty check.]
     //       maybe if we prune nodes rather than their children based on the set op.
-    //       we can switch this to taking firsts and lasts as args, then 
+    //       we can switch this to taking firsts and lasts as args, then
     //       compute the counts of all last minus first into C, then run op on C.
     //       we might be able to simply seed F and L with firsts and lasts, as a way to accept multiple ranges!
     //       [] does this trick work for other functions??
@@ -968,48 +974,45 @@ export class WaveletMatrix {
     op,
     first,
     last,
-    first2,
-    last2,
     lower = 0,
     upper = this.maxSymbol,
     subcodeSeparator = 0,
     sort = false,
   } = {}) {
-    if (first === undefined || last === undefined || first2 === undefined || last2 === undefined) {
+    if (first === undefined || last === undefined) {
       throw new Error('first, last, first2, and last2 must all be specified');
     }
     if (lower > upper) throw new Error('lower must be < upper');
-    if (last > this.length) throw new Error('last must be <= wavelet matrix length');
-    if (first >= last) return Object.assign(this.emptyResult(), { counts2: new Uint32Array() });
-    if (last2 > this.length) throw new Error('last2 must be < wavelet matrix length');
-    if (first2 > last2) throw new Error('first2 must be <= last2');
+    // todo
+    // if (last > this.length) throw new Error('last must be <= wavelet matrix length');
+    // if (first >= last) return Object.assign(this.emptyResult(), { counts2: new Uint32Array() });
+    console.assert(Array.isArray(first) && Array.isArray(last))
 
     // for intersect
     // const scratchLength = Math.min(upper - lower + 1, last - first, last2 - first2);
     // could pass this in to be smaller for different kinds of set ops, eg. when constrained
     // by the smallest set like in union
-    const k = 2
+    const k = first.length;
+
     const scratchLength = Math.min(upper - lower + 1);
     this.scratch.reset();
-    const F = Array.from({length: k }, () => this.scratch.allocU32(scratchLength)); // firsts
-    const L = Array.from({length: k }, () => this.scratch.allocU32(scratchLength)); // lasts
+    const F = Array.from({ length: k }, () => this.scratch.allocU32(scratchLength)); // firsts
+    const L = Array.from({ length: k }, () => this.scratch.allocU32(scratchLength)); // lasts
     const S = this.scratch.allocU32(scratchLength); // symbols
-    const C = this.scratch.allocU32(scratchLength); // symbols
+    const FLC = this.scratch.allocU32(k); // first left child indices
+    const FRC = this.scratch.allocU32(k); // first right child indices
+    const LLC = this.scratch.allocU32(k); // last left child indices
+    const LRC = this.scratch.allocU32(k); // last right child indices
     const walk = new ArrayWalker(1, scratchLength);
     const reverse = !sort; // for walk.reset(reverse, ...)
     const nextIndex = walk.nextFrontIndex();
-    // for (let j = 0; j < k; j++) {
-    //   F[j][nextIndex] = first;
-    //   L[j][nextIndex] = last;
-    // }
-      F[0][nextIndex] = first;
-      L[0][nextIndex] = last;
-      F[1][nextIndex] = first2;
-
-      L[1][nextIndex] = last2;
+    for (let j = 0; j < k; j++) {
+      F[j][nextIndex] = first[j]
+      L[j][nextIndex] = last[j]
+    }
 
     S[nextIndex] = 0;
-    walk.reset(reverse, ...F, ...L, ...S);
+    walk.reset(reverse, ...F, ...L, S);
     let nRankCalls = 0;
 
     const numLevels = this.numLevels;
@@ -1033,79 +1036,67 @@ export class WaveletMatrix {
       const step = sort ? -1 : 1;
       const end = sort ? -1 : walk.length;
       for (let i = start; i != end; i += step) {
-        // const half = walk.length
-        
-        const first = F[0][i];
-        const last = L[0][i];
-        const empty = first === last; // node count == 0
-
-        const first1 = empty ? first : level.rank1(first - 1);
-        const first0 = first - first1;
-
-        const last1 = empty ? last : level.rank1(last - 1);
-        const last0 = last - last1;
-
-        const rightCount = last1 - first1;
-        const leftCount = last0 - first0;
-
-        const first2 = F[1][i];
-        const last2 = L[1][i];
-        const empty2 = first2 === last2; // node count == 0
-
-        const first1_2 = empty ? first1 : level.rank1(first2 - 1);
-        const first0_2 = first2 - first1_2;
-
-        const last1_2 = empty ? last1 : level.rank1(last2 - 1);
-        const last0_2 = last2 - last1_2;
-
-        const rightCount2 = last1_2 - first1_2;
-        const leftCount2 = last0_2 - first0_2;
-
         const symbol = S[i];
 
-        nRankCalls += 4;
+        for (let j = 0; j < k; j++) {
+          const first = F[j][i];
+          const last = L[j][i];
+          const empty = first === last; // node count == 0
 
-        if (op(rightCount, rightCount2)) {
+          const first1 = empty ? first : level.rank1(first - 1);
+          const first0 = first - first1;
+
+          const last1 = empty ? last : level.rank1(last - 1);
+          const last0 = last - last1;
+
+          FLC[j] = first0;
+          LLC[j] = last0;
+          FRC[j] = nz + first1;
+          LRC[j] = nz + last1;
+        }
+
+        nRankCalls += 2 * k;
+
+        if (op(FRC, LRC)) {
           // go right [if symbol ranges overlap each other and the target range]
           const a = (symbol | levelBitMask) & subcodeMask;
           const b = (a | (levelBitMask - 1)) & subcodeMask;
           if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
             const nextIndex = walk.nextBackIndex();
-            F[0][nextIndex] = nz + first1;
-            L[0][nextIndex] = nz + last1;
-            F[1][nextIndex] = nz + first1_2;
-            L[1][nextIndex] = nz + last1_2;
+            for (let j = 0; j < k; j++) {
+              F[j][nextIndex] = FRC[j];
+              L[j][nextIndex] = LRC[j];
+            }
             S[nextIndex] = symbol | levelBitMask;
           }
         }
 
-        if (op(leftCount, leftCount2)) {
+        if (op(FLC, LLC)) {
           // go left
           const a = symbol & subcodeMask;
           const b = (a | (levelBitMask - 1)) & subcodeMask;
           if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
             const nextIndex = sort ? walk.nextBackIndex() : walk.nextFrontIndex();
-            F[0][nextIndex] = first0;
-            L[0][nextIndex] = last0;
-            F[1][nextIndex] = first0_2;
-            L[1][nextIndex] = last0_2;
+            for (let j = 0; j < k; j++) {
+              F[j][nextIndex] = FLC[j];
+              L[j][nextIndex] = LLC[j];
+            }
             S[nextIndex] = symbol;
           }
         }
       }
       walk.reset(reverse, ...F, ...L, S);
     }
-
-    for (let i = 0; i < walk.length; i++) {
-      L[0][i] -= F[0][i];
-      L[1][i] -= F[1][i];
-      // L2[i] -= F2[i];
+    for (let j = 0; j < k; j++) {
+      const f = F[j];
+      const l = L[j];
+      for (let i = 0; i < walk.length; i++) {
+        l[i] -= f[i];
+      }
     }
-    // const counts = L.subarray(0, walk.length).slice();
-    // const counts2 = L2.subarray(0, walk.length).slice();
     const symbols = S.subarray(0, walk.length).slice();
-    //  symbols,, counts, counts2,
-    return { symbols, F, L, len:walk.length, nRankCalls };
+    const counts = L.map((l) => l.subarray(0, walk.length).slice());
+    return { symbols, counts, nRankCalls };
   }
 
   // status: initial draft.
@@ -1194,3 +1185,8 @@ export class WaveletMatrix {
 function intervalsOverlapInclusive(aLo, aHi, bLo, bHi) {
   return aLo <= bHi && bLo <= aHi;
 }
+
+const p = function () {
+  console.log(...arguments);
+  return arguments[0];
+};
