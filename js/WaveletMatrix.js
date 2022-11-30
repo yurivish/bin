@@ -932,10 +932,20 @@ export class WaveletMatrix {
   union(opts) {
     return this.setOp({
       ...opts,
+      scratchEstimate: (first, last) => {
+        // the union return value mate contain as many symbols as in the sum of all index ranges
+        let sum = 0;
+        for (let i = 0; i < first.length; i++) {
+          const val = last[i] - first[i];
+          sum += val;
+        }
+        return sum;
+      },
+
       op: (L, R) => {
         // return true if any count is greater than zero
-        for (let i = 0; i < L.length; i++) if (R[i] - L[i] > 0) return true
-        return false
+        for (let i = 0; i < L.length; i++) if (R[i] - L[i] > 0) return true;
+        return false;
       },
     });
   }
@@ -944,10 +954,20 @@ export class WaveletMatrix {
   intersect(opts) {
     return this.setOp({
       ...opts,
+      scratchEstimate: (first, last) => {
+        // the intersect return value might contain as many symbols as the smallest index range
+        let min = last[0] - first[0];
+        for (let i = 1; i < first.length; i++) {
+          const val = last[i] - first[i];
+          if (val < min) min = val;
+        }
+        return min;
+      },
+
       op: (L, R) => {
         // return true if all counts are greater than zero
-        for (let i = 0; i < L.length; i++) if (R[i] - L[i] === 0) return false
-        return true
+        for (let i = 0; i < L.length; i++) if (R[i] - L[i] === 0) return false;
+        return true;
       },
     });
   }
@@ -971,7 +991,13 @@ export class WaveletMatrix {
     //       [] does this trick work for other functions??
     // operation taking (count, count2) node counts and returning true or false – whether to recurse
     // into subnodes with those counts.
+    // man, this is all very messy. we should extensively comment this and tidy it up at the least,
+    // and perhaps include a simpler implementation alongside it to illustrate the basic idea.
     op,
+    // a function that takes (first, last) and returns an estimate of the required scratch space.
+    // the true amount of scratch space will be determined by taking the min of this value and the
+    // effective alphabet size (upper - lower + 1).
+    scratchEstimate,
     first,
     last,
     lower = 0,
@@ -979,22 +1005,19 @@ export class WaveletMatrix {
     subcodeSeparator = 0,
     sort = false,
   } = {}) {
+    const k = first.length;
     if (first === undefined || last === undefined) {
       throw new Error('first, last, first2, and last2 must all be specified');
     }
     if (lower > upper) throw new Error('lower must be < upper');
-    // todo
-    // if (last > this.length) throw new Error('last must be <= wavelet matrix length');
-    // if (first >= last) return Object.assign(this.emptyResult(), { counts2: new Uint32Array() });
-    console.assert(Array.isArray(first) && Array.isArray(last))
+    for (let j = 0; j < k; j++) {
+      if (last[j] > this.length) throw new Error('last must be <= wavelet matrix length');
+      if (first[j] >= last[j]) return this.emptyResult();
+    }
+    if(!Array.isArray(first) || !Array.isArray(last))throw new Error('first and last must be arrays');
 
-    // for intersect
-    // const scratchLength = Math.min(upper - lower + 1, last - first, last2 - first2);
-    // could pass this in to be smaller for different kinds of set ops, eg. when constrained
-    // by the smallest set like in union
-    const k = first.length;
-
-    const scratchLength = Math.min(upper - lower + 1);
+    // scratchEstimate estimates the space needed for scratch spaces, upper-bounding it by the total number of possible symbols
+    const scratchLength = Math.min(upper - lower + 1, scratchEstimate(first, last));
     this.scratch.reset();
     const F = Array.from({ length: k }, () => this.scratch.allocU32(scratchLength)); // firsts
     const L = Array.from({ length: k }, () => this.scratch.allocU32(scratchLength)); // lasts
@@ -1007,8 +1030,8 @@ export class WaveletMatrix {
     const reverse = !sort; // for walk.reset(reverse, ...)
     const nextIndex = walk.nextFrontIndex();
     for (let j = 0; j < k; j++) {
-      F[j][nextIndex] = first[j]
-      L[j][nextIndex] = last[j]
+      F[j][nextIndex] = first[j];
+      L[j][nextIndex] = last[j];
     }
 
     S[nextIndex] = 0;
@@ -1042,17 +1065,24 @@ export class WaveletMatrix {
           const first = F[j][i];
           const last = L[j][i];
           const empty = first === last; // node count == 0
+          if (empty) {
+            // avoid rank computations for empty index ranges
+            FLC[j] = LLC[j] = FRC[j] = LRC[j] = 0;
+          } else {
+            const first1 = level.rank1(first - 1);
+            const first0 = first - first1;
 
-          const first1 = empty ? first : level.rank1(first - 1);
-          const first0 = first - first1;
+            const last1 = level.rank1(last - 1);
+            const last0 = last - last1;
 
-          const last1 = empty ? last : level.rank1(last - 1);
-          const last0 = last - last1;
-
-          FLC[j] = first0;
-          LLC[j] = last0;
-          FRC[j] = nz + first1;
-          LRC[j] = nz + last1;
+            // compute first/last left/right child node indices,
+            // from which counts can be computed. these are passed
+            // to `op` to decide whether to recurse into child nodes.
+            FLC[j] = first0;
+            LLC[j] = last0;
+            FRC[j] = nz + first1;
+            LRC[j] = nz + last1;
+          }
         }
 
         nRankCalls += 2 * k;
