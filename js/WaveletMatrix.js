@@ -286,7 +286,7 @@ export class WaveletMatrix {
         symbol |= levelBitMask;
       }
     }
-    return symbol;
+    return unsigned(symbol);
   }
 
   accessBatch(indices) {
