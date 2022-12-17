@@ -487,8 +487,8 @@ export class WaveletMatrix {
 
         const symbolCount = C[i];
         const symbol = S[i];
-        const a = symbol & symbolBitMask; // leftmost symbol in this node
-        const b = a + symbolsPerNode; // rightmost symbol in this node
+        const a = unsigned(symbol & symbolBitMask); // leftmost symbol in this node
+        const b = unsigned(a + symbolsPerNode); // rightmost symbol in this node
         const m = (a + b) >>> 1;
 
         // perform two binary searches over the sorted symbols for this node to determine
@@ -547,6 +547,7 @@ export class WaveletMatrix {
     lower = 0,
     upper = this.maxSymbol,
     ignoreBits = 0,
+    assertPowerOfTwoSymbols = false, // optionally turn on additional error checking for ignorebits
     subcodeSeparator = 0,
     sort = false,
   } = {}) {
@@ -555,10 +556,10 @@ export class WaveletMatrix {
     // todo: handle lower === upper
     // these error messages could be improved, explaining that ignore bits tells us the power of two
     // that lower and upper need to be multiples of.
-    // if (lower % symbolGroupSize !== 0)
-    //   throw new Error('lower must evenly divide the symbol block size implied by ignoreBits');
-    // if ((upper + 1) % symbolGroupSize !== 0)
-    //   throw new Error('(upper + 1) must evenly divide the symbol block size implied by ignoreBits');
+    if (assertPowerOfTwoSymbols && lower % symbolGroupSize !== 0)
+      throw new Error('lower must evenly divide the symbol block size implied by ignoreBits');
+    if (assertPowerOfTwoSymbols && (upper + 1) % symbolGroupSize !== 0)
+      throw new Error('(upper + 1) must evenly divide the symbol block size implied by ignoreBits');
     if (first >= last) return this.emptyResult();
     if (first < 0) throw new Error('first must be >= 0');
     if (last > this.length) throw new Error('last must be <= length');
@@ -627,8 +628,8 @@ export class WaveletMatrix {
         const rightCount = last1 - first1;
         if (rightCount > 0) {
           // go right if the right node range [a, b] overlaps [lower, upper]
-          const a = (symbol | levelBitMask) & subcodeMask;
-          const b = (a | (levelBitMask - 1)) & subcodeMask;
+          const a = unsigned((symbol | levelBitMask) & subcodeMask);
+          const b = unsigned((a | (levelBitMask - 1)) & subcodeMask);
           if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
             const nextIndex = walk.nextBackIndex();
             F[nextIndex] = nz + first1;
@@ -642,8 +643,8 @@ export class WaveletMatrix {
           // go left if the left node range [a, b] overlaps [lower, upper]
           // or if there is no range mask. We use an inclusive symbol range since we allow permit all
           // bit patterns as codes, including the maximum value.
-          const a = symbol & subcodeMask;
-          const b = (a | (levelBitMask - 1)) & subcodeMask;
+          const a = unsigned(symbol & subcodeMask);
+          const b = unsigned((a | (levelBitMask - 1)) & subcodeMask);
           if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
             const nextIndex = sort ? walk.nextBackIndex() : walk.nextFrontIndex();
             F[nextIndex] = first0;
@@ -1090,8 +1091,8 @@ export class WaveletMatrix {
 
         if (op(FRC, LRC)) {
           // go right [if symbol ranges overlap each other and the target range]
-          const a = (symbol | levelBitMask) & subcodeMask;
-          const b = (a | (levelBitMask - 1)) & subcodeMask;
+          const a = unsigned((symbol | levelBitMask) & subcodeMask);
+          const b = unsigned((a | (levelBitMask - 1)) & subcodeMask);
           if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
             const nextIndex = walk.nextBackIndex();
             for (let j = 0; j < k; j++) {
@@ -1104,8 +1105,8 @@ export class WaveletMatrix {
 
         if (op(FLC, LLC)) {
           // go left
-          const a = symbol & subcodeMask;
-          const b = (a | (levelBitMask - 1)) & subcodeMask;
+          const a = unsigned(symbol & subcodeMask);
+          const b = unsigned((a | (levelBitMask - 1)) & subcodeMask);
           if (intervalsOverlapInclusive(a, b, subcodeLower, subcodeUpper)) {
             const nextIndex = sort ? walk.nextBackIndex() : walk.nextFrontIndex();
             for (let j = 0; j < k; j++) {
@@ -1226,4 +1227,7 @@ const p = function () {
   return arguments[0];
 };
 
+// Any time we want to treat an integer numerically (eg. perform less-than comparisons,
+// such as those in interval overlap checks) rather than treating it like a bitmask, we
+// should convert the number to an unsigned 32-bit integer.
 const unsigned = x => x >>> 0;
