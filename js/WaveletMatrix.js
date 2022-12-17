@@ -267,7 +267,7 @@ export class WaveletMatrix {
 
   access(index) {
     if (typeof index !== 'number') throw new Error('index must be a number');
-    if (index < 0 || index > this.length) throw new Error('access: out of bounds');
+    if (index < 0 || index >= this.length) throw new Error('access: out of bounds');
     let symbol = 0;
     for (let l = 0; l < this.numLevels; l++) {
       const level = this.levels[l];
