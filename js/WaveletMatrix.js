@@ -49,6 +49,7 @@ export class WaveletMatrix {
     this.numLevels = Math.ceil(Math.log2(this.alphabetSize));
     this.maxLevel = this.numLevels - 1;
     // this.allOnes = 2 ** this.numLevels - 1; // was thinking this could be useful as a selector...
+    // - opts.counts optionally contains element multiplicities
     const { largeAlphabet = 2 ** this.numLevels > data.length, counts } = opts;
     // The more efficient construction algorithm does not scale well to large alphabets,
     // and it cannot handle multiplicities because it constructs the bitvectors out-of-order.
