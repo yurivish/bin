@@ -6,7 +6,7 @@
   "main": "bin.js",
   "scripts": {
     "test": "make --directory=c && mocha --bail --no-color --reporter min",
-    "build": "esbuild bin.js --bundle --target=es2020 --format=esm --outfile=dist/bin.bundle.js"
+    "build": "esbuild js/bin.js --bundle --target=es2020 --format=esm --outfile=dist/bin.bundle.js"
   },
   "repository": {
     "type": "git",
