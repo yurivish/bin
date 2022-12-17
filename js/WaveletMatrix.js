@@ -470,7 +470,7 @@ export class WaveletMatrix {
       const level = this.levels[l];
       const nz = this.numZeros[l];
       const levelBitMask = 1 << (this.maxLevel - l); // determines whether a symbol goes to the left or right
-      const symbolsPerNode = (levelBitMask << 1) - 1;
+      const symbolsPerNode = unsigned((levelBitMask << 1)) - 1;
       const symbolBitMask = 0xffffffff << (this.maxLevel - l); // clears the low bits from a symbol, giving the left edge of its node
 
       let k = sortedSymbols.length; // march k over the sorted symbols array
@@ -604,8 +604,8 @@ export class WaveletMatrix {
       // a single subcode.
       if ((subcodeSeparator & levelBitMask) === 0) subcodeMask |= levelBitMask;
       else subcodeMask = levelBitMask;
-      const subcodeLower = lower & subcodeMask;
-      const subcodeUpper = upper & subcodeMask;
+      const subcodeLower = unsigned(lower & subcodeMask);
+      const subcodeUpper = unsigned(upper & subcodeMask);
 
       // if we want sorted outputs, iterate in reverse to ensure that we don't
       // overwrite unprocessed elements when writing from the back of the array.
@@ -1015,7 +1015,7 @@ export class WaveletMatrix {
       if (last[j] > this.length) throw new Error('last must be <= wavelet matrix length');
       if (first[j] >= last[j]) return this.emptyResult();
     }
-    if(!Array.isArray(first) || !Array.isArray(last))throw new Error('first and last must be arrays');
+    if (!Array.isArray(first) || !Array.isArray(last)) throw new Error('first and last must be arrays');
 
     // scratchEstimate estimates the space needed for scratch spaces, upper-bounding it by the total number of possible symbols
     const scratchLength = Math.min(upper - lower + 1, scratchEstimate(first, last));
@@ -1051,8 +1051,8 @@ export class WaveletMatrix {
 
       if ((subcodeSeparator & levelBitMask) === 0) subcodeMask |= levelBitMask;
       else subcodeMask = levelBitMask;
-      const subcodeLower = lower & subcodeMask;
-      const subcodeUpper = upper & subcodeMask;
+      const subcodeLower = unsigned(lower & subcodeMask);
+      const subcodeUpper = unsigned(upper & subcodeMask);
 
       // if we want sorted outputs, iterate in reverse to ensure that we don't
       // overwrite unprocessed elements when writing from the back of the array.
@@ -1118,15 +1118,15 @@ export class WaveletMatrix {
       }
       walk.reset(reverse, ...F, ...L, S);
     }
-    const counts = new Uint32Array(walk.length)
+    const counts = new Uint32Array(walk.length);
     for (let j = 0; j < k; j++) {
       const f = F[j];
       const l = L[j];
       // since we're walking the arrays here, compute the total count for each symbol as we go
       // so we don't need to re-iterate later.
       for (let i = 0; i < walk.length; i++) {
-        const count = l[i] -= f[i];
-        counts[i] += count
+        const count = (l[i] -= f[i]);
+        counts[i] += count;
       }
     }
     const symbols = S.subarray(0, walk.length).slice();
@@ -1171,7 +1171,7 @@ export class WaveletMatrix {
       separator |= 1 << (sz - 1 + offset);
       offset += sz;
     }
-    return separator >>> 0;
+    return unsigned(separator);
   }
 
   encodeSubcodes(subcodeSeparator, values) {
@@ -1190,12 +1190,12 @@ export class WaveletMatrix {
     while (subcodeSeparator > 0) {
       // todo: validate that values[i] is 0 <= v < 2^subcodeSize
       const subcodeSize = trailing0(subcodeSeparator) + 1;
-      code |= values[i] << offset;
+      code |= unsignedLeftShift(values[i], offset);
       i += 1;
       offset += subcodeSize;
       subcodeSeparator >>>= subcodeSize; // shift off this subcode
     }
-    return code >>> 0;
+    return unsigned(code);
   }
 
   approxSizeInBits() {
@@ -1225,3 +1225,5 @@ const p = function () {
   console.log(...arguments);
   return arguments[0];
 };
+
+const unsigned = x => x >>> 0;
